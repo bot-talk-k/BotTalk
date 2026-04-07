@@ -1,0 +1,291 @@
+const express = require('express');
+const router = express.Router();
+const db = require('../db');
+const { requireAdmin } = require('../middleware/requireAdmin');
+const { logActivity } = require('../services/logger');
+
+// All admin routes require admin role
+router.use(requireAdmin);
+
+// ═══════════════════════════════════════════════════════════════════
+//  GET /api/admin/users — 用户列表（含通道数、推送数统计）
+// ═══════════════════════════════════════════════════════════════════
+
+router.get('/users', (req, res) => {
+  try {
+    const users = db.prepare(`
+      SELECT
+        u.id,
+        u.email,
+        u.wechat_openid,
+        u.send_key,
+        u.role,
+        u.is_disabled,
+        u.rate_limit,
+        u.created_at,
+        (SELECT COUNT(*) FROM channels c WHERE c.user_id = u.id) AS channel_count,
+        (SELECT COUNT(*) FROM push_logs p WHERE p.user_id = u.id) AS push_count
+      FROM users u
+      ORDER BY u.created_at DESC
+    `).all();
+
+    res.json({ success: true, data: users });
+  } catch (err) {
+    console.error('Admin list users error:', err.message);
+    res.status(500).json({ success: false, error: 'Internal error' });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════
+//  PATCH /api/admin/users/:id — 修改用户（禁用/改限额/改角色）
+// ═══════════════════════════════════════════════════════════════════
+
+router.patch('/users/:id', (req, res) => {
+  try {
+    const targetId = Number(req.params.id);
+    if (!Number.isInteger(targetId) || targetId <= 0) {
+      return res.json({ success: false, error: 'Invalid user ID' });
+    }
+
+    // Admin cannot modify themselves
+    if (targetId === req.session.userId) {
+      return res.json({ success: false, error: '不能修改自己的账户' });
+    }
+
+    const target = db.prepare('SELECT id FROM users WHERE id = ?').get(targetId);
+    if (!target) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+
+    const { role, is_disabled, rate_limit } = req.body;
+    const updates = [];
+    const params = [];
+
+    // Whitelist validation for role
+    if (role !== undefined) {
+      if (!['user', 'admin'].includes(role)) {
+        return res.json({ success: false, error: 'role 只能是 user 或 admin' });
+      }
+      updates.push('role = ?');
+      params.push(role);
+    }
+
+    // Validate is_disabled
+    if (is_disabled !== undefined) {
+      const val = Number(is_disabled);
+      if (![0, 1].includes(val)) {
+        return res.json({ success: false, error: 'is_disabled 只能是 0 或 1' });
+      }
+      updates.push('is_disabled = ?');
+      params.push(val);
+    }
+
+    // Validate rate_limit
+    if (rate_limit !== undefined) {
+      const val = Number(rate_limit);
+      if (!Number.isInteger(val) || val < 0 || val > 100000) {
+        return res.json({ success: false, error: 'rate_limit 必须是 0-100000 的整数' });
+      }
+      updates.push('rate_limit = ?');
+      params.push(val);
+    }
+
+    if (updates.length === 0) {
+      return res.json({ success: false, error: '没有可更新的字段' });
+    }
+
+    params.push(targetId);
+    db.prepare(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`).run(...params);
+
+    logActivity(req.session.userId, 'admin_update_user', { targetId, changes: req.body }, req);
+
+    const updated = db.prepare('SELECT id, email, role, is_disabled, rate_limit FROM users WHERE id = ?').get(targetId);
+    res.json({ success: true, data: updated });
+  } catch (err) {
+    console.error('Admin update user error:', err.message);
+    res.status(500).json({ success: false, error: 'Internal error' });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════
+//  DELETE /api/admin/users/:id — 删除用户
+// ═══════════════════════════════════════════════════════════════════
+
+router.delete('/users/:id', (req, res) => {
+  try {
+    const targetId = Number(req.params.id);
+    if (!Number.isInteger(targetId) || targetId <= 0) {
+      return res.json({ success: false, error: 'Invalid user ID' });
+    }
+
+    // Admin cannot delete themselves
+    if (targetId === req.session.userId) {
+      return res.json({ success: false, error: '不能删除自己的账户' });
+    }
+
+    const target = db.prepare('SELECT id FROM users WHERE id = ?').get(targetId);
+    if (!target) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+
+    // Delete related data in a transaction
+    const deleteUser = db.transaction(() => {
+      db.prepare('DELETE FROM push_logs WHERE user_id = ?').run(targetId);
+      db.prepare('DELETE FROM channels WHERE user_id = ?').run(targetId);
+      db.prepare('DELETE FROM reminders WHERE user_id = ?').run(targetId);
+      db.prepare('DELETE FROM logs WHERE user_id = ?').run(targetId);
+      db.prepare('DELETE FROM activity_logs WHERE user_id = ?').run(targetId);
+      db.prepare('DELETE FROM users WHERE id = ?').run(targetId);
+    });
+
+    deleteUser();
+
+    logActivity(req.session.userId, 'admin_delete_user', { targetId }, req);
+
+    res.json({ success: true, data: { deleted: targetId } });
+  } catch (err) {
+    console.error('Admin delete user error:', err.message);
+    res.status(500).json({ success: false, error: 'Internal error' });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════
+//  GET /api/admin/stats — 仪表盘统计
+// ═══════════════════════════════════════════════════════════════════
+
+router.get('/stats', (req, res) => {
+  try {
+    const totalUsers = db.prepare('SELECT COUNT(*) AS cnt FROM users').get().cnt;
+    const todayPushes = db.prepare(
+      "SELECT COUNT(*) AS cnt FROM push_logs WHERE created_at >= date('now')"
+    ).get().cnt;
+    const activeChannels = db.prepare(
+      "SELECT COUNT(*) AS cnt FROM channels WHERE status = 'active'"
+    ).get().cnt;
+    const disabledUsers = db.prepare(
+      'SELECT COUNT(*) AS cnt FROM users WHERE is_disabled = 1'
+    ).get().cnt;
+    const adminCount = db.prepare(
+      "SELECT COUNT(*) AS cnt FROM users WHERE role = 'admin'"
+    ).get().cnt;
+
+    res.json({
+      success: true,
+      data: {
+        total_users: totalUsers,
+        today_pushes: todayPushes,
+        active_channels: activeChannels,
+        disabled_users: disabledUsers,
+        admin_count: adminCount,
+      },
+    });
+  } catch (err) {
+    console.error('Admin stats error:', err.message);
+    res.status(500).json({ success: false, error: 'Internal error' });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════
+//  GET /api/admin/page-views — 页面访问统计
+// ═══════════════════════════════════════════════════════════════════
+
+router.get('/page-views', (req, res) => {
+  try {
+    const { period, page } = req.query;
+
+    // Build date filter
+    let dateFilter = '';
+    if (period === 'today') {
+      dateFilter = "AND created_at >= date('now')";
+    } else if (period === '7d') {
+      dateFilter = "AND created_at >= date('now', '-7 days')";
+    } else if (period === '30d') {
+      dateFilter = "AND created_at >= date('now', '-30 days')";
+    }
+    // 'all' or undefined = no date filter
+
+    let pageFilter = '';
+    const params = [];
+    if (page) {
+      pageFilter = 'AND page = ?';
+      params.push(page);
+    }
+
+    const where = `WHERE 1=1 ${dateFilter} ${pageFilter}`;
+
+    // Summary
+    const total = db.prepare(
+      `SELECT COUNT(*) AS cnt FROM page_views ${where}`
+    ).get(...params).cnt;
+
+    const today = db.prepare(
+      `SELECT COUNT(*) AS cnt FROM page_views WHERE created_at >= date('now') ${pageFilter}`
+    ).get(...params).cnt;
+
+    const uniqueIps = db.prepare(
+      `SELECT COUNT(DISTINCT ip) AS cnt FROM page_views ${where}`
+    ).get(...params).cnt;
+
+    // By page
+    const byPage = db.prepare(
+      `SELECT page, COUNT(*) AS count, COUNT(DISTINCT ip) AS unique_ips
+       FROM page_views ${where}
+       GROUP BY page ORDER BY count DESC`
+    ).all(...params);
+
+    // By day (last 30 days)
+    const byDay = db.prepare(
+      `SELECT date(created_at) AS date, COUNT(*) AS count
+       FROM page_views
+       WHERE created_at >= date('now', '-30 days') ${pageFilter}
+       GROUP BY date(created_at) ORDER BY date ASC`
+    ).all(...params);
+
+    // Recent 50 records
+    const recent = db.prepare(
+      `SELECT page, tab, ip, user_agent, referer, created_at
+       FROM page_views ${where}
+       ORDER BY id DESC LIMIT 50`
+    ).all(...params);
+
+    // Mask IP: replace last segment with *
+    function maskIp(ip) {
+      if (!ip) return '-';
+      // IPv4
+      if (ip.includes('.')) {
+        const parts = ip.split('.');
+        if (parts.length === 4) {
+          parts[3] = '*';
+          return parts.join('.');
+        }
+      }
+      // IPv6 or other: mask last 4 chars
+      if (ip.length > 4) {
+        return ip.substring(0, ip.length - 4) + '****';
+      }
+      return '****';
+    }
+
+    const maskedRecent = recent.map(r => ({
+      ...r,
+      ip: maskIp(r.ip)
+    }));
+
+    const maskedByPage = byPage; // no IP in by_page
+
+    res.json({
+      success: true,
+      data: {
+        summary: { total, today, unique_ips: uniqueIps },
+        by_page: maskedByPage,
+        by_day: byDay,
+        recent: maskedRecent
+      }
+    });
+  } catch (err) {
+    console.error('Admin page-views error:', err.message);
+    res.status(500).json({ success: false, error: 'Internal error' });
+  }
+});
+
+module.exports = router;

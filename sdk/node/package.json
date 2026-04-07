@@ -1,0 +1,34 @@
+{
+  "name": "bottalk",
+  "version": "0.1.0",
+  "description": "Official Node.js SDK for bot-talk.com push service",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "node --experimental-strip-types --no-warnings --test tests/client.test.ts tests/admin.test.ts"
+  },
+  "keywords": [
+    "bottalk",
+    "push",
+    "notification",
+    "wechat",
+    "server-chan"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "devDependencies": {}
+}

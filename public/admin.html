@@ -1,0 +1,862 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BotTalk - 管理后台</title>
+  <style>
+    /* ── Reset & Base ──────────────────────────────────────────────── */
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: -apple-system, "SF Pro Display", "SF Pro Text", "PingFang SC", "Helvetica Neue", Helvetica, Arial, sans-serif;
+      background: #fff;
+      color: #1d1d1f;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    /* ── Typography ────────────────────────────────────────────────── */
+    h1 { font-size: 48px; font-weight: 700; letter-spacing: -0.5px; }
+    h2 { font-size: 28px; font-weight: 600; letter-spacing: -0.2px; }
+    h3 { font-size: 20px; font-weight: 600; }
+
+    /* ── Nav ────────────────────────────────────────────────────────── */
+    .navbar {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+      height: 48px;
+      backdrop-filter: saturate(180%) blur(20px);
+      -webkit-backdrop-filter: saturate(180%) blur(20px);
+      background: rgba(255,255,255,0.8);
+      border-bottom: 0.5px solid rgba(0,0,0,0.1);
+      display: flex; align-items: center; justify-content: center;
+      padding: 0 20px;
+    }
+    .navbar-inner {
+      width: 100%; max-width: 980px;
+      display: flex; align-items: center;
+    }
+    .nav-logo {
+      font-size: 18px; font-weight: 700; color: #1d1d1f;
+      letter-spacing: -0.3px; cursor: pointer;
+      user-select: none; flex-shrink: 0;
+      text-decoration: none;
+    }
+    .nav-links {
+      display: flex; gap: 4px; margin-left: 32px;
+    }
+    .nav-links a {
+      padding: 6px 14px; text-decoration: none; color: #6e6e73;
+      font-size: 13px; font-weight: 500; border-radius: 980px;
+      cursor: pointer; transition: background 0.2s, color 0.2s;
+      white-space: nowrap;
+    }
+    .nav-links a:hover { background: rgba(0,0,0,0.04); color: #1d1d1f; }
+    .nav-links a.active { background: rgba(0,113,227,0.08); color: #0071e3; }
+    .nav-right {
+      margin-left: auto; display: flex; align-items: center; gap: 12px;
+      font-size: 13px; flex-shrink: 0;
+    }
+    .nav-right .username { color: #6e6e73; font-weight: 500; }
+    .nav-btn {
+      padding: 5px 16px; border-radius: 980px; border: none;
+      font-size: 13px; font-weight: 500; cursor: pointer;
+      transition: all 0.2s;
+    }
+    .nav-btn-logout {
+      background: transparent; color: #6e6e73; border: 1px solid rgba(0,0,0,0.12);
+    }
+    .nav-btn-logout:hover { border-color: #ff3b30; color: #ff3b30; }
+
+    /* ── Layout ────────────────────────────────────────────────────── */
+    .main { padding-top: 48px; }
+    .container { max-width: 980px; margin: 0 auto; padding: 0 20px; }
+
+    /* ── Buttons ───────────────────────────────────────────────────── */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      padding: 10px 24px; border-radius: 980px; font-size: 14px;
+      font-weight: 500; cursor: pointer; border: none;
+      transition: all 0.2s; user-select: none;
+      text-decoration: none;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn-primary { background: #0071e3; color: #fff; }
+    .btn-primary:hover { background: #0077ed; }
+    .btn-secondary {
+      background: transparent; color: #0071e3;
+      border: 1.5px solid #0071e3;
+    }
+    .btn-secondary:hover { background: rgba(0,113,227,0.06); }
+    .btn-danger-text {
+      background: transparent; color: #ff3b30; border: none;
+      padding: 6px 12px; font-size: 13px;
+    }
+    .btn-danger-text:hover { background: rgba(255,59,48,0.06); border-radius: 980px; }
+    .btn-sm { padding: 6px 16px; font-size: 13px; }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
+
+    /* ── Cards ─────────────────────────────────────────────────────── */
+    .card {
+      background: #fff; border-radius: 16px; padding: 24px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+      margin-bottom: 16px;
+      transition: transform 0.25s ease, box-shadow 0.25s ease;
+    }
+
+    /* ── Section backgrounds ───────────────────────────────────────── */
+    .section-gray { background: #f5f5f7; }
+    .section-white { background: #fff; }
+    .section { padding: 32px 0; }
+
+    /* ── Badge ─────────────────────────────────────────────────────── */
+    .badge {
+      display: inline-block; padding: 3px 10px; border-radius: 980px;
+      font-size: 12px; font-weight: 600;
+    }
+    .badge-green { background: rgba(52,199,89,0.12); color: #248a3d; }
+    .badge-red { background: rgba(255,59,48,0.12); color: #ff3b30; }
+    .badge-blue { background: rgba(0,113,227,0.08); color: #0071e3; }
+    .badge-gray { background: rgba(142,142,147,0.12); color: #636366; }
+
+    /* ── Toast ─────────────────────────────────────────────────────── */
+    .toast-container {
+      position: fixed; top: 64px; left: 50%; transform: translateX(-50%);
+      z-index: 9999; pointer-events: none;
+    }
+    .toast {
+      background: #1d1d1f; color: #fff; padding: 10px 24px;
+      border-radius: 980px; font-size: 14px; font-weight: 500;
+      opacity: 0; transform: translateY(-12px);
+      transition: all 0.35s ease; pointer-events: auto;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+      margin-bottom: 8px;
+    }
+    .toast.show { opacity: 1; transform: translateY(0); }
+
+    /* ── Table ─────────────────────────────────────────────────────── */
+    .data-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    .data-table th {
+      text-align: left; padding: 12px 16px; font-weight: 600;
+      color: #8e8e93; font-size: 12px; text-transform: uppercase;
+      letter-spacing: 0.5px; border-bottom: 1px solid rgba(0,0,0,0.06);
+    }
+    .data-table td {
+      padding: 14px 16px; border-bottom: 1px solid rgba(0,0,0,0.04);
+    }
+    .data-table tr:last-child td { border-bottom: none; }
+    .data-table tr:hover td { background: rgba(0,0,0,0.02); }
+
+    /* ── Stats grid ────────────────────────────────────────────────── */
+    .stats-grid {
+      display: grid; grid-template-columns: repeat(4, 1fr);
+      gap: 16px; margin-bottom: 32px;
+    }
+    .stat-card {
+      background: #fff; border-radius: 16px; padding: 24px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+      text-align: center;
+    }
+    .stat-value {
+      font-size: 36px; font-weight: 700; color: #1d1d1f;
+      letter-spacing: -0.5px;
+    }
+    .stat-label {
+      font-size: 13px; color: #8e8e93; margin-top: 4px;
+      font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;
+    }
+
+    /* ── Section header ────────────────────────────────────────────── */
+    .section-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 24px; flex-wrap: wrap; gap: 12px;
+    }
+    .section-header h2 { margin: 0; }
+
+    /* ── Hidden ─────────────────────────────────────────────────────── */
+    .hidden { display: none !important; }
+
+    /* ── No permission ─────────────────────────────────────────────── */
+    .no-permission {
+      text-align: center; padding: 120px 20px;
+    }
+    .no-permission h2 { margin-bottom: 12px; }
+    .no-permission p { font-size: 16px; color: #8e8e93; margin-bottom: 24px; }
+
+    /* ── Action buttons in table ───────────────────────────────────── */
+    .action-btn {
+      display: inline-block; padding: 4px 12px; border-radius: 980px;
+      font-size: 12px; font-weight: 500; cursor: pointer; border: none;
+      transition: all 0.2s; margin: 2px;
+    }
+    .action-btn:active { transform: scale(0.95); }
+    .action-btn-blue {
+      background: rgba(0,113,227,0.08); color: #0071e3;
+    }
+    .action-btn-blue:hover { background: rgba(0,113,227,0.15); }
+    .action-btn-orange {
+      background: rgba(255,159,10,0.1); color: #c77c00;
+    }
+    .action-btn-orange:hover { background: rgba(255,159,10,0.2); }
+    .action-btn-green {
+      background: rgba(52,199,89,0.12); color: #248a3d;
+    }
+    .action-btn-green:hover { background: rgba(52,199,89,0.2); }
+    .action-btn-red {
+      background: rgba(255,59,48,0.08); color: #ff3b30;
+    }
+    .action-btn-red:hover { background: rgba(255,59,48,0.15); }
+
+    /* ── Spinner ────────────────────────────────────────────────────── */
+    .spinner {
+      display: inline-block; width: 18px; height: 18px;
+      border: 2px solid #0071e3; border-top-color: transparent;
+      border-radius: 50%; animation: spin 0.8s linear infinite;
+      vertical-align: middle; margin-right: 8px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Loading state ─────────────────────────────────────────────── */
+    .loading-state {
+      text-align: center; padding: 64px 20px; color: #8e8e93;
+    }
+
+    /* ── Fade-in animation ─────────────────────────────────────────── */
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .fade-in { animation: fadeInUp 0.5s ease forwards; }
+
+    /* ── Responsive ────────────────────────────────────────────────── */
+    @media (max-width: 768px) {
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+      .nav-links { gap: 2px; margin-left: 12px; }
+      .nav-links a { padding: 6px 10px; font-size: 12px; }
+      h2 { font-size: 22px; }
+      .section { padding: 24px 0; }
+      .card { padding: 20px; }
+      .data-table { font-size: 12px; }
+      .data-table th, .data-table td { padding: 10px 8px; }
+      .stat-value { font-size: 28px; }
+      .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+      .pv-grid-2col { grid-template-columns: 1fr !important; }
+    }
+
+    @media (max-width: 480px) {
+      .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+      .stat-card { padding: 16px; }
+      .stat-value { font-size: 24px; }
+      .nav-links { display: none; }
+      .navbar { justify-content: space-between; }
+      .main { padding-top: 48px; }
+      .action-btn { font-size: 11px; padding: 3px 8px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Navigation -->
+  <nav class="navbar">
+    <div class="navbar-inner">
+      <a class="nav-logo" href="index.html">BotTalk</a>
+      <div class="nav-links">
+        <a href="index.html">首页</a>
+        <a class="active">管理后台</a>
+      </div>
+      <div class="nav-right">
+        <span id="nav-user-area"></span>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Toast container -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <div class="main">
+
+    <!-- Loading state -->
+    <div id="loading-state" class="loading-state">
+      <div class="spinner"></div> 加载中...
+    </div>
+
+    <!-- No permission -->
+    <div id="no-permission" class="no-permission hidden">
+      <h2>无权访问</h2>
+      <p>此页面仅限管理员访问</p>
+      <a href="index.html" class="btn btn-primary">返回首页</a>
+    </div>
+
+    <!-- Admin content -->
+    <div id="admin-content" class="hidden">
+
+      <!-- Stats dashboard -->
+      <div class="section-gray section">
+        <div class="container">
+          <div class="section-header">
+            <h2>仪表盘</h2>
+            <button class="btn btn-sm btn-secondary" onclick="loadData()">刷新数据</button>
+          </div>
+          <div class="stats-grid" id="stats-grid">
+            <div class="stat-card">
+              <div class="stat-value" id="stat-users">-</div>
+              <div class="stat-label">总用户数</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value" id="stat-pushes">-</div>
+              <div class="stat-label">今日推送</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value" id="stat-channels">-</div>
+              <div class="stat-label">活跃通道</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value" id="stat-admins">-</div>
+              <div class="stat-label">管理员</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- User management table -->
+      <div class="section">
+        <div class="container">
+          <div class="section-header">
+            <h2>用户管理</h2>
+          </div>
+          <div class="card" style="padding: 0; overflow: hidden;">
+            <div class="table-scroll">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>用户标识</th>
+                    <th>角色</th>
+                    <th>通道数</th>
+                    <th>推送数</th>
+                    <th>限额</th>
+                    <th>状态</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody id="users-tbody">
+                  <tr><td colspan="8" style="text-align:center; color:#8e8e93; padding:40px;">加载中...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Page views statistics -->
+      <div class="section-gray section">
+        <div class="container">
+          <div class="section-header">
+            <h2>访问统计</h2>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+              <button class="btn btn-sm btn-secondary" id="pv-btn-today" onclick="loadPageViews('today')">今日</button>
+              <button class="btn btn-sm btn-secondary" id="pv-btn-7d" onclick="loadPageViews('7d')">7天</button>
+              <button class="btn btn-sm btn-primary" id="pv-btn-30d" onclick="loadPageViews('30d')">30天</button>
+              <button class="btn btn-sm btn-secondary" id="pv-btn-all" onclick="loadPageViews('all')">全部</button>
+            </div>
+          </div>
+
+          <!-- Summary cards -->
+          <div class="stats-grid" style="grid-template-columns: repeat(3, 1fr);">
+            <div class="stat-card">
+              <div class="stat-value" id="pv-total">-</div>
+              <div class="stat-label">总访问量</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value" id="pv-today">-</div>
+              <div class="stat-label">今日访问</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value" id="pv-unique">-</div>
+              <div class="stat-label">独立 IP</div>
+            </div>
+          </div>
+
+          <!-- By page + Trend side by side -->
+          <div class="pv-grid-2col" style="display:grid;grid-template-columns:1fr 2fr;gap:16px;margin-bottom:16px;">
+            <!-- By page table -->
+            <div class="card" style="padding:0;overflow:hidden;">
+              <div style="padding:16px 20px 8px;font-weight:600;font-size:14px;color:#6e6e73;">按页面分布</div>
+              <div class="table-scroll">
+                <table class="data-table">
+                  <thead>
+                    <tr><th>页面</th><th>访问数</th><th>独立IP</th></tr>
+                  </thead>
+                  <tbody id="pv-by-page-tbody">
+                    <tr><td colspan="3" style="text-align:center;color:#8e8e93;padding:20px;">加载中...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Trend chart -->
+            <div class="card">
+              <div style="font-weight:600;font-size:14px;color:#6e6e73;margin-bottom:12px;">30天访问趋势</div>
+              <div id="pv-trend-chart" style="min-height:160px;">
+                <div style="text-align:center;color:#8e8e93;padding:40px;">加载中...</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Recent records -->
+          <div class="card" style="padding:0;overflow:hidden;">
+            <div style="padding:16px 20px 8px;font-weight:600;font-size:14px;color:#6e6e73;">最近 50 条访问</div>
+            <div class="table-scroll">
+              <table class="data-table">
+                <thead>
+                  <tr><th>页面</th><th>Tab</th><th>IP</th><th>User-Agent</th><th>时间</th></tr>
+                </thead>
+                <tbody id="pv-recent-tbody">
+                  <tr><td colspan="5" style="text-align:center;color:#8e8e93;padding:20px;">加载中...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    // ═══════════════════════════════════════════════════════════════════
+    //  State
+    // ═══════════════════════════════════════════════════════════════════
+    var currentUser = null;
+    var basePath = window.location.pathname.replace(/\/[^/]*$/, '');
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  Helpers
+    // ═══════════════════════════════════════════════════════════════════
+    function apiFetch(path, opts) {
+      opts = opts || {};
+      opts.credentials = 'same-origin';
+      return fetch(basePath + path, opts);
+    }
+
+    function showToast(msg, duration) {
+      duration = duration || 2500;
+      var container = document.getElementById('toast-container');
+      var el = document.createElement('div');
+      el.className = 'toast';
+      el.textContent = msg;
+      container.appendChild(el);
+      requestAnimationFrame(function() {
+        requestAnimationFrame(function() { el.classList.add('show'); });
+      });
+      setTimeout(function() {
+        el.classList.remove('show');
+        setTimeout(function() { el.remove(); }, 350);
+      }, duration);
+    }
+
+    function escapeHtml(str) {
+      var d = document.createElement('div');
+      d.textContent = str;
+      return d.innerHTML;
+    }
+
+    function maskOpenId(id) {
+      if (!id) return '-';
+      if (id.length <= 4) return id;
+      return id.substring(0, 4) + '****';
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  Auth check
+    // ═══════════════════════════════════════════════════════════════════
+    async function checkAdmin() {
+      var loadingEl = document.getElementById('loading-state');
+      var noPermEl = document.getElementById('no-permission');
+      var contentEl = document.getElementById('admin-content');
+
+      try {
+        var res = await apiFetch('/api/auth/me');
+        if (!res.ok) throw new Error('Not logged in');
+        var json = await res.json();
+        if (!json.success) throw new Error('Not logged in');
+
+        currentUser = json.data;
+
+        if (currentUser.role !== 'admin') {
+          loadingEl.classList.add('hidden');
+          noPermEl.classList.remove('hidden');
+          return;
+        }
+
+        // Admin confirmed
+        loadingEl.classList.add('hidden');
+        contentEl.classList.remove('hidden');
+        updateNav();
+        loadData();
+      } catch (e) {
+        loadingEl.classList.add('hidden');
+        noPermEl.classList.remove('hidden');
+      }
+    }
+
+    function updateNav() {
+      var userArea = document.getElementById('nav-user-area');
+      if (currentUser) {
+        var displayName = currentUser.email || 'User';
+        userArea.innerHTML =
+          '<span class="username">' + escapeHtml(displayName) + '</span>' +
+          '<button class="nav-btn nav-btn-logout" onclick="logout()">退出</button>';
+      }
+    }
+
+    async function logout() {
+      try { await apiFetch('/api/auth/logout', { method: 'POST' }); } catch (e) {}
+      window.location.href = 'index.html';
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  Load data
+    // ═══════════════════════════════════════════════════════════════════
+    async function loadData() {
+      await Promise.all([loadStats(), loadUsers(), loadPageViews('30d')]);
+    }
+
+    async function loadStats() {
+      try {
+        var res = await apiFetch('/api/admin/stats');
+        var json = await res.json();
+        if (!json.success) return;
+        var d = json.data;
+        document.getElementById('stat-users').textContent = d.total_users;
+        document.getElementById('stat-pushes').textContent = d.today_pushes;
+        document.getElementById('stat-channels').textContent = d.active_channels;
+        document.getElementById('stat-admins').textContent = d.admin_count;
+      } catch (e) {
+        showToast('加载统计数据失败');
+      }
+    }
+
+    async function loadUsers() {
+      try {
+        var res = await apiFetch('/api/admin/users');
+        var json = await res.json();
+        if (!json.success) { showToast('加载用户列表失败'); return; }
+        renderUsersTable(json.data);
+      } catch (e) {
+        showToast('加载用户列表失败');
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  Render users table
+    // ═══════════════════════════════════════════════════════════════════
+    function renderUsersTable(users) {
+      var tbody = document.getElementById('users-tbody');
+
+      if (!users || users.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color:#8e8e93; padding:40px;">暂无用户</td></tr>';
+        return;
+      }
+
+      var html = '';
+      users.forEach(function(u) {
+        var isSelf = currentUser && u.id === currentUser.id;
+        var identifier = u.wechat_openid ? maskOpenId(u.wechat_openid) : (u.email || '-');
+
+        // Role badge
+        var roleBadge = u.role === 'admin'
+          ? '<span class="badge badge-blue">admin</span>'
+          : '<span class="badge badge-gray">user</span>';
+
+        // Status badge
+        var statusBadge = u.is_disabled
+          ? '<span class="badge badge-red">禁用</span>'
+          : '<span class="badge badge-green">正常</span>';
+
+        // Actions
+        var actions = '';
+        if (isSelf) {
+          actions = '<span style="color:#8e8e93; font-size:12px;">当前用户</span>';
+        } else {
+          // Toggle role
+          if (u.role === 'admin') {
+            actions += '<button class="action-btn action-btn-blue" onclick="toggleRole(' + u.id + ', \'user\')">设为用户</button>';
+          } else {
+            actions += '<button class="action-btn action-btn-blue" onclick="toggleRole(' + u.id + ', \'admin\')">设为管理员</button>';
+          }
+
+          // Toggle disable
+          if (u.is_disabled) {
+            actions += '<button class="action-btn action-btn-green" onclick="toggleDisable(' + u.id + ', 0)">启用</button>';
+          } else {
+            actions += '<button class="action-btn action-btn-orange" onclick="toggleDisable(' + u.id + ', 1)">禁用</button>';
+          }
+
+          // Rate limit
+          actions += '<button class="action-btn action-btn-blue" onclick="changeRateLimit(' + u.id + ', ' + (u.rate_limit || 0) + ')">限额</button>';
+
+          // Delete
+          actions += '<button class="action-btn action-btn-red" onclick="deleteUser(' + u.id + ')">删除</button>';
+        }
+
+        html += '<tr>' +
+          '<td>' + u.id + '</td>' +
+          '<td>' + escapeHtml(identifier) + '</td>' +
+          '<td>' + roleBadge + '</td>' +
+          '<td>' + (u.channel_count || 0) + '</td>' +
+          '<td>' + (u.push_count || 0) + '</td>' +
+          '<td>' + (u.rate_limit || 0) + '</td>' +
+          '<td>' + statusBadge + '</td>' +
+          '<td>' + actions + '</td>' +
+          '</tr>';
+      });
+
+      tbody.innerHTML = html;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  Actions
+    // ═══════════════════════════════════════════════════════════════════
+    async function toggleRole(userId, newRole) {
+      try {
+        var res = await apiFetch('/api/admin/users/' + userId, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ role: newRole })
+        });
+        var json = await res.json();
+        if (json.success) {
+          showToast('角色已更新');
+          loadData();
+        } else {
+          showToast(json.error || '操作失败');
+        }
+      } catch (e) {
+        showToast('操作失败');
+      }
+    }
+
+    async function toggleDisable(userId, disabled) {
+      try {
+        var res = await apiFetch('/api/admin/users/' + userId, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ is_disabled: disabled })
+        });
+        var json = await res.json();
+        if (json.success) {
+          showToast(disabled ? '已禁用' : '已启用');
+          loadData();
+        } else {
+          showToast(json.error || '操作失败');
+        }
+      } catch (e) {
+        showToast('操作失败');
+      }
+    }
+
+    function changeRateLimit(userId, currentLimit) {
+      var newLimit = prompt('请输入新的推送限额 (0-100000):', currentLimit);
+      if (newLimit === null) return;
+      var val = parseInt(newLimit, 10);
+      if (isNaN(val) || val < 0 || val > 100000) {
+        showToast('限额必须是 0-100000 的整数');
+        return;
+      }
+      updateRateLimit(userId, val);
+    }
+
+    async function updateRateLimit(userId, limit) {
+      try {
+        var res = await apiFetch('/api/admin/users/' + userId, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rate_limit: limit })
+        });
+        var json = await res.json();
+        if (json.success) {
+          showToast('限额已更新为 ' + limit);
+          loadData();
+        } else {
+          showToast(json.error || '操作失败');
+        }
+      } catch (e) {
+        showToast('操作失败');
+      }
+    }
+
+    async function deleteUser(userId) {
+      if (!confirm('确定要删除该用户吗？此操作不可撤销，将同时删除该用户的所有通道、推送记录等数据。')) {
+        return;
+      }
+      if (!confirm('再次确认：真的要永久删除用户 #' + userId + ' 吗？')) {
+        return;
+      }
+      try {
+        var res = await apiFetch('/api/admin/users/' + userId, {
+          method: 'DELETE'
+        });
+        var json = await res.json();
+        if (json.success) {
+          showToast('用户已删除');
+          loadData();
+        } else {
+          showToast(json.error || '删除失败');
+        }
+      } catch (e) {
+        showToast('删除失败');
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  Page view tracking
+    // ═══════════════════════════════════════════════════════════════════
+    (function() {
+      try {
+        var trackData = JSON.stringify({ page: 'admin' });
+        if (navigator.sendBeacon) {
+          navigator.sendBeacon(basePath + '/api/track', new Blob([trackData], { type: 'application/json' }));
+        } else {
+          fetch(basePath + '/api/track', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: trackData,
+            credentials: 'same-origin'
+          }).catch(function() {});
+        }
+      } catch (e) {}
+    })();
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  Page views statistics
+    // ═══════════════════════════════════════════════════════════════════
+    async function loadPageViews(period) {
+      period = period || '30d';
+      try {
+        var res = await apiFetch('/api/admin/page-views?period=' + period);
+        var json = await res.json();
+        if (!json.success) { showToast('加载访问统计失败'); return; }
+        renderPageViews(json.data, period);
+      } catch (e) {
+        showToast('加载访问统计失败');
+      }
+    }
+
+    function renderPageViews(data, activePeriod) {
+      var summary = data.summary;
+      var byPage = data.by_page;
+      var byDay = data.by_day;
+      var recent = data.recent;
+
+      // Summary cards
+      document.getElementById('pv-total').textContent = summary.total;
+      document.getElementById('pv-today').textContent = summary.today;
+      document.getElementById('pv-unique').textContent = summary.unique_ips;
+
+      // Period buttons
+      ['today','7d','30d','all'].forEach(function(p) {
+        var btn = document.getElementById('pv-btn-' + p);
+        if (btn) {
+          btn.className = 'btn btn-sm ' + (p === activePeriod ? 'btn-primary' : 'btn-secondary');
+        }
+      });
+
+      // By page table
+      var pageHtml = '';
+      byPage.forEach(function(r) {
+        pageHtml += '<tr><td>' + escapeHtml(r.page) + '</td><td>' + r.count + '</td><td>' + r.unique_ips + '</td></tr>';
+      });
+      document.getElementById('pv-by-page-tbody').innerHTML = pageHtml || '<tr><td colspan="3" style="text-align:center;color:#8e8e93;padding:20px;">暂无数据</td></tr>';
+
+      // Trend chart (SVG line chart, last 30 days)
+      renderTrendChart(byDay);
+
+      // Recent records
+      var recentHtml = '';
+      recent.forEach(function(r) {
+        recentHtml += '<tr>' +
+          '<td>' + escapeHtml(r.page) + '</td>' +
+          '<td>' + escapeHtml(r.tab || '-') + '</td>' +
+          '<td>' + escapeHtml(r.ip || '-') + '</td>' +
+          '<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escapeHtml((r.user_agent || '-').substring(0, 60)) + '</td>' +
+          '<td>' + escapeHtml(r.created_at || '-') + '</td>' +
+          '</tr>';
+      });
+      document.getElementById('pv-recent-tbody').innerHTML = recentHtml || '<tr><td colspan="5" style="text-align:center;color:#8e8e93;padding:20px;">暂无数据</td></tr>';
+    }
+
+    function renderTrendChart(byDay) {
+      var container = document.getElementById('pv-trend-chart');
+      if (!byDay || byDay.length === 0) {
+        container.innerHTML = '<div style="text-align:center;color:#8e8e93;padding:40px;">暂无趋势数据</div>';
+        return;
+      }
+
+      var W = 700, H = 200, padL = 50, padR = 20, padT = 20, padB = 40;
+      var chartW = W - padL - padR;
+      var chartH = H - padT - padB;
+
+      var maxVal = Math.max.apply(null, byDay.map(function(d) { return d.count; }));
+      if (maxVal === 0) maxVal = 1;
+
+      var n = byDay.length;
+
+      // Build points
+      var points = byDay.map(function(d, i) {
+        var x = padL + (n > 1 ? (i / (n - 1)) * chartW : chartW / 2);
+        var y = padT + chartH - (d.count / maxVal) * chartH;
+        return { x: x, y: y, date: d.date, count: d.count };
+      });
+
+      var polyline = points.map(function(p) { return p.x + ',' + p.y; }).join(' ');
+
+      // Area fill
+      var areaPath = 'M' + points[0].x + ',' + (padT + chartH) + ' ';
+      areaPath += points.map(function(p) { return 'L' + p.x + ',' + p.y; }).join(' ');
+      areaPath += ' L' + points[points.length - 1].x + ',' + (padT + chartH) + ' Z';
+
+      // Y-axis labels
+      var yLabels = '';
+      for (var i = 0; i <= 4; i++) {
+        var val = Math.round(maxVal * i / 4);
+        var yy = padT + chartH - (i / 4) * chartH;
+        yLabels += '<text x="' + (padL - 8) + '" y="' + (yy + 4) + '" text-anchor="end" fill="#8e8e93" font-size="11">' + val + '</text>';
+        yLabels += '<line x1="' + padL + '" y1="' + yy + '" x2="' + (W - padR) + '" y2="' + yy + '" stroke="#f0f0f0" stroke-width="1"/>';
+      }
+
+      // X-axis labels (show ~5 labels)
+      var xLabels = '';
+      var step = Math.max(1, Math.floor(n / 5));
+      for (var j = 0; j < n; j += step) {
+        var label = byDay[j].date.substring(5); // MM-DD
+        xLabels += '<text x="' + points[j].x + '" y="' + (H - 8) + '" text-anchor="middle" fill="#8e8e93" font-size="11">' + label + '</text>';
+      }
+
+      // Dots
+      var dots = points.map(function(p) {
+        return '<circle cx="' + p.x + '" cy="' + p.y + '" r="3" fill="#0071e3"/>';
+      }).join('');
+
+      var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;max-width:' + W + 'px;height:auto;">' +
+        yLabels + xLabels +
+        '<defs><linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">' +
+        '<stop offset="0%" stop-color="#0071e3" stop-opacity="0.2"/>' +
+        '<stop offset="100%" stop-color="#0071e3" stop-opacity="0.02"/>' +
+        '</linearGradient></defs>' +
+        '<path d="' + areaPath + '" fill="url(#areaGrad)"/>' +
+        '<polyline points="' + polyline + '" fill="none" stroke="#0071e3" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>' +
+        dots +
+        '</svg>';
+
+      container.innerHTML = svg;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  Init
+    // ═══════════════════════════════════════════════════════════════════
+    checkAdmin();
+  </script>
+</body>
+</html>
