@@ -1,0 +1,15 @@
+node_modules
+data
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+*.log
+*.md
+docs
+sdk
+LICENSE
+docker-compose*.yml
+Dockerfile
+.dockerignore

@@ -1,0 +1,26 @@
+# docker-compose.prod.yml — 生产环境覆盖配置 / Production overrides
+# 用法 / Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# 此文件在基础配置之上增加生产环境优化
+# This file layers production optimizations on top of the base config
+
+services:
+  app:
+    restart: always
+    # 生产环境建议只监听 127.0.0.1，由 Nginx 等反向代理对外暴露
+    # In production, bind to 127.0.0.1 only; expose via Nginx/Caddy reverse proxy
+    ports:
+      - "127.0.0.1:${PORT:-3000}:3000"
+    environment:
+      - NODE_ENV=production
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "1.0"
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"

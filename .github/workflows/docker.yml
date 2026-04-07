@@ -1,0 +1,30 @@
+name: Docker Build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Dockerfile'
+      - 'package*.json'
+      - 'app.js'
+      - 'db.js'
+      - 'scheduler.js'
+      - 'ilink.js'
+      - 'routes/**'
+      - 'services/**'
+      - 'middleware/**'
+      - 'public/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'Dockerfile'
+
+jobs:
+  build:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t bottalk:ci .

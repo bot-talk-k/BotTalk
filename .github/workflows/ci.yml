@@ -1,0 +1,132 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    outputs:
+      server: ${{ steps.filter.outputs.server }}
+      python-sdk: ${{ steps.filter.outputs.python-sdk }}
+      node-sdk: ${{ steps.filter.outputs.node-sdk }}
+      go-sdk: ${{ steps.filter.outputs.go-sdk }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            server:
+              - 'app.js'
+              - 'db.js'
+              - 'scheduler.js'
+              - 'ilink.js'
+              - 'package*.json'
+              - 'routes/**'
+              - 'services/**'
+              - 'middleware/**'
+              - 'public/**'
+            python-sdk:
+              - 'sdk/python/**'
+            node-sdk:
+              - 'sdk/node/**'
+            go-sdk:
+              - 'sdk/go/**'
+
+  server:
+    name: Server
+    needs: changes
+    if: needs.changes.outputs.server == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Verify server starts
+        run: |
+          node app.js &
+          SERVER_PID=$!
+          sleep 5
+          curl -sf http://localhost:3000/ > /dev/null
+          kill $SERVER_PID
+
+  python-sdk:
+    name: Python SDK (${{ matrix.python-version }})
+    needs: changes
+    if: needs.changes.outputs.python-sdk == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.9', '3.10', '3.11', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        working-directory: sdk/python
+        run: pip install -e .
+
+      - name: Run tests
+        working-directory: sdk/python
+        run: python -m unittest discover -s tests -v
+
+  node-sdk:
+    name: Node SDK (Node ${{ matrix.node-version }})
+    needs: changes
+    if: needs.changes.outputs.node-sdk == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+          cache-dependency-path: sdk/node/package.json
+
+      - name: Install dependencies
+        working-directory: sdk/node
+        run: npm ci
+
+      - name: Run tests
+        working-directory: sdk/node
+        run: node --experimental-strip-types --no-warnings --test tests/*.test.ts
+
+  go-sdk:
+    name: Go SDK (Go ${{ matrix.go-version }})
+    needs: changes
+    if: needs.changes.outputs.go-sdk == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: ['1.21', '1.22']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go-version }}
+          cache-dependency-path: sdk/go/go.sum
+
+      - name: Run tests
+        working-directory: sdk/go
+        run: go test -v ./...

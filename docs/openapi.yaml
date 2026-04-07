@@ -1,0 +1,1583 @@
+openapi: 3.0.3
+info:
+  title: BotTalk API
+  description: |
+    BotTalk 是一个开源的微信推送服务（类似 Server酱），通过微信 iLink Bot 向用户发送消息推送。
+
+    ## 认证方式
+
+    - **SendKey**：用于推送 API，32 位十六进制字符串，支持路径传参、Query 传参和 Bearer Token 三种方式。
+    - **Session Cookie**：用于管理 API，通过登录或扫码注册后自动设置，有效期 30 天。
+
+    ## 响应格式
+
+    推送 API 使用 `code` + `message` 风格；管理 API 使用 `success` 布尔值风格。
+  version: 1.0.0
+  contact:
+    name: BotTalk
+    url: https://bot-talk.com
+
+servers:
+  - url: https://bot-talk.com
+    description: 托管服务
+  - url: http://localhost:3000
+    description: 本地开发 / 自部署
+
+tags:
+  - name: Push
+    description: 消息推送（仅需 SendKey）
+  - name: Auth
+    description: 用户认证（注册、登录、登出）
+  - name: Key
+    description: SendKey 管理
+  - name: Channels
+    description: 推送通道管理
+  - name: Reminders
+    description: 定时提醒管理
+  - name: Logs
+    description: 推送日志
+  - name: Admin
+    description: 管理后台（需要 admin 角色）
+  - name: Config
+    description: 服务器配置
+
+components:
+  securitySchemes:
+    SendKeyQuery:
+      type: apiKey
+      in: query
+      name: key
+      description: 通过 query 参数传递 SendKey
+    SendKeyBearer:
+      type: http
+      scheme: bearer
+      description: 通过 Authorization Bearer 头传递 SendKey
+    SessionCookie:
+      type: apiKey
+      in: cookie
+      name: connect.sid
+      description: 登录 session cookie
+
+  schemas:
+    # ── Push API 响应 ──
+    PushResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+          description: "错误码：0=成功, 40001=Key无效, 40002=无可用通道, 40003=内容为空, 42901=频率超限, 50001=全部失败"
+        message:
+          type: string
+        data:
+          type: object
+          nullable: true
+          properties:
+            results:
+              type: array
+              items:
+                $ref: '#/components/schemas/ChannelResult'
+
+    ChannelResult:
+      type: object
+      properties:
+        channel_id:
+          type: integer
+        status:
+          type: string
+          enum: [success, failed, skipped]
+        reason:
+          type: string
+          description: 仅 status=skipped 时出现
+        token_invalid:
+          type: boolean
+          description: 仅 status=failed 时可能出现，为 true 表示通道已被标记为 inactive
+
+    # ── 管理 API 通用响应 ──
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: string
+
+    UnauthorizedError:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Unauthorized. Please log in."
+
+    InternalError:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: string
+          example: "Internal error"
+
+    # ── 数据模型 ──
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+          nullable: true
+        send_key:
+          type: string
+          description: 32 位十六进制字符串
+        role:
+          type: string
+          enum: [user, admin]
+        channel_count:
+          type: integer
+
+    Channel:
+      type: object
+      properties:
+        id:
+          type: integer
+        user_id:
+          type: integer
+        name:
+          type: string
+        channel_type:
+          type: string
+          example: wechat_ilink
+        wechat_openid:
+          type: string
+        bot_token:
+          type: string
+        context_token:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [pending, active, inactive]
+        is_default:
+          type: integer
+          enum: [0, 1]
+        created_at:
+          type: string
+          format: date-time
+
+    Reminder:
+      type: object
+      properties:
+        id:
+          type: integer
+        user_id:
+          type: integer
+        title:
+          type: string
+        message:
+          type: string
+        time:
+          type: string
+          description: "格式 HH:MM 或 YYYY-MM-DDTHH:MM"
+        type:
+          type: string
+          enum: [once, daily, every2min]
+        enabled:
+          type: integer
+          enum: [0, 1]
+        send_count:
+          type: integer
+        max_count:
+          type: integer
+          description: 最大发送次数，0 表示无限制
+        created_at:
+          type: string
+          format: date-time
+
+    PushLog:
+      type: object
+      properties:
+        id:
+          type: integer
+        user_id:
+          type: integer
+        title:
+          type: string
+        content:
+          type: string
+        status:
+          type: string
+          enum: [success, failed]
+        ip:
+          type: string
+        channel_id:
+          type: integer
+        channel_name:
+          type: string
+          description: 通过 JOIN 获取的通道名称
+        response:
+          type: string
+          description: JSON 字符串，包含 iLink API 响应
+        created_at:
+          type: string
+          format: date-time
+
+    QRCodeData:
+      type: object
+      description: iLink API 返回的二维码数据（字段可能随上游变化）
+      properties:
+        qrcode:
+          type: string
+        qrcode_url:
+          type: string
+        expire_time:
+          type: integer
+
+    AdminUser:
+      type: object
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+          nullable: true
+        wechat_openid:
+          type: string
+          nullable: true
+        send_key:
+          type: string
+        role:
+          type: string
+          enum: [user, admin]
+        is_disabled:
+          type: integer
+          enum: [0, 1]
+        rate_limit:
+          type: integer
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        channel_count:
+          type: integer
+        push_count:
+          type: integer
+
+    AdminStats:
+      type: object
+      properties:
+        total_users:
+          type: integer
+        today_pushes:
+          type: integer
+        active_channels:
+          type: integer
+        disabled_users:
+          type: integer
+        admin_count:
+          type: integer
+
+paths:
+  # ════════════════════════════════════════════════════════════════════
+  #  Push API
+  # ════════════════════════════════════════════════════════════════════
+
+  /{sendkey}.send:
+    get:
+      tags: [Push]
+      summary: "推送消息（Server酱兼容格式 - GET）"
+      description: 通过 URL 路径中的 SendKey 推送消息，兼容 Server酱格式。
+      parameters:
+        - name: sendkey
+          in: path
+          required: true
+          schema:
+            type: string
+          description: 用户的 SendKey
+        - name: title
+          in: query
+          schema:
+            type: string
+          description: 消息标题（与 desp 不能同时为空）
+        - name: desp
+          in: query
+          schema:
+            type: string
+          description: 消息内容
+        - name: channel
+          in: query
+          schema:
+            type: string
+          description: "目标通道：留空/default=默认通道, all=所有通道, 1,3,5=指定ID"
+      responses:
+        '200':
+          description: 推送结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PushResponse'
+    post:
+      tags: [Push]
+      summary: "推送消息（Server酱兼容格式 - POST）"
+      description: 通过 URL 路径中的 SendKey 推送消息，兼容 Server酱格式。
+      parameters:
+        - name: sendkey
+          in: path
+          required: true
+          schema:
+            type: string
+          description: 用户的 SendKey
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                  description: 消息标题（与 desp/message 不能同时为空）
+                desp:
+                  type: string
+                  description: 消息内容
+                message:
+                  type: string
+                  description: 消息内容（desp 的别名）
+                channel:
+                  type: string
+                  description: "目标通道：留空/default=默认通道, all=所有通道, 1,3,5=指定ID"
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                desp:
+                  type: string
+                message:
+                  type: string
+                channel:
+                  type: string
+      responses:
+        '200':
+          description: 推送结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PushResponse'
+
+  /notify:
+    get:
+      tags: [Push]
+      summary: "推送消息（通用格式 - GET）"
+      description: 通过 query 参数传递 SendKey 和消息内容。
+      security:
+        - SendKeyQuery: []
+      parameters:
+        - name: key
+          in: query
+          required: true
+          schema:
+            type: string
+          description: SendKey
+        - name: title
+          in: query
+          schema:
+            type: string
+          description: 消息标题（与 msg/desp 不能同时为空）
+        - name: msg
+          in: query
+          schema:
+            type: string
+          description: 消息内容
+        - name: desp
+          in: query
+          schema:
+            type: string
+          description: 消息内容（msg 的别名）
+        - name: channel
+          in: query
+          schema:
+            type: string
+          description: "目标通道：留空/default=默认通道, all=所有通道, 1,3,5=指定ID"
+      responses:
+        '200':
+          description: 推送结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PushResponse'
+    post:
+      tags: [Push]
+      summary: "推送消息（通用格式 - POST）"
+      description: 通过 Bearer Token 或 query 参数传递 SendKey，POST body 传递消息内容。
+      security:
+        - SendKeyBearer: []
+        - SendKeyQuery: []
+      parameters:
+        - name: key
+          in: query
+          schema:
+            type: string
+          description: SendKey（也可通过 Authorization Bearer 头传递）
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                  description: 消息标题（与 message/desp 不能同时为空）
+                message:
+                  type: string
+                  description: 消息内容
+                desp:
+                  type: string
+                  description: 消息内容（message 的别名）
+                channel:
+                  type: string
+                  description: "目标通道：留空/default=默认通道, all=所有通道, 1,3,5=指定ID"
+      responses:
+        '200':
+          description: 推送结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PushResponse'
+
+  # ════════════════════════════════════════════════════════════════════
+  #  Auth API
+  # ════════════════════════════════════════════════════════════════════
+
+  /api/auth/register:
+    post:
+      tags: [Auth]
+      summary: 邮箱注册
+      description: 通过邮箱注册新用户，自动生成 SendKey 并建立登录 session。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  description: 邮箱地址
+      responses:
+        '200':
+          description: 注册成功或业务错误
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    properties:
+                      success:
+                        type: boolean
+                        example: true
+                      data:
+                        type: object
+                        properties:
+                          id:
+                            type: integer
+                          email:
+                            type: string
+                          send_key:
+                            type: string
+                  - $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: 服务器内部错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InternalError'
+
+  /api/auth/login:
+    post:
+      tags: [Auth]
+      summary: SendKey 登录
+      description: 通过 SendKey 登录，建立 session。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [send_key]
+              properties:
+                send_key:
+                  type: string
+                  description: 用户的 SendKey
+      responses:
+        '200':
+          description: 登录成功或业务错误
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    properties:
+                      success:
+                        type: boolean
+                        example: true
+                      data:
+                        type: object
+                        properties:
+                          id:
+                            type: integer
+                          email:
+                            type: string
+                          send_key:
+                            type: string
+                          channel_count:
+                            type: integer
+                  - $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: 服务器内部错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InternalError'
+
+  /api/auth/me:
+    get:
+      tags: [Auth]
+      summary: 获取当前用户信息
+      description: 获取当前登录用户信息，需要登录 session。
+      security:
+        - SessionCookie: []
+      responses:
+        '200':
+          description: 用户信息
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                      email:
+                        type: string
+                      send_key:
+                        type: string
+                      role:
+                        type: string
+                        enum: [user, admin]
+                      channel_count:
+                        type: integer
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+        '500':
+          description: 服务器内部错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InternalError'
+
+  /api/auth/logout:
+    post:
+      tags: [Auth]
+      summary: 退出登录
+      description: 退出登录，销毁 session。
+      security:
+        - SessionCookie: []
+      responses:
+        '200':
+          description: 登出成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+        '500':
+          description: 服务器内部错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InternalError'
+
+  # ════════════════════════════════════════════════════════════════════
+  #  Key API
+  # ════════════════════════════════════════════════════════════════════
+
+  /api/key:
+    get:
+      tags: [Key]
+      summary: 获取 SendKey
+      description: 获取当前用户的 SendKey。
+      security:
+        - SessionCookie: []
+      responses:
+        '200':
+          description: SendKey
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      send_key:
+                        type: string
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+
+  /api/key/reset:
+    post:
+      tags: [Key]
+      summary: 重置 SendKey
+      description: 生成新的 SendKey，旧 Key 立即失效。
+      security:
+        - SessionCookie: []
+      responses:
+        '200':
+          description: 新的 SendKey
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      send_key:
+                        type: string
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+
+  # ════════════════════════════════════════════════════════════════════
+  #  Channels API
+  # ════════════════════════════════════════════════════════════════════
+
+  /api/channels/qrcode-public:
+    post:
+      tags: [Channels]
+      summary: 生成公开二维码（扫码即注册）
+      description: 生成扫码绑定二维码，用于新用户注册+绑定通道，无需登录。
+      responses:
+        '200':
+          description: 二维码数据
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/QRCodeData'
+        '500':
+          description: 获取二维码失败
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  data:
+                    type: object
+                    properties:
+                      error:
+                        type: string
+
+  /api/channels/bind-status-public/{qrcode}:
+    get:
+      tags: [Channels]
+      summary: 轮询公开扫码状态
+      description: |
+        轮询扫码状态。扫码完成后自动创建用户和默认通道，并建立登录 session。
+        返回 status 为 pending 表示通道正在等待激活，用户需要在微信中向 Bot 发送一条消息完成激活。
+      parameters:
+        - name: qrcode
+          in: path
+          required: true
+          schema:
+            type: string
+          description: 从 qrcode-public 获取的二维码字符串
+      responses:
+        '200':
+          description: 扫码状态
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    oneOf:
+                      - type: object
+                        description: 等待扫码
+                        properties:
+                          status:
+                            type: string
+                            example: waiting
+                      - type: object
+                        description: 二维码过期
+                        properties:
+                          status:
+                            type: string
+                            example: expired
+                      - type: object
+                        description: 扫码完成
+                        properties:
+                          id:
+                            type: integer
+                          send_key:
+                            type: string
+                          status:
+                            type: string
+                            example: pending
+                          wechat_openid:
+                            type: string
+                          is_new:
+                            type: boolean
+                            description: true=新用户, false=已有用户自动登录
+        '403':
+          description: Session 不匹配
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  data:
+                    type: object
+                    properties:
+                      error:
+                        type: string
+                        example: "Session mismatch"
+
+  /api/channels:
+    get:
+      tags: [Channels]
+      summary: 获取通道列表
+      description: 获取当前用户的所有通道（不含已删除的 inactive 通道）。
+      security:
+        - SessionCookie: []
+      responses:
+        '200':
+          description: 通道列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Channel'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+
+  /api/channels/qrcode:
+    post:
+      tags: [Channels]
+      summary: 生成新通道二维码
+      description: 为当前用户生成添加新通道的二维码。每个用户最多 10 个通道。
+      security:
+        - SessionCookie: []
+      responses:
+        '200':
+          description: 二维码数据
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/QRCodeData'
+        '400':
+          description: 超过通道上限
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  data:
+                    type: object
+                    properties:
+                      error:
+                        type: string
+                        example: "Maximum 10 channels allowed"
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+
+  /api/channels/bind-status/{qrcode}:
+    get:
+      tags: [Channels]
+      summary: 轮询新通道扫码状态
+      description: |
+        轮询新通道的扫码绑定状态。需要登录。
+        支持新微信绑定、同一微信重绑、以及检测微信是否已被其他账户绑定。
+      security:
+        - SessionCookie: []
+      parameters:
+        - name: qrcode
+          in: path
+          required: true
+          schema:
+            type: string
+          description: 从 /api/channels/qrcode 获取的二维码字符串
+      responses:
+        '200':
+          description: 扫码状态
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    oneOf:
+                      - type: object
+                        description: iLink 返回的等待状态
+                      - type: object
+                        description: 新通道绑定成功
+                        properties:
+                          id:
+                            type: integer
+                          name:
+                            type: string
+                          status:
+                            type: string
+                            example: pending
+                          wechat_openid:
+                            type: string
+                          is_default:
+                            type: integer
+                      - type: object
+                        description: 同一微信重绑
+                        properties:
+                          id:
+                            type: integer
+                          name:
+                            type: string
+                          status:
+                            type: string
+                            example: pending
+                          wechat_openid:
+                            type: string
+                          is_default:
+                            type: integer
+                          rebind:
+                            type: boolean
+                            example: true
+                      - type: object
+                        description: 微信已被其他账户绑定
+                        properties:
+                          error:
+                            type: string
+                            example: wechat_already_bound
+                          message:
+                            type: string
+                            example: 该微信已被其他账户绑定
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+
+  /api/channels/{id}/activation:
+    get:
+      tags: [Channels]
+      summary: 检查通道激活状态
+      description: 检查通道是否已激活（用户在微信中发送了第一条消息）。
+      security:
+        - SessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: 通道 ID
+      responses:
+        '200':
+          description: 激活状态
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      activated:
+                        type: boolean
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+        '404':
+          description: 通道不存在
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  data:
+                    type: object
+                    properties:
+                      error:
+                        type: string
+                        example: "Channel not found"
+
+  /api/channels/{id}:
+    patch:
+      tags: [Channels]
+      summary: 更新通道
+      description: 更新通道名称或设为默认通道。
+      security:
+        - SessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: 通道 ID
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  description: 新的通道名称
+                is_default:
+                  type: integer
+                  enum: [0, 1]
+                  description: 设为 1 则将此通道设为默认
+      responses:
+        '200':
+          description: 更新后的通道
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/Channel'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+        '404':
+          description: 通道不存在
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  data:
+                    type: object
+                    properties:
+                      error:
+                        type: string
+                        example: "Channel not found"
+    delete:
+      tags: [Channels]
+      summary: 删除通道
+      description: 软删除通道（将状态设为 inactive）。
+      security:
+        - SessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: 通道 ID
+      responses:
+        '200':
+          description: 删除成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      message:
+                        type: string
+                        example: "Channel deleted"
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+        '404':
+          description: 通道不存在
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  data:
+                    type: object
+                    properties:
+                      error:
+                        type: string
+                        example: "Channel not found"
+
+  /api/channels/{id}/check:
+    post:
+      tags: [Channels]
+      summary: 检测通道存活状态
+      description: 检测通道是否存活（通过服务端 poller 心跳检测，不调用 iLink API）。
+      security:
+        - SessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: 通道 ID
+      responses:
+        '200':
+          description: 存活状态
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      alive:
+                        type: boolean
+                      reason:
+                        type: string
+                        nullable: true
+                        description: "不存活时的原因：no_poller, stopped, session_expired, heartbeat_timeout"
+                      last_ok_seconds_ago:
+                        type: integer
+                        description: 距离上次成功心跳的秒数
+                      status:
+                        type: string
+                        enum: [active, inactive]
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+        '404':
+          description: 通道不存在
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  data:
+                    type: object
+                    properties:
+                      error:
+                        type: string
+                        example: "Channel not found"
+
+  # ════════════════════════════════════════════════════════════════════
+  #  Push Logs API
+  # ════════════════════════════════════════════════════════════════════
+
+  /api/push-logs:
+    get:
+      tags: [Logs]
+      summary: 获取推送日志
+      description: 获取当前用户最近 50 条推送日志，包含通道名称。
+      security:
+        - SessionCookie: []
+      responses:
+        '200':
+          description: 推送日志列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PushLog'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+
+  # ════════════════════════════════════════════════════════════════════
+  #  Reminders API
+  # ════════════════════════════════════════════════════════════════════
+
+  /api/reminders:
+    get:
+      tags: [Reminders]
+      summary: 获取提醒列表
+      description: 获取当前用户的所有提醒。
+      security:
+        - SessionCookie: []
+      responses:
+        '200':
+          description: 提醒列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Reminder'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+    post:
+      tags: [Reminders]
+      summary: 创建提醒
+      description: 创建新的定时提醒。
+      security:
+        - SessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, time]
+              properties:
+                title:
+                  type: string
+                  description: 提醒标题
+                message:
+                  type: string
+                  description: 提醒内容
+                time:
+                  type: string
+                  description: "触发时间，格式 HH:MM 或 YYYY-MM-DDTHH:MM"
+                type:
+                  type: string
+                  enum: [once, daily, every2min]
+                  default: once
+                  description: "类型：once（默认）、daily、every2min（体验用）"
+                max_count:
+                  type: integer
+                  default: 0
+                  description: 最大发送次数，0 表示无限制
+      responses:
+        '200':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  id:
+                    type: integer
+                    description: 新创建的提醒 ID
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+
+  /api/reminders/{id}:
+    delete:
+      tags: [Reminders]
+      summary: 删除提醒
+      description: 删除指定提醒（同时删除关联的发送日志）。仅能删除自己的提醒。
+      security:
+        - SessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: 提醒 ID
+      responses:
+        '200':
+          description: 删除结果
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+
+  /api/reminders/{id}/enable:
+    patch:
+      tags: [Reminders]
+      summary: 启用/禁用提醒
+      description: 启用或禁用指定提醒。
+      security:
+        - SessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: 提醒 ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enabled]
+              properties:
+                enabled:
+                  type: boolean
+                  description: true 启用，false 禁用
+      responses:
+        '200':
+          description: 操作成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+
+  # ════════════════════════════════════════════════════════════════════
+  #  Admin API
+  # ════════════════════════════════════════════════════════════════════
+
+  /api/admin/users:
+    get:
+      tags: [Admin]
+      summary: 用户列表
+      description: 获取所有用户列表，含通道数和推送数统计。需要 admin 角色。
+      security:
+        - SessionCookie: []
+      responses:
+        '200':
+          description: 用户列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AdminUser'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+        '403':
+          description: 无 admin 权限
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/admin/users/{id}:
+    patch:
+      tags: [Admin]
+      summary: 修改用户
+      description: 修改用户的角色、禁用状态或速率限制。不能修改自己。需要 admin 角色。
+      security:
+        - SessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: 用户 ID
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                role:
+                  type: string
+                  enum: [user, admin]
+                  description: 用户角色
+                is_disabled:
+                  type: integer
+                  enum: [0, 1]
+                  description: 是否禁用
+                rate_limit:
+                  type: integer
+                  minimum: 0
+                  maximum: 100000
+                  description: 速率限制（每小时推送条数）
+      responses:
+        '200':
+          description: 更新结果
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    properties:
+                      success:
+                        type: boolean
+                        example: true
+                      data:
+                        type: object
+                        properties:
+                          id:
+                            type: integer
+                          email:
+                            type: string
+                          role:
+                            type: string
+                          is_disabled:
+                            type: integer
+                          rate_limit:
+                            type: integer
+                  - $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+        '403':
+          description: 无 admin 权限
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: 用户不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      tags: [Admin]
+      summary: 删除用户
+      description: 删除用户及其所有关联数据（通道、推送日志、提醒等）。不能删除自己。需要 admin 角色。
+      security:
+        - SessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: 用户 ID
+      responses:
+        '200':
+          description: 删除结果
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    properties:
+                      success:
+                        type: boolean
+                        example: true
+                      data:
+                        type: object
+                        properties:
+                          deleted:
+                            type: integer
+                            description: 被删除的用户 ID
+                  - $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+        '403':
+          description: 无 admin 权限
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: 用户不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/admin/stats:
+    get:
+      tags: [Admin]
+      summary: 仪表盘统计
+      description: 获取系统概览统计数据。需要 admin 角色。
+      security:
+        - SessionCookie: []
+      responses:
+        '200':
+          description: 统计数据
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/AdminStats'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+        '403':
+          description: 无 admin 权限
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ════════════════════════════════════════════════════════════════════
+  #  Config API
+  # ════════════════════════════════════════════════════════════════════
+
+  /api/config:
+    get:
+      tags: [Config]
+      summary: 获取服务器配置
+      description: 获取服务器配置信息（公开接口，无需认证）。
+      responses:
+        '200':
+          description: 服务器配置
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  base_url:
+                    type: string
+                    example: "https://bot-talk.com"

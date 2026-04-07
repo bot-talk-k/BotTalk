@@ -1,0 +1,2433 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BotTalk - WeChat Push Notification Service</title>
+  <script src="qrcode.min.js"></script>
+  <script src="i18n.js"></script>
+  <style>
+    /* ── Reset & Base ──────────────────────────────────────────────── */
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: -apple-system, "SF Pro Display", "SF Pro Text", "PingFang SC", "Helvetica Neue", Helvetica, Arial, sans-serif;
+      background: #fff;
+      color: #1d1d1f;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    /* ── Typography ────────────────────────────────────────────────── */
+    h1 { font-size: 48px; font-weight: 700; letter-spacing: -0.5px; }
+    h2 { font-size: 28px; font-weight: 600; letter-spacing: -0.2px; }
+    h3 { font-size: 20px; font-weight: 600; }
+
+    /* ── Nav ────────────────────────────────────────────────────────── */
+    .navbar {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+      height: 48px;
+      backdrop-filter: saturate(180%) blur(20px);
+      -webkit-backdrop-filter: saturate(180%) blur(20px);
+      background: rgba(255,255,255,0.8);
+      border-bottom: 0.5px solid rgba(0,0,0,0.1);
+      display: flex; align-items: center; justify-content: center;
+      padding: 0 20px;
+    }
+    .navbar-inner {
+      width: 100%; max-width: 980px;
+      display: flex; align-items: center;
+    }
+    .nav-logo {
+      font-size: 18px; font-weight: 700; color: #1d1d1f;
+      letter-spacing: -0.3px; cursor: pointer;
+      user-select: none; flex-shrink: 0;
+    }
+    .nav-links {
+      display: flex; gap: 4px; margin-left: 32px;
+    }
+    .nav-links a {
+      padding: 6px 14px; text-decoration: none; color: #6e6e73;
+      font-size: 13px; font-weight: 500; border-radius: 980px;
+      cursor: pointer; transition: background 0.2s, color 0.2s;
+      white-space: nowrap;
+    }
+    .nav-links a:hover { background: rgba(0,0,0,0.04); color: #1d1d1f; }
+    .nav-links a.active { background: rgba(0,113,227,0.08); color: #0071e3; }
+    .nav-right {
+      margin-left: auto; display: flex; align-items: center; gap: 16px;
+      font-size: 13px; flex-shrink: 0;
+    }
+    .nav-right .username { color: #6e6e73; font-weight: 500; }
+    #lang-toggle {
+      padding: 4px 12px; border-radius: 980px; border: 1px solid rgba(0,0,0,0.12);
+      background: transparent; font-size: 12px; font-weight: 600; color: #6e6e73;
+      cursor: pointer; transition: all 0.2s;
+    }
+    #lang-toggle:hover { border-color: #0071e3; color: #0071e3; }
+    .nav-btn {
+      padding: 5px 16px; border-radius: 980px; border: none;
+      font-size: 13px; font-weight: 500; cursor: pointer;
+      transition: all 0.2s;
+    }
+    .nav-btn-login { background: #0071e3; color: #fff; }
+    .nav-btn-login:hover { background: #0077ed; }
+    .nav-btn-logout {
+      background: transparent; color: #6e6e73; border: 1px solid rgba(0,0,0,0.12);
+    }
+    .nav-btn-logout:hover { border-color: #ff3b30; color: #ff3b30; }
+
+    /* ── Layout ────────────────────────────────────────────────────── */
+    .main { padding-top: 48px; }
+    .container { max-width: 980px; margin: 0 auto; padding: 0 20px; }
+
+    /* ── Page transitions ──────────────────────────────────────────── */
+    .page { display: none; opacity: 0; transition: opacity 0.35s ease; }
+    .page.active { display: block; }
+    .page.visible { opacity: 1; }
+
+    /* ── Buttons ───────────────────────────────────────────────────── */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      padding: 10px 24px; border-radius: 980px; font-size: 14px;
+      font-weight: 500; cursor: pointer; border: none;
+      transition: all 0.2s; user-select: none;
+      text-decoration: none;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn-primary { background: #0071e3; color: #fff; }
+    .btn-primary:hover { background: #0077ed; }
+    .btn-secondary {
+      background: transparent; color: #0071e3;
+      border: 1.5px solid #0071e3;
+    }
+    .btn-secondary:hover { background: rgba(0,113,227,0.06); }
+    .btn-danger-text {
+      background: transparent; color: #ff3b30; border: none;
+      padding: 6px 12px; font-size: 13px;
+    }
+    .btn-danger-text:hover { background: rgba(255,59,48,0.06); border-radius: 980px; }
+    .btn-sm { padding: 6px 16px; font-size: 13px; }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
+    .btn-icon {
+      width: 36px; height: 36px; padding: 0; border-radius: 50%;
+      display: inline-flex; align-items: center; justify-content: center;
+      background: rgba(0,0,0,0.04); border: none; cursor: pointer;
+      transition: all 0.2s; font-size: 14px; color: #6e6e73;
+    }
+    .btn-icon:hover { background: rgba(0,0,0,0.08); color: #1d1d1f; }
+
+    /* ── Cards ─────────────────────────────────────────────────────── */
+    .card {
+      background: #fff; border-radius: 16px; padding: 24px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+      margin-bottom: 16px;
+      transition: transform 0.25s ease, box-shadow 0.25s ease;
+    }
+    .card-hover:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+    }
+    .card h3 { margin-bottom: 8px; }
+
+    /* ── Section backgrounds ───────────────────────────────────────── */
+    .section-gray { background: #f5f5f7; }
+    .section-white { background: #fff; }
+    .section { padding: 32px 0; }
+    .section-sm { padding: 20px 0; }
+
+    /* ── Badge ─────────────────────────────────────────────────────── */
+    .badge {
+      display: inline-block; padding: 3px 10px; border-radius: 980px;
+      font-size: 12px; font-weight: 600;
+    }
+    .badge-green { background: rgba(52,199,89,0.12); color: #248a3d; }
+    .badge-yellow { background: rgba(255,159,10,0.12); color: #c77c00; }
+    .badge-gray { background: rgba(142,142,147,0.12); color: #636366; }
+    .badge-blue { background: rgba(0,113,227,0.08); color: #0071e3; }
+
+    /* ── Toast ─────────────────────────────────────────────────────── */
+    .toast-container {
+      position: fixed; top: 64px; left: 50%; transform: translateX(-50%);
+      z-index: 9999; pointer-events: none;
+    }
+    .toast {
+      background: #1d1d1f; color: #fff; padding: 10px 24px;
+      border-radius: 980px; font-size: 14px; font-weight: 500;
+      opacity: 0; transform: translateY(-12px);
+      transition: all 0.35s ease; pointer-events: auto;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+      margin-bottom: 8px;
+    }
+    .toast.show { opacity: 1; transform: translateY(0); }
+
+    /* ── Form ──────────────────────────────────────────────────────── */
+    .form-group { margin-bottom: 20px; }
+    .form-group label {
+      display: block; font-size: 13px; font-weight: 600;
+      color: #6e6e73; margin-bottom: 6px; text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .input {
+      width: 100%; padding: 12px 16px;
+      border: 1.5px solid rgba(0,0,0,0.1); border-radius: 12px;
+      font-size: 15px; font-family: inherit; color: #1d1d1f;
+      background: #fff; outline: none; transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .input:focus {
+      border-color: #0071e3;
+      box-shadow: 0 0 0 3px rgba(0,113,227,0.15);
+    }
+    textarea.input { min-height: 120px; resize: vertical; }
+    .input-mono {
+      font-family: "SF Mono", "Fira Code", "Fira Mono", Menlo, Consolas, monospace;
+      font-size: 14px; letter-spacing: 0.5px;
+    }
+
+    /* ── Code block ────────────────────────────────────────────────── */
+    .code-block {
+      background: #f5f5f7; border-radius: 10px; padding: 12px 16px;
+      font-family: "SF Mono", "Fira Code", Menlo, Consolas, monospace;
+      font-size: 13px; line-height: 1.5; overflow-x: auto;
+      position: relative; color: #1d1d1f; margin: 8px 0;
+      white-space: pre-wrap; word-break: break-all;
+    }
+    .code-block .copy-btn {
+      position: absolute; top: 8px; right: 8px;
+    }
+    .method-badge {
+      display: inline-block; font-size: 11px; font-weight: 700;
+      padding: 2px 8px; border-radius: 4px; margin-right: 8px;
+      text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    .method-get { background: rgba(0,113,227,0.1); color: #0071e3; }
+    .method-post { background: rgba(52,199,89,0.1); color: #248a3d; }
+
+    /* ── QR section ────────────────────────────────────────────────── */
+    .qr-section { text-align: center; padding: 32px 0; }
+    .qr-wrapper {
+      display: inline-block; padding: 20px; background: #fff;
+      border-radius: 20px; box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+    }
+    .qr-countdown { font-size: 13px; color: #8e8e93; margin-top: 12px; }
+    .qr-hint { font-size: 14px; color: #8e8e93; margin-top: 16px; }
+    .qr-grayed { opacity: 0.2; filter: grayscale(1); }
+
+    /* ── Spinner ────────────────────────────────────────────────────── */
+    .spinner {
+      display: inline-block; width: 18px; height: 18px;
+      border: 2px solid #0071e3; border-top-color: transparent;
+      border-radius: 50%; animation: spin 0.8s linear infinite;
+      vertical-align: middle; margin-right: 8px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes pulseGlow {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.55; transform: scale(1.03); }
+    }
+    @keyframes arrowBounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(6px); }
+    }
+
+    /* ── Status dot ────────────────────────────────────────────────── */
+    .status-dot {
+      display: inline-block; width: 8px; height: 8px;
+      border-radius: 50%; margin-right: 6px;
+    }
+    .status-dot-green { background: #34c759; }
+    .status-dot-red { background: #ff3b30; }
+
+    /* ── Table ─────────────────────────────────────────────────────── */
+    .data-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    .data-table th {
+      text-align: left; padding: 12px 16px; font-weight: 600;
+      color: #8e8e93; font-size: 12px; text-transform: uppercase;
+      letter-spacing: 0.5px; border-bottom: 1px solid rgba(0,0,0,0.06);
+    }
+    .data-table td {
+      padding: 14px 16px; border-bottom: 1px solid rgba(0,0,0,0.04);
+    }
+    .data-table tr:last-child td { border-bottom: none; }
+    .data-table tr:hover td { background: rgba(0,0,0,0.02); }
+
+    /* ── Channel card ──────────────────────────────────────────────── */
+    .channel-card {
+      background: #fff; border-radius: 16px; padding: 24px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+      display: flex; align-items: center; gap: 16px;
+      transition: all 0.25s ease; margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+    .channel-card:hover { box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
+    .channel-info { flex: 1; min-width: 200px; }
+    .channel-name {
+      font-size: 17px; font-weight: 600; color: #1d1d1f;
+      border: none; background: transparent; outline: none;
+      padding: 2px 0; font-family: inherit;
+      border-bottom: 1.5px solid transparent;
+      transition: border-color 0.2s;
+      width: 100%; max-width: 300px;
+    }
+    .channel-name:hover { border-bottom-color: rgba(0,0,0,0.1); }
+    .channel-name:focus { border-bottom-color: #0071e3; }
+    .channel-meta {
+      font-size: 13px; color: #8e8e93; margin-top: 4px;
+      display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+    }
+    .channel-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+    /* ── Key display ───────────────────────────────────────────────── */
+    .key-row {
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    }
+    .key-field {
+      flex: 1; min-width: 200px; padding: 8px 12px;
+      background: #f5f5f7; border-radius: 8px; border: none;
+      font-family: "SF Mono", Menlo, Consolas, monospace;
+      font-size: 13px; color: #1d1d1f; outline: none;
+    }
+    .key-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+    /* ── Empty state ───────────────────────────────────────────────── */
+    .empty-state {
+      text-align: center; padding: 64px 20px; color: #8e8e93;
+    }
+    .empty-state p { font-size: 16px; }
+
+    /* ── Hidden ─────────────────────────────────────────────────────── */
+    .hidden { display: none !important; }
+
+    /* ── Hero ───────────────────────────────────────────────────────── */
+    .hero {
+      text-align: center; padding: 100px 20px 60px;
+    }
+    .hero h1 {
+      font-size: 56px; font-weight: 700;
+      background: linear-gradient(135deg, #1d1d1f 0%, #6e6e73 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .hero .subtitle {
+      font-size: 22px; color: #6e6e73; margin-top: 12px; font-weight: 400;
+    }
+    .hero .cta { margin-top: 36px; }
+
+    /* ── Feature grid ──────────────────────────────────────────────── */
+    .feature-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      gap: 20px; margin-top: 0;
+    }
+    .feature-card {
+      text-align: center; padding: 40px 24px;
+    }
+    .feature-icon {
+      width: 56px; height: 56px; border-radius: 16px;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 24px; margin-bottom: 16px;
+    }
+    .feature-icon-blue { background: rgba(0,113,227,0.1); color: #0071e3; }
+    .feature-icon-green { background: rgba(52,199,89,0.1); color: #34c759; }
+    .feature-icon-purple { background: rgba(175,82,222,0.1); color: #af52de; }
+    .feature-card p { font-size: 15px; color: #6e6e73; margin-top: 8px; }
+
+    /* ── Inline QR overlay in hero ─────────────────────────────────── */
+    .inline-qr {
+      margin-top: 32px; display: inline-block;
+    }
+
+    /* ── Section header ────────────────────────────────────────────── */
+    .section-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 24px; flex-wrap: wrap; gap: 12px;
+    }
+    .section-header h2 { margin: 0; }
+
+    /* ── Param table ───────────────────────────────────────────────── */
+    .param-table { width: 100%; font-size: 14px; border-collapse: collapse; }
+    .param-table th {
+      text-align: left; padding: 8px 0; font-size: 12px; color: #8e8e93;
+      font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+      border-bottom: 1px solid rgba(0,0,0,0.06);
+    }
+    .param-table td {
+      padding: 8px 0; border-bottom: 1px solid rgba(0,0,0,0.04);
+    }
+    .param-table td:first-child {
+      font-family: "SF Mono", Menlo, monospace; font-size: 13px;
+    }
+
+    /* ── Auth Modal ────────────────────────────────────────────────── */
+    .auth-overlay {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      z-index: 2000;
+      background: rgba(0,0,0,0.4);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      display: flex; align-items: center; justify-content: center;
+      opacity: 0; transition: opacity 0.3s ease;
+      pointer-events: none;
+    }
+    .auth-overlay.show {
+      opacity: 1; pointer-events: auto;
+    }
+    .auth-modal {
+      background: #fff; border-radius: 20px; padding: 36px;
+      max-width: 420px; width: 90%;
+      box-shadow: 0 24px 80px rgba(0,0,0,0.2);
+      transform: scale(0.95) translateY(10px);
+      transition: transform 0.3s ease;
+    }
+    .auth-overlay.show .auth-modal {
+      transform: scale(1) translateY(0);
+    }
+    .auth-tabs {
+      display: flex; gap: 0; margin-bottom: 24px;
+      border-bottom: 1px solid rgba(0,0,0,0.08);
+    }
+    .auth-tab {
+      flex: 1; padding: 10px 0; text-align: center;
+      font-size: 15px; font-weight: 600; color: #8e8e93;
+      cursor: pointer; border: none; background: none;
+      border-bottom: 2px solid transparent;
+      transition: all 0.2s;
+    }
+    .auth-tab.active {
+      color: #0071e3; border-bottom-color: #0071e3;
+    }
+    .auth-tab:hover { color: #1d1d1f; }
+    .auth-close {
+      position: absolute; top: 12px; right: 16px;
+      width: 28px; height: 28px; border-radius: 50%;
+      border: none; background: rgba(0,0,0,0.06);
+      font-size: 16px; color: #8e8e93; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.2s;
+    }
+    .auth-close:hover { background: rgba(0,0,0,0.1); color: #1d1d1f; }
+
+    /* ── Warning banner ────────────────────────────────────────────── */
+    .warning-banner {
+      background: rgba(255,159,10,0.1);
+      border: 1px solid rgba(255,159,10,0.3);
+      border-radius: 12px;
+      padding: 12px 16px;
+      font-size: 13px;
+      color: #8a6d3b;
+      margin-bottom: 20px;
+      line-height: 1.6;
+    }
+
+    /* ── Login prompt card ─────────────────────────────────────────── */
+    .login-prompt {
+      text-align: center; padding: 48px 20px;
+    }
+    .login-prompt p { font-size: 16px; color: #8e8e93; margin-bottom: 16px; }
+
+    /* ── Responsive ────────────────────────────────────────────────── */
+    @media (max-width: 768px) {
+      .hero h1 { font-size: 36px; }
+      .hero .subtitle { font-size: 17px; }
+      .hero { padding: 72px 20px 40px; }
+      .feature-grid { grid-template-columns: 1fr; gap: 12px; }
+      .feature-card { padding: 28px 20px; }
+      .nav-links { gap: 2px; margin-left: 12px; }
+      .nav-links a { padding: 6px 10px; font-size: 12px; }
+      h2 { font-size: 22px; }
+      .section { padding: 40px 0; }
+      .channel-card { flex-direction: column; align-items: flex-start; }
+      .key-row { flex-direction: column; }
+      .key-field { min-width: 100%; }
+      .data-table { font-size: 12px; }
+      .data-table th, .data-table td { padding: 10px 8px; }
+      .card { padding: 20px; }
+    }
+
+    @media (max-width: 480px) {
+      .nav-links { display: none; }
+      .navbar { justify-content: space-between; }
+      .nav-mobile-links {
+        display: flex; gap: 0; overflow-x: auto;
+        padding: 0 20px; background: #fff;
+        border-bottom: 0.5px solid rgba(0,0,0,0.1);
+        position: fixed; top: 48px; left: 0; right: 0; z-index: 999;
+      }
+      .nav-mobile-links a {
+        padding: 10px 14px; text-decoration: none; color: #6e6e73;
+        font-size: 13px; font-weight: 500; white-space: nowrap;
+      }
+      .nav-mobile-links a.active { color: #0071e3; border-bottom: 2px solid #0071e3; }
+      .main { padding-top: 88px; }
+      .auth-modal { padding: 24px; }
+    }
+
+    /* ── Fade-in animation ─────────────────────────────────────────── */
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .fade-in { animation: fadeInUp 0.5s ease forwards; }
+  </style>
+</head>
+<body>
+
+  <!-- ═══ Navigation ═══ -->
+  <nav class="navbar">
+    <div class="navbar-inner">
+      <a class="nav-logo" href="/intro" style="text-decoration:none;color:inherit;cursor:pointer;">BotTalk</a>
+      <div class="nav-links" id="nav-links">
+        <a onclick="showPage('home')" id="nav-home" data-i18n="nav.home">状态</a>
+        <a onclick="showPage('keyPage')" id="nav-key" data-i18n="nav.key">Key&API</a>
+        <a onclick="showPage('logsPage')" id="nav-logs"><span data-i18n="nav.logs">推送日志</span><span id="nav-logs-badge" style="display:none;background:#ff3b30;color:#fff;border-radius:980px;padding:1px 7px;font-size:11px;margin-left:4px;font-weight:600;">0</span></a>
+        <a onclick="showPage('demoPage')" id="nav-demo" data-i18n="nav.demo">应用示范</a>
+        <a href="admin.html" id="nav-admin" class="hidden" style="color:#0071e3;">管理后台</a>
+      </div>
+      <div class="nav-right">
+        <button id="lang-toggle" onclick="toggleLang()">EN</button>
+        <span id="nav-user-area"></span>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Mobile nav (visible < 480px) -->
+  <div class="nav-mobile-links hidden" id="nav-mobile">
+    <a onclick="showPage('home')" id="mnav-home" data-i18n="nav.home">状态</a>
+    <a onclick="showPage('keyPage')" id="mnav-key" data-i18n="nav.key">Key&API</a>
+    <a onclick="showPage('logsPage')" id="mnav-logs" data-i18n="nav.logs">推送日志</a>
+    <a onclick="showPage('demoPage')" id="mnav-demo" data-i18n="nav.demo">应用示范</a>
+    <a href="admin.html" id="mnav-admin" class="hidden" style="color:#0071e3;">管理后台</a>
+  </div>
+
+  <!-- ═══ Auth Modal ═══ -->
+  <div class="auth-overlay" id="auth-overlay" onclick="if(event.target===this)closeAuthModal()">
+    <div class="auth-modal" style="position: relative;">
+      <!-- Content filled by showLoginPrompt() -->
+    </div>
+  </div>
+
+  <div class="main">
+
+    <!-- ═══ Page: Home ═══ -->
+    <div class="page active" id="home">
+      <div class="hero">
+        <h1 data-i18n="home.title">BotTalk</h1>
+        <p class="subtitle" data-i18n="home.subtitle">免费开源的微信消息推送服务</p>
+        <div id="hero-content" style="margin-top: 36px;"></div>
+      </div>
+      <div class="section-gray section">
+        <div class="container">
+          <div class="feature-grid">
+            <div class="card card-hover feature-card">
+              <div class="feature-icon feature-icon-blue">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+              </div>
+              <h3 data-i18n="home.feat1.title">扫码即用</h3>
+              <p data-i18n="home.feat1.desc">微信扫码绑定，30秒获取 SendKey</p>
+            </div>
+            <div class="card card-hover feature-card">
+              <div class="feature-icon feature-icon-green">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+              </div>
+              <h3 data-i18n="home.feat2.title">简单推送</h3>
+              <p data-i18n="home.feat2.desc">GET/POST 调用 API，消息直达微信</p>
+            </div>
+            <div class="card card-hover feature-card">
+              <div class="feature-icon feature-icon-purple">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
+              </div>
+              <h3 data-i18n="home.feat3.title">完全免费</h3>
+              <p data-i18n="home.feat3.desc">开源项目，支持自部署</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ Page: Channels ═══ -->
+    <div class="page" id="channelsPage">
+      <div class="section">
+        <div class="container">
+          <div id="channels-content"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ Page: Key & API ═══ -->
+    <div class="page" id="keyPage">
+      <div class="section">
+        <div class="container">
+
+          <!-- SendKey card -->
+          <div class="card" style="margin-bottom: 16px; padding: 14px 20px;" id="sendkey-card">
+            <!-- Filled dynamically based on auth state -->
+          </div>
+
+          <!-- API docs card (always visible) -->
+          <div class="card" style="margin-bottom: 16px;">
+            <h3 data-i18n="api.title" style="margin-bottom: 4px;">API 调用说明</h3>
+            <p style="font-size: 13px; color: #6e6e73; margin-bottom: 14px;" data-i18n="api.intro">向以下 URL 发送请求即可推送消息到微信。</p>
+
+            <!-- 快速体验区 -->
+            <div style="background: #f5f5f7; border-radius: 10px; padding: 14px 16px; margin-bottom: 16px;">
+              <h4 style="font-size: 14px; margin-bottom: 10px;" data-i18n="api.quick_section">快速体验</h4>
+
+              <div style="margin-bottom: 10px;">
+                <p style="font-size: 12px; color: #6e6e73; margin-bottom: 4px;">
+                  <span class="method-badge method-get">GET</span>
+                  <span data-i18n="api.get_simple">仅标题：</span>
+                </p>
+                <input type="text" class="input" id="api-get-simple-input" readonly style="font-family: monospace; font-size: 12px; font-weight: 600; padding: 6px 10px; background: #fff; line-height: 1.4;" />
+                <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 4px;">
+                  <button class="btn btn-primary btn-sm" onclick="quickTestUrl('api-get-simple-input', 'quick-test-simple-result')" data-i18n="api.quick_test">发一条测试</button>
+                  <button class="btn btn-secondary btn-sm" onclick="copyInput('api-get-simple-input')" data-i18n="api.copy">复制</button>
+                  <span id="quick-test-simple-result" style="font-size: 12px;"></span>
+                </div>
+              </div>
+
+              <div>
+                <p style="font-size: 12px; color: #6e6e73; margin-bottom: 4px;">
+                  <span class="method-badge method-get">GET</span>
+                  <span data-i18n="api.get_full">标题 + 正文：</span>
+                </p>
+                <textarea class="input" id="api-get-full-input" style="font-family: monospace; font-size: 12px; font-weight: 600; padding: 6px 10px; background: #fff; resize: none; line-height: 1.4;"></textarea>
+                <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 4px;">
+                  <button class="btn btn-primary btn-sm" onclick="quickTestUrl('api-get-full-input', 'quick-test-full-result')" data-i18n="api.quick_test">发一条测试</button>
+                  <button class="btn btn-secondary btn-sm" onclick="copyInput('api-get-full-input')" data-i18n="api.copy">复制</button>
+                  <span id="quick-test-full-result" style="font-size: 12px;"></span>
+                </div>
+              </div>
+
+              <p style="font-size: 11px; color: #8e8e93; margin-top: 8px;" data-i18n="api.get_note">GET 请求有长度限制，建议使用 POST 发送长消息。</p>
+            </div>
+
+            <!-- 开发者文档区 -->
+            <h4 style="font-size: 14px; margin-bottom: 8px; color: #6e6e73;" data-i18n="api.dev_section">开发者接入</h4>
+
+            <div style="margin-bottom: 10px;">
+              <p style="font-size: 12px; margin-bottom: 4px;">
+                <span class="method-badge method-post">POST</span>
+                <span data-i18n="api.post">程序调用（推荐）：</span>
+              </p>
+              <textarea class="input" id="api-post-input" readonly style="font-family: monospace; font-size: 12px; font-weight: 600; padding: 6px 10px; background: #f5f5f7; resize: none; line-height: 1.4;"></textarea>
+              <button class="btn btn-secondary btn-sm" style="margin-top: 4px;" onclick="copyInput('api-post-input')" data-i18n="api.copy">复制</button>
+            </div>
+
+            <div style="margin-bottom: 14px;">
+              <p style="font-size: 12px; margin-bottom: 4px;">
+                <span class="method-badge method-post">POST</span>
+                <span data-i18n="api.bearer">Bearer Token 方式：</span>
+              </p>
+              <textarea class="input" id="api-bearer-input" readonly style="font-family: monospace; font-size: 12px; font-weight: 600; padding: 6px 10px; background: #f5f5f7; resize: none; line-height: 1.4;"></textarea>
+              <button class="btn btn-secondary btn-sm" style="margin-top: 4px;" onclick="copyInput('api-bearer-input')" data-i18n="api.copy">复制</button>
+            </div>
+
+            <div style="border-top: 1px solid rgba(0,0,0,0.06); padding-top: 14px;">
+              <h4 style="font-size: 14px; font-weight: 600; margin-bottom: 8px;" data-i18n="api.params_title">参数说明</h4>
+              <table class="param-table">
+                <thead>
+                  <tr>
+                    <th data-i18n="api.param_name">参数</th>
+                    <th data-i18n="api.param_required">必填</th>
+                    <th data-i18n="api.param_desc">说明</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>title</td>
+                    <td>*</td>
+                    <td data-i18n="api.param_title_desc">消息标题</td>
+                  </tr>
+                  <tr>
+                    <td>desp / msg</td>
+                    <td>*</td>
+                    <td data-i18n="api.param_desp_desc">消息内容</td>
+                  </tr>
+                </tbody>
+              </table>
+              <p style="font-size: 13px; color: #8e8e93; margin-top: 8px;" data-i18n="api.param_note">* title 和 desp/msg 不能同时为空</p>
+
+              <h5 style="font-size: 14px; margin-top: 16px; margin-bottom: 8px;" data-i18n="api.response_title">返回说明</h5>
+              <p style="font-size: 13px; color: #6e6e73; margin-bottom: 8px;" data-i18n="api.response_desc">接口返回 JSON，通过 code 字段判断是否成功：</p>
+              <table class="param-table">
+                <thead>
+                  <tr>
+                    <th>code</th>
+                    <th data-i18n="api.resp_col_meaning">含义</th>
+                    <th data-i18n="api.resp_col_action">处理建议</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><code>0</code></td>
+                    <td data-i18n="api.code_0">发送成功</td>
+                    <td data-i18n="api.code_0_action">无需处理</td>
+                  </tr>
+                  <tr>
+                    <td><code>40001</code></td>
+                    <td data-i18n="api.code_40001">SendKey 无效</td>
+                    <td data-i18n="api.code_40001_action">检查 Key 是否正确</td>
+                  </tr>
+                  <tr>
+                    <td><code>40002</code></td>
+                    <td data-i18n="api.code_40002">没有可用通道</td>
+                    <td data-i18n="api.code_40002_action">请先绑定并激活通道</td>
+                  </tr>
+                  <tr>
+                    <td><code>40003</code></td>
+                    <td data-i18n="api.code_40003">title 和内容均为空</td>
+                    <td data-i18n="api.code_40003_action">至少传入 title 或 desp</td>
+                  </tr>
+                  <tr>
+                    <td><code>42901</code></td>
+                    <td data-i18n="api.code_42901">发送频率超限</td>
+                    <td data-i18n="api.code_42901_action">每小时最多 100 条，稍后重试</td>
+                  </tr>
+                  <tr>
+                    <td><code>50001</code></td>
+                    <td data-i18n="api.code_50001">全部推送失败</td>
+                    <td data-i18n="api.code_50001_action">通道可能已过期，请检测通道状态</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Send test card (always visible, but send checks auth) -->
+          <div class="card">
+            <h3 data-i18n="send.title" style="margin-bottom: 20px;">在线发送测试</h3>
+            <div class="form-group">
+              <label data-i18n="send.msg_title">消息标题</label>
+              <input class="input" id="test-title" data-i18n="send.msg_title_ph">
+            </div>
+            <div class="form-group">
+              <label data-i18n="send.msg_content">消息内容</label>
+              <textarea class="input" id="test-desp" data-i18n="send.msg_content_ph"></textarea>
+            </div>
+            <div style="display: flex; align-items: center; gap: 16px;">
+              <button class="btn btn-primary" onclick="testSend()" id="test-send-btn" data-i18n="send.btn">发送</button>
+              <span id="test-result" style="font-size: 14px;"></span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ Page: Logs ═══ -->
+    <div class="page" id="logsPage">
+      <div class="section">
+        <div class="container">
+          <div id="logs-content"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ Page: Demo (应用示范) ═══ -->
+    <div class="page" id="demoPage">
+      <div class="section">
+        <div class="container">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <h2 data-i18n="demo.title" style="margin: 0;">应用示范</h2>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn btn-sm btn-secondary" onclick="showPage('home')" data-i18n="demo.back_home">返回首页</button>
+              <button class="btn btn-sm btn-secondary" onclick="showPage('keyPage')" data-i18n="demo.go_api">API 文档</button>
+            </div>
+          </div>
+          <p style="font-size: 14px; color: #6e6e73; margin-bottom: 20px;" data-i18n="demo.subtitle">体验通过微信接收事件提醒 — 这就是 BotTalk 推送能力的实际应用场景</p>
+
+          <!-- 一键体验提醒 -->
+          <div class="card" style="margin-bottom: 20px;">
+            <h3 style="margin-bottom: 8px;" data-i18n="demo.quick_title">一键体验</h3>
+            <p style="font-size: 13px; color: #6e6e73; margin-bottom: 16px;" data-i18n="demo.quick_desc">点击下方按钮，将创建一个每 2 分钟推送一次的喝水提醒，你可以在微信上立刻感受到效果</p>
+            <div id="demo-preview" style="background: #f5f5f7; border-radius: 10px; padding: 14px 16px; margin-bottom: 16px; font-size: 13px; line-height: 1.8;">
+              <p><strong data-i18n="demo.preview_title_label">标题：</strong><span data-i18n="demo.preview_title_value">💧 喝水提醒</span></p>
+              <p><strong data-i18n="demo.preview_msg_label">内容：</strong><span data-i18n="demo.preview_msg_value">记得喝一杯水，保持健康！</span></p>
+              <p><strong data-i18n="demo.preview_time_label">首次推送：</strong><span id="demo-preview-time"></span></p>
+              <p><strong data-i18n="demo.preview_repeat_label">重复：</strong><span data-i18n="demo.preview_repeat_value">每 2 分钟</span></p>
+            </div>
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <button class="btn btn-primary" onclick="addQuickDemoReminder()" style="padding: 12px 28px;" data-i18n="demo.quick_btn">🔔 立即创建体验提醒</button>
+              <span id="demo-add-result" style="font-size: 13px;"></span>
+            </div>
+          </div>
+
+          <!-- 自定义添加（折叠） -->
+          <div class="card" style="margin-bottom: 20px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;" onclick="var el=document.getElementById('demo-custom-form');el.style.display=el.style.display==='none'?'block':'none';">
+              <h3 style="margin: 0;" data-i18n="demo.custom_title">自定义提醒</h3>
+              <span style="color: #0071e3; font-size: 13px;" data-i18n="demo.expand">展开 ▼</span>
+            </div>
+            <div id="demo-custom-form" style="display: none; margin-top: 16px;">
+              <div class="form-group">
+                <label data-i18n="demo.reminder_title">提醒标题</label>
+                <input class="input" id="demo-reminder-title">
+              </div>
+              <div class="form-group">
+                <label data-i18n="demo.reminder_msg">提醒内容（可选）</label>
+                <input class="input" id="demo-reminder-msg">
+              </div>
+              <div class="form-group">
+                <label data-i18n="demo.reminder_time">提醒时间</label>
+                <input class="input" type="datetime-local" id="demo-reminder-time">
+              </div>
+              <div class="form-group">
+                <label data-i18n="demo.reminder_type">类型</label>
+                <select class="input" id="demo-reminder-type">
+                  <option value="once" data-i18n="demo.type_once">单次</option>
+                  <option value="daily" data-i18n="demo.type_daily">每天</option>
+                  <option value="weekly" data-i18n="demo.type_weekly">每周</option>
+                </select>
+              </div>
+              <button class="btn btn-primary" onclick="addDemoReminder()" data-i18n="demo.add_btn">添加提醒</button>
+              <span id="demo-custom-result" style="font-size: 13px; margin-left: 12px;"></span>
+            </div>
+          </div>
+
+          <!-- 提醒列表 -->
+          <div class="card" style="margin-bottom: 20px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+              <h3 style="margin: 0;" data-i18n="demo.my_reminders">我的提醒</h3>
+              <button class="btn btn-sm btn-secondary" onclick="loadDemoReminders()" data-i18n="demo.refresh">刷新</button>
+            </div>
+            <div id="demo-reminders-list"></div>
+          </div>
+
+          <!-- 下方放快速测试区 -->
+          <div class="card" style="margin-bottom: 20px;">
+            <h3 style="margin-bottom: 8px;" data-i18n="demo.also_try">也试试直接推送</h3>
+            <p style="font-size: 13px; color: #6e6e73; margin-bottom: 16px;" data-i18n="demo.also_try_desc">提醒功能的底层就是 BotTalk 推送 API，开发者可以直接调用</p>
+            <div id="demo-quick-test"></div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Toast container -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <script>
+    // ═══════════════════════════════════════════════════════════════════
+    //  State
+    // ═══════════════════════════════════════════════════════════════════
+    let currentUser = null;
+    let sendKey = null;
+    let hasActiveChannel = false;
+    let keyVisible = true;
+    let apiBaseUrl = '';
+    let currentPage = 'home';
+    let authCallback = null; // called after successful login/register
+
+    const basePath = window.location.pathname.replace(/\/[^/]*$/, '');
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  Helpers
+    // ═══════════════════════════════════════════════════════════════════
+    function apiFetch(path, opts) {
+      opts = opts || {};
+      opts.credentials = 'same-origin';
+      return fetch(basePath + path, opts).then(function(res) {
+        if (res.status === 401) {
+          // Session expired or not logged in — show login prompt
+          currentUser = null;
+          sendKey = null;
+          hasActiveChannel = false;
+          updateNav();
+          showAuthModal();
+          return Promise.reject(new Error('Unauthorized'));
+        }
+        return res;
+      });
+    }
+
+    // Non-auth-checking fetch for endpoints that don't require login
+    function publicFetch(path, opts) {
+      opts = opts || {};
+      opts.credentials = 'same-origin';
+      return fetch(basePath + path, opts);
+    }
+
+    function showToast(msg, duration) {
+      duration = duration || 2500;
+      var container = document.getElementById('toast-container');
+      var el = document.createElement('div');
+      el.className = 'toast';
+      el.textContent = msg;
+      container.appendChild(el);
+      requestAnimationFrame(function() {
+        requestAnimationFrame(function() { el.classList.add('show'); });
+      });
+      setTimeout(function() {
+        el.classList.remove('show');
+        setTimeout(function() { el.remove(); }, 350);
+      }, duration);
+    }
+
+    function maskWechatId(id) {
+      if (!id || id.length <= 8) return id || '';
+      return id.substring(0, 4) + '****' + id.substring(id.length - 4);
+    }
+
+    function formatTime(ts) {
+      // SQLite CURRENT_TIMESTAMP 存的是 UTC，加 'Z' 后缀让浏览器正确识别为 UTC 并转本地时间
+      var d = new Date(ts.includes('T') || ts.includes('Z') ? ts : ts + 'Z');
+      return d.toLocaleString(currentLang === 'zh' ? 'zh-CN' : 'en-US');
+    }
+
+    function escapeHtml(str) {
+      var d = document.createElement('div');
+      d.textContent = str;
+      return d.innerHTML;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  requireAuth — checks login, shows modal if not, calls callback after
+    // ═══════════════════════════════════════════════════════════════════
+    function requireAuth(callback) {
+      if (currentUser) {
+        if (callback) callback();
+        return;
+      }
+      authCallback = callback;
+      showLoginPrompt();
+    }
+
+    function showLoginPrompt() {
+      var overlay = document.getElementById('auth-overlay');
+      var modal = overlay.querySelector('.auth-modal');
+      modal.innerHTML =
+        '<button class="auth-close" onclick="closeAuthModal()">&times;</button>' +
+        '<div style="text-align: center; padding: 30px 20px;">' +
+          '<p style="font-size: 18px; font-weight: 600; margin-bottom: 8px;">' + t('login.prompt_title') + '</p>' +
+          '<p style="font-size: 14px; color: #6e6e73; margin-bottom: 24px;">' + t('login.prompt_desc') + '</p>' +
+          '<button class="btn btn-primary" style="width: 100%; padding: 14px;" onclick="closeAuthModal();showPage(\'home\');renderHeroContent();">' + t('login.go_scan') + '</button>' +
+        '</div>';
+      overlay.classList.add('show');
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  Auth Modal (lightweight login prompt)
+    // ═══════════════════════════════════════════════════════════════════
+    function showAuthModal() { showLoginPrompt(); }
+
+    function closeAuthModal() {
+      var overlay = document.getElementById('auth-overlay');
+      overlay.classList.remove('show');
+      authCallback = null;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  Navigation
+    // ═══════════════════════════════════════════════════════════════════
+    function showPage(pageId) {
+      // ALL pages are accessible to everyone — no login gate
+      stopAllPolling();
+      currentPage = pageId;
+
+      document.querySelectorAll('.page').forEach(function(p) {
+        p.classList.remove('active', 'visible');
+      });
+      document.querySelectorAll('.nav-links a, .nav-mobile-links a').forEach(function(a) {
+        a.classList.remove('active');
+      });
+
+      var page = document.getElementById(pageId);
+      page.classList.add('active');
+      requestAnimationFrame(function() {
+        requestAnimationFrame(function() { page.classList.add('visible'); });
+      });
+
+      // Activate nav link
+      var navMap = {
+        'home': ['nav-home', 'mnav-home'],
+        'channelsPage': ['nav-channels', 'mnav-channels'],
+        'keyPage': ['nav-key', 'mnav-key'],
+        'logsPage': ['nav-logs', 'mnav-logs'],
+        'demoPage': ['nav-demo', 'mnav-demo']
+      };
+      var navIds = navMap[pageId];
+      if (navIds) {
+        navIds.forEach(function(id) {
+          var el = document.getElementById(id);
+          if (el) el.classList.add('active');
+        });
+      }
+
+      // Load data for pages
+      if (pageId === 'logsPage') renderLogsPage();
+      if (pageId === 'channelsPage') renderChannelsPage();
+      if (pageId === 'keyPage') renderKeyPage();
+      if (pageId === 'demoPage') renderDemoPage();
+
+      window.scrollTo(0, 0);
+
+      // Track page view
+      var trackMap = {
+        'home': 'home',
+        'keyPage': 'key_api',
+        'logsPage': 'push_log',
+        'demoPage': 'demo',
+        'channelsPage': 'channels'
+      };
+      var trackPage = trackMap[pageId];
+      if (trackPage) {
+        try {
+          var trackData = JSON.stringify({ page: trackPage });
+          if (navigator.sendBeacon) {
+            navigator.sendBeacon(basePath + '/api/track', new Blob([trackData], { type: 'application/json' }));
+          } else {
+            fetch(basePath + '/api/track', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: trackData,
+              credentials: 'same-origin'
+            }).catch(function() {});
+          }
+        } catch (e) {}
+      }
+    }
+
+    function refreshCurrentPage() {
+      if (currentPage === 'home') renderHeroContent();
+      if (currentPage === 'keyPage') renderKeyPage();
+      if (currentPage === 'channelsPage') renderChannelsPage();
+      if (currentPage === 'logsPage') renderLogsPage();
+      if (currentPage === 'demoPage') renderDemoPage();
+    }
+
+    function updateNav() {
+      var userArea = document.getElementById('nav-user-area');
+
+      if (currentUser) {
+        var displayName = currentUser.nickname || currentUser.email || 'User';
+        userArea.innerHTML =
+          '<span class="username" style="cursor:pointer;margin-right:4px;" onclick="editNickname()" title="' + t('profile.click_to_edit') + '">' + escapeHtml(displayName) + '</span>' +
+          '<button class="nav-btn nav-btn-logout" style="margin-left:4px;" onclick="logout()" data-i18n="nav.logout">' + t('nav.logout') + '</button>';
+      } else {
+        userArea.innerHTML =
+          '<button class="nav-btn nav-btn-login" onclick="showPage(\'home\');renderHeroContent();" data-i18n="nav.login">' + t('nav.login') + '</button>';
+      }
+
+      // Show/hide admin link based on role
+      ['nav-admin', 'mnav-admin'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) {
+          if (currentUser && currentUser.role === 'admin') {
+            el.classList.remove('hidden');
+          } else {
+            el.classList.add('hidden');
+          }
+        }
+      });
+
+      // Show mobile nav if applicable
+      updateMobileNav();
+    }
+
+    function updateMobileNav() {
+      var mobileNav = document.getElementById('nav-mobile');
+      if (window.innerWidth <= 480) {
+        mobileNav.classList.remove('hidden');
+      } else {
+        mobileNav.classList.add('hidden');
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  Language
+    // ═══════════════════════════════════════════════════════════════════
+    function toggleLang() {
+      var newLang = currentLang === 'zh' ? 'en' : 'zh';
+      applyLanguage(newLang);
+      // Re-render dynamic content
+      updateNav();
+      refreshCurrentPage();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  Auth
+    // ═══════════════════════════════════════════════════════════════════
+    async function checkAuth() {
+      try {
+        var res = await publicFetch('/api/auth/me');
+        if (res.ok) {
+          var json = await res.json();
+          currentUser = json.data;
+          sendKey = currentUser.send_key;
+          hasActiveChannel = (currentUser.channel_count || 0) > 0;
+          updateNav();
+          updateApiDocs();
+          loadUnreadCount();
+          return true;
+        }
+      } catch (e) {}
+      currentUser = null;
+      sendKey = null;
+      hasActiveChannel = false;
+      updateNav();
+      return false;
+    }
+
+    async function logout() {
+      try {
+        await publicFetch('/api/auth/logout', { method: 'POST' });
+      } catch (e) {}
+      currentUser = null;
+      sendKey = null;
+      hasActiveChannel = false;
+      updateNav();
+      showPage('home');
+      renderHeroContent();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  QR / Polling (for channel binding only)
+    // ═══════════════════════════════════════════════════════════════════
+    let qrTimer = null;
+    let pollStatusTimer = null;
+    let bindCheckTimer = null;
+    let pollingStopped = false;
+    const QR_EXPIRE_SECONDS = 300;
+
+    function stopAllPolling() {
+      pollingStopped = true;
+      if (qrTimer) { clearInterval(qrTimer); qrTimer = null; }
+      if (pollStatusTimer) { clearTimeout(pollStatusTimer); pollStatusTimer = null; }
+      if (bindCheckTimer) { clearTimeout(bindCheckTimer); bindCheckTimer = null; }
+    }
+
+    var heroQrTimer = null;
+    var heroQrPollTimer = null;
+
+    function renderHeroContent() {
+      var area = document.getElementById('hero-content');
+      if (!area) return;
+
+      // 清理之前的定时器
+      if (heroQrTimer) { clearInterval(heroQrTimer); heroQrTimer = null; }
+      if (heroQrPollTimer) { clearTimeout(heroQrPollTimer); heroQrPollTimer = null; }
+
+      if (currentUser && hasActiveChannel) {
+        // ── 已登录有通道：显示 SendKey + 快速操作 ──
+        var base = apiBaseUrl || (window.location.origin + basePath);
+        var maskedKey = sendKey ? sendKey.substring(0, 8) + '****' : '';
+        area.innerHTML =
+          '<div style="max-width: 480px; margin: 0 auto; text-align: center;">' +
+            '<div id="hero-unread-banner" style="display:none;background:rgba(255,59,48,0.08);border:1px solid rgba(255,59,48,0.3);border-radius:12px;padding:12px 16px;margin-bottom:16px;cursor:pointer;" onclick="showPage(\'logsPage\')">' +
+              '<span style="color:#ff3b30;font-weight:600;">⚠️ ' + t('logs.unread_banner_prefix') + ' <span id="hero-unread-count">0</span> ' + t('logs.unread_banner_suffix') + '</span>' +
+              '<span style="color:#6e6e73;font-size:13px;margin-left:8px;">' + t('logs.click_to_view') + '</span>' +
+            '</div>' +
+            '<p style="font-size: 15px; color: #34c759; font-weight: 600; margin-bottom: 12px;">' + t('hero.bound_ok') + '</p>' +
+            '<div style="background: #f5f5f7; border-radius: 12px; padding: 16px; margin-bottom: 16px;">' +
+              '<p style="font-size: 13px; color: #6e6e73; margin-bottom: 4px;">SendKey</p>' +
+              '<p style="font-size: 15px; font-family: monospace; word-break: break-all;">' + maskedKey + '</p>' +
+            '</div>' +
+            '<div id="hero-test-result" style="margin-bottom: 12px;"></div>' +
+            '<div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">' +
+              '<button class="btn btn-primary" id="hero-test-btn" onclick="heroSendTest()">' + t('hero.send_test') + '</button>' +
+              '<button class="btn btn-secondary" onclick="openContactModal()" title="' + t('contact.tooltip') + '">' + t('contact.btn') + '</button>' +
+            '</div>' +
+          '</div>';
+        // 渲染完成后刷新未读数
+        loadUnreadCount();
+      } else if (currentUser && !hasActiveChannel) {
+        // ── 已登录无通道：用认证接口绑定 ──
+        area.innerHTML =
+          '<div style="text-align: center;">' +
+            '<p style="font-size: 15px; color: #ff9500; margin-bottom: 16px;">' + t('hero.need_bind') + '</p>' +
+            '<button class="btn btn-primary" onclick="showPage(\'channelsPage\')">' + t('hero.go_bind') + '</button>' +
+          '</div>';
+      } else {
+        // ── 未登录：显示按钮，点击后才生成 QR ──
+        area.innerHTML =
+          '<div style="text-align: center;">' +
+            '<div id="hero-qr-area">' +
+              '<button class="btn btn-primary" style="padding: 14px 36px; font-size: 17px;" onclick="loadHeroQR()">' + t('hero.scan_register') + '</button>' +
+            '</div>' +
+          '</div>';
+      }
+    }
+
+    async function loadHeroQR() {
+      var qrArea = document.getElementById('hero-qr-area');
+      if (!qrArea) return;
+
+      try {
+        var res = await publicFetch('/api/channels/qrcode-public', { method: 'POST' });
+        var json = await res.json();
+        if (!json.success || !json.data.qrcode) throw new Error('QR failed');
+
+        var qrcode = json.data.qrcode;
+        var qrUrl = json.data.qrcode_img_content;
+
+        qrArea.innerHTML =
+          '<p style="font-size: 15px; font-weight: 500; margin-bottom: 12px;">' + t('hero.scan_to_start') + '</p>' +
+          '<canvas id="hero-qr-canvas" style="border-radius: 12px;"></canvas>' +
+          '<p id="hero-qr-countdown" style="font-size: 13px; color: #8e8e93; margin-top: 8px;"></p>';
+
+        QRCode.toCanvas(document.getElementById('hero-qr-canvas'), qrUrl, {
+          width: 200, margin: 2, color: { dark: '#1d1d1f', light: '#ffffff' }
+        });
+
+        var remaining = 300;
+        var countdownEl = document.getElementById('hero-qr-countdown');
+        heroQrTimer = setInterval(function() {
+          remaining--;
+          var min = Math.floor(remaining / 60);
+          var sec = remaining % 60;
+          countdownEl.textContent = t('qr.countdown_prefix') + min + ':' + String(sec).padStart(2, '0');
+          if (remaining <= 0) {
+            clearInterval(heroQrTimer);
+            qrArea.innerHTML =
+              '<p style="color: #8e8e93; margin-bottom: 12px;">' + t('qr.expired') + '</p>' +
+              '<button class="btn btn-primary btn-sm" onclick="loadHeroQR()">' + t('qr.retry') + '</button>';
+          }
+        }, 1000);
+
+        pollHeroQR(qrcode);
+      } catch (e) {
+        qrArea.innerHTML =
+          '<p style="color: #ff3b30; margin-bottom: 12px;">' + t('qr.load_failed') + '</p>' +
+          '<button class="btn btn-primary btn-sm" onclick="loadHeroQR()">' + t('qr.retry') + '</button>';
+      }
+    }
+
+    async function pollHeroQR(qrcode) {
+      try {
+        var res = await publicFetch('/api/channels/bind-status-public/' + qrcode);
+        var json = await res.json();
+
+        if (json.success && json.data.send_key) {
+          // 扫码成功！
+          if (heroQrTimer) { clearInterval(heroQrTimer); heroQrTimer = null; }
+
+          sendKey = json.data.send_key;
+          // 获取完整用户信息
+          var meRes = await publicFetch('/api/auth/me');
+          if (meRes.ok) {
+            var meJson = await meRes.json();
+            currentUser = meJson.data;
+            sendKey = currentUser.send_key;
+            hasActiveChannel = (currentUser.channel_count || 0) > 0;
+          }
+          updateNav();
+
+          var area = document.getElementById('hero-content');
+          var channelId = json.data.id;
+          hasActiveChannel = false; // 扫码后新 bot_token，旧 context_token 失效，必须重新激活
+
+          {
+            // 扫码后统一走等待激活流程（新老用户都需要发消息获取新 context_token）
+            area.innerHTML =
+              '<div style="max-width: 520px; margin: 0 auto; text-align: center;">' +
+                '<p style="font-size: 20px; color: #ff9500; font-weight: 700; margin-bottom: 20px;">✅ ' + t('hero.scan_ok') + '</p>' +
+                '<div style="background: linear-gradient(135deg, #fff4e6 0%, #ffe9cc 100%); border: 2px solid #ff9500; border-radius: 16px; padding: 24px 20px; margin-bottom: 16px; animation: pulseGlow 1.6s ease-in-out infinite;">' +
+                  '<div style="font-size: 32px; margin-bottom: 12px; animation: arrowBounce 1.2s ease-in-out infinite;">📱⬇️</div>' +
+                  '<p style="font-size: 22px; color: #d97706; font-weight: 800; margin: 0 0 10px 0; line-height: 1.4;">' + t('hero.send_msg_hint') + '</p>' +
+                  '<p style="font-size: 15px; color: #92400e; margin: 0; line-height: 1.5;">' + t('hero.send_msg_detail') + '</p>' +
+                '</div>' +
+                '<div id="hero-activation-status" style="font-size: 14px; color: #8e8e93; margin-top: 12px;">' +
+                  '<span class="spinner" style="display: inline-block; width: 16px; height: 16px; border: 2px solid #e5e5ea; border-top-color: #0071e3; border-radius: 50%; animation: spin 1s linear infinite; vertical-align: middle; margin-right: 6px;"></span>' +
+                  t('hero.waiting_activation') +
+                '</div>' +
+              '</div>';
+            // 轮询等待激活
+            pollHeroActivationThenSuccess(channelId, area, json.data.is_new);
+          }
+          return;
+        }
+
+        if (json.data && json.data.status === 'expired') {
+          return; // 倒计时会处理
+        }
+
+        // 还没扫码，继续轮询
+        heroQrPollTimer = setTimeout(function() { pollHeroQR(qrcode); }, 2000);
+      } catch (e) {
+        heroQrPollTimer = setTimeout(function() { pollHeroQR(qrcode); }, 3000);
+      }
+    }
+
+    function showHeroSuccess(area, isNew) {
+      area.innerHTML =
+        '<div style="max-width: 480px; margin: 0 auto; text-align: center;">' +
+          '<p style="font-size: 18px; color: #34c759; font-weight: 600; margin-bottom: 16px;">' +
+            (isNew ? t('hero.welcome_new') : t('hero.welcome_back')) +
+          '</p>' +
+          '<div style="background: #f5f5f7; border-radius: 12px; padding: 20px; margin-bottom: 16px; text-align: left;">' +
+            '<p style="font-size: 13px; color: #6e6e73; margin-bottom: 4px;">SendKey</p>' +
+            '<div style="display: flex; align-items: center; gap: 8px;">' +
+              '<input type="text" value="' + sendKey + '" readonly style="flex: 1; font-family: monospace; font-size: 14px; padding: 8px; border: 1px solid #e5e5ea; border-radius: 8px; background: #fff;">' +
+              '<button class="btn btn-sm btn-secondary" onclick="navigator.clipboard.writeText(\'' + sendKey + '\');this.textContent=\'✓\';setTimeout(()=>this.textContent=\'' + t('api.copy') + '\',1500)">' + t('api.copy') + '</button>' +
+            '</div>' +
+            '<p style="font-size: 12px; color: #6e6e73; margin-top: 8px;">' + t('hero.save_key_hint') + '</p>' +
+          '</div>' +
+          '<div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">' +
+            '<button class="btn btn-primary" onclick="showPage(\'demoPage\')" style="padding: 12px 24px;">' + t('nav.demo') + '</button>' +
+            '<button class="btn btn-secondary" onclick="showPage(\'keyPage\')" style="padding: 12px 24px;">' + t('nav.key') + '</button>' +
+            '<button class="btn btn-secondary" onclick="showPage(\'logsPage\')" style="padding: 12px 24px;">' + t('nav.logs') + '</button>' +
+          '</div>' +
+        '</div>';
+    }
+
+    async function pollHeroActivationThenSuccess(channelId, area, isNew) {
+      try {
+        var res = await publicFetch('/api/channels/' + channelId + '/activation');
+        var json = await res.json();
+        if (json.success && json.data.activated) {
+          hasActiveChannel = true;
+          updateNav();
+          updateApiDocs();
+          showHeroSuccess(area, isNew);
+          return;
+        }
+        setTimeout(function() { pollHeroActivationThenSuccess(channelId, area, isNew); }, 2000);
+      } catch (e) {
+        setTimeout(function() { pollHeroActivationThenSuccess(channelId, area, isNew); }, 3000);
+      }
+    }
+
+    function handleHeroCta() {
+      if (currentUser) {
+        showPage('keyPage');
+      } else {
+        showAuthModal();
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  Channels page
+    // ═══════════════════════════════════════════════════════════════════
+    function renderChannelsPage() {
+      var container = document.getElementById('channels-content');
+      if (!currentUser) {
+        container.innerHTML =
+          '<div class="card">' +
+            '<div class="login-prompt">' +
+              '<p>' + t('auth.login_to_manage_channels') + '</p>' +
+              '<button class="btn btn-primary btn-sm" onclick="requireAuth(function(){ renderChannelsPage(); })">' + t('auth.click_to_login') + '</button>' +
+            '</div>' +
+          '</div>';
+        return;
+      }
+
+      container.innerHTML =
+        '<div class="section-header">' +
+          '<div>' +
+            '<h2 data-i18n="ch.title">' + t('ch.title') + '</h2>' +
+            '<span id="channel-count" style="font-size: 14px; color: #8e8e93;"></span>' +
+          '</div>' +
+          '<button class="btn btn-primary btn-sm" id="add-channel-btn" onclick="startChannelBind()">' +
+            '<span data-i18n="ch.add">' + t('ch.add') + '</span>' +
+          '</button>' +
+        '</div>' +
+        '<div id="channel-qr-area" class="hidden" style="margin-bottom: 24px;"></div>' +
+        '<div id="channel-list"></div>';
+
+      loadChannels();
+    }
+
+    async function loadChannels() {
+      var listEl = document.getElementById('channel-list');
+      if (!listEl) return;
+      try {
+        var res = await apiFetch('/api/channels');
+        var json = await res.json();
+        var channels = json.data || [];
+
+        var countEl = document.getElementById('channel-count');
+        if (countEl) countEl.textContent = channels.length + '/10';
+
+        if (channels.length === 0) {
+          listEl.innerHTML =
+            '<div class="empty-state"><p>' + t('ch.empty') + '</p></div>';
+          return;
+        }
+
+        var html = '';
+        channels.forEach(function(ch) {
+          var statusClass = ch.status === 'active' ? 'badge-green' : (ch.status === 'pending' ? 'badge-yellow' : 'badge-gray');
+          var statusKey = 'ch.status.' + ch.status;
+          var statusText = t(statusKey);
+
+          html += '<div class="channel-card">';
+          html +=   '<div class="channel-info">';
+          html +=     '<input class="channel-name" value="' + escapeHtml(ch.name) + '" onblur="renameChannel(' + ch.id + ', this.value)" onkeydown="if(event.key===\'Enter\')this.blur()">';
+          html +=     '<div class="channel-meta">';
+          html +=       '<span>' + maskWechatId(ch.wechat_openid) + '</span>';
+          html +=       '<span class="badge ' + statusClass + '">' + statusText + '</span>';
+          if (ch.is_default) {
+            html +=     '<span class="badge badge-blue">' + t('ch.default_badge') + '</span>';
+          }
+          html +=       '<span style="color: #c7c7cc;">' + formatTime(ch.created_at) + '</span>';
+          html +=     '</div>';
+          html +=   '</div>';
+          html +=   '<div class="channel-actions">';
+          if (!ch.is_default) {
+            html +=   '<button class="btn btn-sm btn-secondary" onclick="setDefault(' + ch.id + ')">' + t('ch.set_default') + '</button>';
+          }
+          html +=     '<button class="btn btn-sm btn-secondary" id="check-btn-' + ch.id + '" onclick="checkChannel(' + ch.id + ')">' + t('ch.check_status') + '</button>';
+          html +=     '<button class="btn btn-sm btn-danger-text" onclick="deleteChannel(' + ch.id + ')">' + t('ch.delete') + '</button>';
+          html +=   '</div>';
+          html += '</div>';
+        });
+
+        listEl.innerHTML = html;
+      } catch (e) {
+        if (listEl) listEl.innerHTML = '<div class="empty-state"><p style="color: #ff3b30;">Failed to load channels</p></div>';
+      }
+    }
+
+    async function renameChannel(id, name) {
+      name = name.trim();
+      if (!name) return;
+      try {
+        await apiFetch('/api/channels/' + id, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: name })
+        });
+      } catch (e) {}
+    }
+
+    async function setDefault(id) {
+      try {
+        await apiFetch('/api/channels/' + id, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ is_default: 1 })
+        });
+        loadChannels();
+      } catch (e) {}
+    }
+
+    async function checkChannel(id) {
+      var btn = document.getElementById('check-btn-' + id);
+      if (btn) { btn.textContent = t('ch.checking'); btn.disabled = true; }
+      try {
+        var res = await apiFetch('/api/channels/' + id + '/check', { method: 'POST' });
+        var json = await res.json();
+        if (json.success && json.data.alive) {
+          showToast(t('ch.check_alive'));
+        } else {
+          showToast(t('ch.check_dead'));
+        }
+        loadChannels();
+      } catch (e) {
+        showToast(t('ch.check_error'));
+      } finally {
+        if (btn) { btn.textContent = t('ch.check_status'); btn.disabled = false; }
+      }
+    }
+
+    async function deleteChannel(id) {
+      if (!confirm(t('ch.delete_confirm'))) return;
+      try {
+        await apiFetch('/api/channels/' + id, { method: 'DELETE' });
+        loadChannels();
+      } catch (e) {}
+    }
+
+    // ── Channel binding flow ──
+    async function startChannelBind() {
+      var area = document.getElementById('channel-qr-area');
+      area.classList.remove('hidden');
+      stopAllPolling();
+      pollingStopped = false;
+
+      area.innerHTML =
+        '<div class="card" style="text-align: center;">' +
+          '<div class="warning-banner">' +
+            t('ch.bind_warning') +
+          '</div>' +
+          '<p style="color: #8e8e93; padding: 20px;">' + t('qr.loading') + '</p>' +
+        '</div>';
+
+      try {
+        var res = await apiFetch('/api/channels/qrcode', { method: 'POST' });
+        var json = await res.json();
+
+        if (!json.success) {
+          area.innerHTML =
+            '<div class="card" style="text-align: center;">' +
+              '<p style="color: #ff3b30; margin-bottom: 16px;">' + (json.data && json.data.error || t('qr.load_failed')) + '</p>' +
+              '<button class="btn btn-sm btn-secondary" onclick="document.getElementById(\'channel-qr-area\').classList.add(\'hidden\')">' + t('ch.title') + '</button>' +
+            '</div>';
+          return;
+        }
+
+        var qrUrl = json.data.qrcode_img_content;
+        var qrcode = json.data.qrcode;
+
+        area.innerHTML =
+          '<div class="card" style="text-align: center;">' +
+            '<div class="warning-banner">' +
+              t('ch.bind_warning') +
+            '</div>' +
+            '<h3 style="margin-bottom: 16px;">' + t('ch.scan_new') + '</h3>' +
+            '<div class="qr-wrapper" id="ch-qr-wrapper">' +
+              '<canvas id="ch-qr-canvas"></canvas>' +
+              '<p class="qr-countdown" id="ch-qr-countdown"></p>' +
+              '<p class="qr-hint">' + t('qr.scan_hint') + '</p>' +
+            '</div>' +
+          '</div>';
+
+        QRCode.toCanvas(document.getElementById('ch-qr-canvas'), qrUrl, {
+          width: 200, margin: 2, color: { dark: '#1d1d1f', light: '#ffffff' }
+        });
+
+        var remaining = QR_EXPIRE_SECONDS;
+        var countdownEl = document.getElementById('ch-qr-countdown');
+        qrTimer = setInterval(function() {
+          remaining--;
+          var min = Math.floor(remaining / 60);
+          var sec = remaining % 60;
+          countdownEl.textContent = t('qr.countdown_prefix') + min + ':' + String(sec).padStart(2, '0');
+          if (remaining <= 0) {
+            clearInterval(qrTimer);
+            area.innerHTML =
+              '<div class="card" style="text-align: center;">' +
+                '<p style="color: #ff3b30; margin-bottom: 16px;">' + t('qr.expired') + '</p>' +
+                '<button class="btn btn-primary btn-sm" onclick="startChannelBind()">' + t('qr.retry') + '</button>' +
+              '</div>';
+          }
+        }, 1000);
+
+        pollChannelBindStatus(qrcode, area);
+      } catch (e) {
+        area.innerHTML =
+          '<div class="card" style="text-align: center;">' +
+            '<p style="color: #ff3b30; margin-bottom: 16px;">' + t('qr.load_failed') + '</p>' +
+            '<button class="btn btn-primary btn-sm" onclick="startChannelBind()">' + t('qr.retry') + '</button>' +
+          '</div>';
+      }
+    }
+
+    async function pollChannelBindStatus(qrcode, area) {
+      try {
+        var res = await apiFetch('/api/channels/bind-status/' + qrcode);
+        var json = await res.json();
+        var data = json.data;
+
+        // WeChat already bound to another user
+        if (data && data.error === 'wechat_already_bound') {
+          if (qrTimer) { clearInterval(qrTimer); qrTimer = null; }
+          area.innerHTML =
+            '<div class="card" style="text-align: center; padding: 32px;">' +
+              '<p style="color: #ff3b30; font-size: 16px; margin-bottom: 16px;">' + t('channel.already_bound') + '</p>' +
+              '<button class="btn btn-secondary btn-sm" onclick="startChannelBind()">' + t('qr.retry') + '</button>' +
+            '</div>';
+          return;
+        }
+
+        if (data && data.id) {
+          if (qrTimer) { clearInterval(qrTimer); qrTimer = null; }
+
+          if (data.rebind) {
+            showToast(t('channel.rebind_hint'));
+          }
+
+          if (data.status === 'active') {
+            channelBindComplete(area);
+          } else {
+            showChannelWaitForMessage(area, data.id);
+          }
+          return;
+        }
+
+        if (data && data.status === 'expired') {
+          stopAllPolling();
+          area.innerHTML =
+            '<div class="card" style="text-align: center;">' +
+              '<p style="color: #ff3b30; margin-bottom: 16px;">' + t('qr.expired') + '</p>' +
+              '<button class="btn btn-primary btn-sm" onclick="startChannelBind()">' + t('qr.retry') + '</button>' +
+            '</div>';
+          return;
+        }
+
+        if (!pollingStopped) {
+          pollStatusTimer = setTimeout(function() { pollChannelBindStatus(qrcode, area); }, 2000);
+        }
+      } catch (e) {
+        if (!pollingStopped) {
+          pollStatusTimer = setTimeout(function() { pollChannelBindStatus(qrcode, area); }, 2000);
+        }
+      }
+    }
+
+    function showChannelWaitForMessage(area, channelId) {
+      area.innerHTML =
+        '<div class="card" style="text-align: center;">' +
+          '<div style="margin-bottom: 8px;">' +
+            '<svg width="48" height="48" viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="24" fill="rgba(52,199,89,0.1)"/><path d="M16 24l5 5 11-11" stroke="#34c759" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
+          '</div>' +
+          '<p style="font-size: 18px; font-weight: 600; margin-bottom: 8px;">' + t('qr.scan_success') + '</p>' +
+          '<p style="font-size: 14px; color: #6e6e73; margin-bottom: 20px;">' + t('qr.send_msg_hint') + '</p>' +
+          '<div>' +
+            '<span class="spinner"></span>' +
+            '<span style="color: #8e8e93; font-size: 13px;">' + t('qr.waiting_msg') + '</span>' +
+            '<span class="qr-countdown" id="ch-msg-countdown" style="margin-left: 8px;"></span>' +
+          '</div>' +
+        '</div>';
+
+      var elapsed = 0;
+      var maxWait = 300;
+
+      async function check() {
+        try {
+          var res = await apiFetch('/api/channels/' + channelId + '/activation');
+          var json = await res.json();
+          if (json.data && json.data.activated) {
+            channelBindComplete(area);
+            return;
+          }
+        } catch (e) {}
+
+        elapsed += 3;
+        if (elapsed < maxWait && !pollingStopped) {
+          var remain = maxWait - elapsed;
+          var min = Math.floor(remain / 60);
+          var sec = remain % 60;
+          var el = document.getElementById('ch-msg-countdown');
+          if (el) el.textContent = '(' + min + ':' + String(sec).padStart(2, '0') + ')';
+          bindCheckTimer = setTimeout(check, 3000);
+        } else {
+          area.innerHTML =
+            '<div class="card" style="text-align: center;">' +
+              '<p style="color: #ff3b30; margin-bottom: 16px;">' + t('qr.wait_timeout') + '</p>' +
+              '<button class="btn btn-primary btn-sm" onclick="startChannelBind()">' + t('qr.rescan') + '</button>' +
+            '</div>';
+        }
+      }
+
+      check();
+    }
+
+    function channelBindComplete(area) {
+      // 全局状态更新：已有活跃通道
+      hasActiveChannel = true;
+      updateApiDocs();
+
+      area.innerHTML =
+        '<div class="card" style="text-align: center;">' +
+          '<div style="margin-bottom: 8px;">' +
+            '<svg width="48" height="48" viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="24" fill="rgba(52,199,89,0.15)"/><path d="M16 24l5 5 11-11" stroke="#34c759" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
+          '</div>' +
+          '<p style="font-size: 18px; font-weight: 600; color: #34c759;">' + t('qr.bind_done') + '</p>' +
+        '</div>';
+
+      showToast(t('qr.bind_done'));
+
+      setTimeout(function() {
+        area.classList.add('hidden');
+        loadChannels();
+      }, 2000);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  Key & API page
+    // ═══════════════════════════════════════════════════════════════════
+    async function renderKeyPage() {
+      // 刷新通道状态
+      if (currentUser) {
+        try {
+          var res = await publicFetch('/api/auth/me');
+          if (res.ok) {
+            var json = await res.json();
+            hasActiveChannel = (json.data.channel_count || 0) > 0;
+          }
+        } catch (e) {}
+      }
+      renderSendKeyCard();
+      updateApiDocs();
+      loadApiBaseUrl();
+    }
+
+    function renderSendKeyCard() {
+      var card = document.getElementById('sendkey-card');
+      if (!currentUser) {
+        card.innerHTML =
+          '<h3 data-i18n="key.title" style="margin-bottom: 16px;">' + t('key.title') + '</h3>' +
+          '<div class="login-prompt" style="padding: 24px 0;">' +
+            '<p>' + t('auth.login_to_view_key') + '</p>' +
+            '<button class="btn btn-primary btn-sm" onclick="requireAuth(function(){ renderKeyPage(); })" style="margin-top: 8px;">' + t('auth.click_to_login') + '</button>' +
+          '</div>';
+        return;
+      }
+
+      var noChannelHint = !hasActiveChannel
+        ? '<div style="background: #fffbe6; border: 1px solid #ffe58f; border-radius: 12px; padding: 12px 16px; margin-bottom: 16px; font-size: 13px; color: #ad8b00;">' +
+            t('key.no_channel_hint') + ' <a href="javascript:showPage(\'channelsPage\')" style="color: #0071e3;">' + t('api.go_bind') + '</a>' +
+          '</div>'
+        : '';
+
+      card.innerHTML =
+        noChannelHint +
+        '<div class="key-row">' +
+          '<span style="font-weight: 600; font-size: 14px; white-space: nowrap;">SendKey</span>' +
+          '<input class="key-field" id="sendkey-display" type="text" readonly value="' + escapeHtml(sendKey || '') + '">' +
+          '<div class="key-actions">' +
+            '<button class="btn btn-sm btn-secondary" onclick="toggleKeyVisibility()" id="key-toggle-btn">' + t('key.show') + '</button>' +
+            '<button class="btn btn-sm btn-secondary" onclick="copyKey()">' + t('key.copy') + '</button>' +
+            '<button class="btn btn-sm btn-danger-text" onclick="resetKey()" style="border: 1.5px solid #ff3b30; border-radius: 980px;">' + t('key.reset') + '</button>' +
+          '</div>' +
+        '</div>';
+
+      keyVisible = false;
+      loadKeyData();
+    }
+
+    async function loadKeyData() {
+      try {
+        var res = await apiFetch('/api/key');
+        var json = await res.json();
+        if (json.success) {
+          sendKey = json.data.send_key;
+          var display = document.getElementById('sendkey-display');
+          if (display) display.value = sendKey;
+        }
+      } catch (e) {}
+    }
+
+    async function loadApiBaseUrl() {
+      try {
+        var res2 = await publicFetch('/api/config');
+        var json2 = await res2.json();
+        apiBaseUrl = json2.base_url || (window.location.origin + basePath);
+      } catch (e) {
+        apiBaseUrl = window.location.origin + basePath;
+      }
+      updateApiDocs();
+    }
+
+    function updateApiDocs() {
+      var base = apiBaseUrl || (window.location.origin + basePath);
+      // 只有登录且有活跃通道时才显示真实 Key
+      var k = (sendKey && hasActiveChannel) ? sendKey : 'YOUR_SENDKEY';
+
+      var getSimple = document.querySelector('.api-url-get-simple');
+      var getFull = document.querySelector('.api-url-get-full');
+      var post = document.querySelector('.api-url-post');
+      var bearer = document.querySelector('.api-url-bearer');
+
+      if (getSimple) getSimple.textContent = base + '/' + k + '.send?title=' + encodeURIComponent(t('api.test_title_simple'));
+      if (getFull) getFull.textContent = base + '/' + k + '.send?title=' + encodeURIComponent(t('api.curl_title')) + '&desp=' + encodeURIComponent(t('api.curl_desp'));
+
+      // Update input fields in quick test section
+      var simpleInput = document.getElementById('api-get-simple-input');
+      var fullInput = document.getElementById('api-get-full-input');
+      if (simpleInput) simpleInput.value = base + '/' + k + '.send?title=' + t('api.test_title_simple');
+      var maskedKey = k.length > 12 ? k.substring(0, 8) + '****' : k;
+      var richDesp = t('api.test_desp_prefix') + base + t('api.test_desp_time') + new Date().toLocaleString() + t('api.test_desp_key') + maskedKey + t('api.test_desp_suffix');
+      var fullInput = document.getElementById('api-get-full-input');
+      if (fullInput) fullInput.value = base + '/' + k + '.send?title=' + t('api.test_title_full') + '&desp=' + richDesp;
+      if (post) post.textContent = base + '/' + k + '.send'; // keep for legacy
+      if (bearer) bearer.textContent = base + '/notify?key=' + k; // keep for legacy
+
+      var postInput = document.getElementById('api-post-input');
+      var bearerInput = document.getElementById('api-bearer-input');
+      if (postInput) postInput.value =
+        'curl -X POST "' + base + '/' + k + '.send" \\\n' +
+        '-H "Content-Type: application/json" \\\n' +
+        '-d \'{"title": "' + t('api.curl_title') + '", "desp": "' + t('api.curl_desp') + '"}\'';
+      if (bearerInput) bearerInput.value =
+        'curl -X POST "' + base + '/notify?key=' + k + '" \\\n' +
+        '-H "Content-Type: application/json" \\\n' +
+        '-d \'{"title": "' + t('api.curl_title') + '", "msg": "' + t('api.curl_desp') + '"}\'';
+
+      // 自适应所有 textarea 高度
+      [simpleInput, fullInput, postInput, bearerInput].forEach(function(el) {
+        if (el) autoResizeTextarea(el);
+      });
+    }
+
+    function autoResizeTextarea(el) {
+      var lines = el.value.split('\n').length;
+      el.rows = Math.max(lines, 1);
+    }
+
+    function copyInput(inputId) {
+      var el = document.getElementById(inputId);
+      if (el) {
+        navigator.clipboard.writeText(el.value).then(function() { showToast(t('toast.copy_success')); });
+      }
+    }
+
+    function quickTestRich(resultId) {
+      requireAuth(function() {
+        var resultEl = document.getElementById(resultId);
+        var base = apiBaseUrl || (window.location.origin + basePath);
+        var k = (sendKey && hasActiveChannel) ? sendKey : null;
+        if (!k) { resultEl.textContent = t('api.no_channel'); resultEl.style.color = '#ff3b30'; return; }
+
+        var maskedKey = k.length > 12 ? k.substring(0, 8) + '****' : k;
+        var richDesp = t('api.test_desp_prefix') + base + t('api.test_desp_time') + new Date().toLocaleString() + t('api.test_desp_key') + maskedKey + t('api.test_desp_suffix');
+
+        resultEl.textContent = t('api.sending');
+        resultEl.style.color = '#8e8e93';
+
+        fetch(base + '/' + k + '.send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({ title: t('api.test_title_full'), desp: richDesp })
+        }).then(function(r) { return r.json(); }).then(function(json) {
+          if (json.code === 0) {
+            resultEl.textContent = t('send.success');
+            resultEl.style.color = '#34c759';
+          } else if (json.code === 40002) {
+            resultEl.innerHTML = '<span style="color:#ff3b30;">' + t('api.no_channel') + '</span> <a href="javascript:showPage(\'channelsPage\')" style="color:#0071e3;">' + t('api.go_bind') + '</a>';
+          } else {
+            resultEl.textContent = (json.message || JSON.stringify(json));
+            resultEl.style.color = '#ff3b30';
+          }
+        }).catch(function(e) {
+          resultEl.textContent = 'Error: ' + e.message;
+          resultEl.style.color = '#ff3b30';
+        });
+      });
+    }
+
+    function editNickname() {
+      if (!currentUser) return;
+      var current = currentUser.nickname || '';
+      var newName = prompt(t('profile.nickname_prompt'), current);
+      if (newName === null) return; // cancelled
+      newName = newName.trim().substring(0, 20);
+      apiFetch('/api/auth/me', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nickname: newName })
+      }).then(function(res) { return res.json(); })
+        .then(function(json) {
+          if (json.success) {
+            currentUser.nickname = json.data.nickname;
+            updateNav();
+            showToast(t('profile.nickname_updated'));
+          }
+        }).catch(function() {});
+    }
+
+    async function loadUnreadCount() {
+      if (!currentUser) return;
+      try {
+        var res = await apiFetch('/api/push-logs/unread-count');
+        var json = await res.json();
+        var count = (json && json.data && json.data.unread_failed) || 0;
+        var banner = document.getElementById('hero-unread-banner');
+        var navBadge = document.getElementById('nav-logs-badge');
+        if (count > 0) {
+          if (banner) {
+            var cntEl = document.getElementById('hero-unread-count');
+            if (cntEl) cntEl.textContent = count;
+            banner.style.display = 'block';
+          }
+          if (navBadge) {
+            navBadge.textContent = count;
+            navBadge.style.display = 'inline-block';
+          }
+        } else {
+          if (banner) banner.style.display = 'none';
+          if (navBadge) navBadge.style.display = 'none';
+        }
+      } catch (e) {}
+    }
+
+    function isTokenExpired(responseStr) {
+      try {
+        var d = JSON.parse(responseStr);
+        return d.ret === -14 || d.errcode === -14;
+      } catch (e) { return false; }
+    }
+
+    async function markLogRead(id) {
+      try {
+        await apiFetch('/api/push-logs/' + id + '/read', { method: 'PATCH' });
+        loadLogs();
+        loadUnreadCount();
+      } catch (e) {}
+    }
+
+    async function markAllLogsRead() {
+      try {
+        await apiFetch('/api/push-logs/mark-all-read', { method: 'POST' });
+        loadLogs();
+        loadUnreadCount();
+        showToast(t('logs.mark_all_read'));
+      } catch (e) {}
+    }
+
+    function heroSendTest() {
+      var btn = document.getElementById('hero-test-btn');
+      var resultEl = document.getElementById('hero-test-result');
+      if (!btn || !resultEl || !sendKey) return;
+
+      btn.disabled = true;
+      btn.textContent = t('api.sending');
+      resultEl.textContent = '';
+
+      var base = apiBaseUrl || (window.location.origin + basePath);
+      var now = new Date().toLocaleString('zh-CN');
+
+      apiFetch('/' + sendKey + '.send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: t('hero.test_title'),
+          desp: t('hero.test_desp') + '\n⏰ ' + now
+        })
+      }).then(function(res) { return res.json(); })
+        .then(function(json) {
+          btn.disabled = false;
+          btn.textContent = t('hero.send_test');
+          if (json.code === 0) {
+            resultEl.innerHTML = '<span style="color: #34c759;">' + t('hero.test_ok') + '</span>';
+          } else {
+            resultEl.innerHTML = '<span style="color: #ff3b30;">' + (json.message || 'Failed') + '</span>';
+          }
+        }).catch(function(e) {
+          btn.disabled = false;
+          btn.textContent = t('hero.send_test');
+          resultEl.innerHTML = '<span style="color: #ff3b30;">' + e.message + '</span>';
+        });
+    }
+
+    function quickTestUrl(inputId, resultId) {
+      requireAuth(function() {
+        var raw = document.getElementById(inputId).value.trim();
+        var resultEl = document.getElementById(resultId);
+
+        if (!raw) { resultEl.textContent = 'URL is empty'; resultEl.style.color = '#ff3b30'; return; }
+        if (!raw.startsWith('http')) { resultEl.textContent = 'Invalid URL'; resultEl.style.color = '#ff3b30'; return; }
+
+        resultEl.textContent = t('api.sending');
+        resultEl.style.color = '#8e8e93';
+
+        // Parse the readable URL, extract params, send as POST JSON
+        var qIdx = raw.indexOf('?');
+        var baseUrl = qIdx >= 0 ? raw.substring(0, qIdx) : raw;
+        var params = {};
+        if (qIdx >= 0) {
+          raw.substring(qIdx + 1).split('&').forEach(function(pair) {
+            var eqIdx = pair.indexOf('=');
+            if (eqIdx >= 0) {
+              params[pair.substring(0, eqIdx)] = pair.substring(eqIdx + 1);
+            }
+          });
+        }
+
+        var fetchOpts = { credentials: 'same-origin' };
+        var url = baseUrl;
+        if (Object.keys(params).length > 0) {
+          fetchOpts.method = 'POST';
+          fetchOpts.headers = { 'Content-Type': 'application/json' };
+          fetchOpts.body = JSON.stringify(params);
+        }
+
+        fetch(url, fetchOpts).then(function(r) { return r.json(); }).then(function(json) {
+          if (json.code === 0) {
+            resultEl.textContent = t('send.success');
+            resultEl.style.color = '#34c759';
+          } else if (json.code === 40002) {
+            resultEl.innerHTML = '<span style="color:#ff3b30;">' + t('api.no_channel') + '</span> <a href="javascript:showPage(\'channelsPage\')" style="color:#0071e3;">' + t('api.go_bind') + '</a>';
+          } else {
+            resultEl.textContent = (json.message || JSON.stringify(json));
+            resultEl.style.color = '#ff3b30';
+          }
+        }).catch(function(e) {
+          resultEl.textContent = 'Error: ' + e.message;
+          resultEl.style.color = '#ff3b30';
+        });
+      });
+    }
+
+    function toggleKeyVisibility() {
+      var input = document.getElementById('sendkey-display');
+      var btn = document.getElementById('key-toggle-btn');
+      if (!input || !btn) return;
+      keyVisible = !keyVisible;
+      input.type = keyVisible ? 'text' : 'password';
+      btn.textContent = keyVisible ? t('key.hide') : t('key.show');
+    }
+
+    function copyKey() {
+      if (!sendKey) return;
+      navigator.clipboard.writeText(sendKey).then(function() {
+        showToast(t('toast.copy_success'));
+      });
+    }
+
+    async function resetKey() {
+      if (!confirm(t('key.reset_confirm'))) return;
+      try {
+        var res = await apiFetch('/api/key/reset', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        var json = await res.json();
+        if (json.success) {
+          sendKey = json.data.send_key;
+          var display = document.getElementById('sendkey-display');
+          if (display) display.value = sendKey;
+          updateApiDocs();
+          showToast(t('key.reset_done'));
+        }
+      } catch (e) {
+        showToast(t('send.fail'));
+      }
+    }
+
+    function copyCodeBlock(elementId) {
+      var el = document.getElementById(elementId);
+      var span = el.querySelector('span');
+      if (!span) return;
+      navigator.clipboard.writeText(span.textContent).then(function() {
+        showToast(t('toast.copy_success'));
+      });
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  Send test
+    // ═══════════════════════════════════════════════════════════════════
+    function testSend() {
+      requireAuth(function() {
+        doTestSend();
+      });
+    }
+
+    async function doTestSend() {
+      var title = document.getElementById('test-title').value;
+      var desp = document.getElementById('test-desp').value;
+      var resultEl = document.getElementById('test-result');
+      var btn = document.getElementById('test-send-btn');
+
+      if (!title && !desp) {
+        resultEl.textContent = t('send.empty_warn');
+        resultEl.style.color = '#ff9500';
+        return;
+      }
+
+      btn.disabled = true;
+      resultEl.textContent = t('send.sending');
+      resultEl.style.color = '#8e8e93';
+
+      try {
+        var res = await fetch(basePath + '/' + sendKey + '.send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({ title: title, desp: desp })
+        });
+        var json = await res.json();
+        if (json.code === 0) {
+          resultEl.textContent = t('send.success');
+          resultEl.style.color = '#34c759';
+        } else {
+          resultEl.textContent = t('send.fail') + ': ' + json.message;
+          resultEl.style.color = '#ff3b30';
+        }
+      } catch (e) {
+        resultEl.textContent = t('send.fail') + ': ' + e.message;
+        resultEl.style.color = '#ff3b30';
+      }
+      btn.disabled = false;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  Logs page
+    // ═══════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════
+    //  Demo page (应用示范)
+    // ═══════════════════════════════════════════════════════════════════
+    function renderDemoPage() {
+      requireAuth(function() {
+        loadDemoReminders();
+        // 把快速测试区复制到 demo 页
+        var quickTest = document.getElementById('demo-quick-test');
+        if (quickTest && sendKey && hasActiveChannel) {
+          var base = apiBaseUrl || (window.location.origin + basePath);
+          var k = sendKey;
+          quickTest.innerHTML =
+            '<div style="margin-bottom: 12px;">' +
+              '<p style="font-size: 13px; color: #6e6e73; margin-bottom: 6px;">' +
+                '<span class="method-badge method-get">GET</span> ' + t('api.get_simple') +
+              '</p>' +
+              '<textarea class="input" id="demo-test-input" style="font-family: monospace; font-size: 12px; padding: 8px 12px; background: #fff; min-height: 56px; resize: vertical;">' +
+                base + '/' + k + '.send?title=' + t('api.test_title_simple') +
+              '</textarea>' +
+              '<div style="display: flex; gap: 8px; align-items: center; margin-top: 6px;">' +
+                '<button class="btn btn-primary btn-sm" onclick="quickTestUrl(\'demo-test-input\', \'demo-test-result\')">' + t('api.quick_test') + '</button>' +
+                '<button class="btn btn-secondary btn-sm" onclick="copyInput(\'demo-test-input\')">' + t('api.copy') + '</button>' +
+                '<span id="demo-test-result" style="font-size: 13px;"></span>' +
+              '</div>' +
+            '</div>';
+        } else if (quickTest) {
+          quickTest.innerHTML = '<p style="color: #8e8e93;">' + t('demo.need_channel') + '</p>';
+        }
+        // 预览时间：1分钟后
+        var previewTime = document.getElementById('demo-preview-time');
+        if (previewTime) {
+          previewTime.textContent = new Date(Date.now() + 60000).toLocaleString();
+        }
+        // 自定义表单默认时间：5分钟后
+        var timeInput = document.getElementById('demo-reminder-time');
+        if (timeInput && !timeInput.value) {
+          var d = new Date(Date.now() + 5 * 60000);
+          timeInput.value = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0') + 'T' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+        }
+      });
+    }
+
+    async function addQuickDemoReminder() {
+      var resultEl = document.getElementById('demo-add-result');
+      resultEl.textContent = t('api.sending');
+      resultEl.style.color = '#8e8e93';
+
+      // 1 分钟后首次推送
+      var d = new Date(Date.now() + 60000);
+      var timeStr = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0') + 'T' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+
+      try {
+        var res = await apiFetch('/api/reminders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: t('demo.preview_title_value'),
+            message: t('demo.preview_msg_value'),
+            time: timeStr,
+            type: 'every2min',
+            max_count: 5
+          })
+        });
+        var json = await res.json();
+        if (json.success) {
+          resultEl.textContent = t('demo.quick_success');
+          resultEl.style.color = '#34c759';
+          loadDemoReminders();
+        } else {
+          resultEl.textContent = json.error || t('demo.add_failed');
+          resultEl.style.color = '#ff3b30';
+        }
+      } catch (e) {
+        resultEl.textContent = t('demo.add_failed');
+        resultEl.style.color = '#ff3b30';
+      }
+    }
+
+    async function addDemoReminder() {
+      var title = document.getElementById('demo-reminder-title').value.trim();
+      var msg = document.getElementById('demo-reminder-msg').value.trim();
+      var time = document.getElementById('demo-reminder-time').value;
+      var type = document.getElementById('demo-reminder-type').value;
+      var resultEl = document.getElementById('demo-add-result');
+
+      if (!title) { resultEl.textContent = t('demo.title_required'); resultEl.style.color = '#ff3b30'; return; }
+      if (!time) { resultEl.textContent = t('demo.time_required'); resultEl.style.color = '#ff3b30'; return; }
+
+      try {
+        var res = await apiFetch('/api/reminders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title: title, message: msg, time: time, type: type })
+        });
+        var json = await res.json();
+        if (json.success) {
+          resultEl.textContent = t('demo.add_success');
+          resultEl.style.color = '#34c759';
+          document.getElementById('demo-reminder-title').value = '';
+          document.getElementById('demo-reminder-msg').value = '';
+          loadDemoReminders();
+        } else {
+          resultEl.textContent = json.error || t('demo.add_failed');
+          resultEl.style.color = '#ff3b30';
+        }
+      } catch (e) {
+        resultEl.textContent = t('demo.add_failed');
+        resultEl.style.color = '#ff3b30';
+      }
+    }
+
+    async function loadDemoReminders() {
+      var list = document.getElementById('demo-reminders-list');
+      if (!list) return;
+      list.innerHTML = '<p style="color: #8e8e93;">' + t('demo.loading') + '</p>';
+
+      try {
+        var res = await apiFetch('/api/reminders');
+        var json = await res.json();
+        var reminders = json.data || [];
+
+        if (reminders.length === 0) {
+          list.innerHTML = '<p style="color: #8e8e93;">' + t('demo.no_reminders') + '</p>';
+          return;
+        }
+
+        var html = '';
+        reminders.forEach(function(r) {
+          var typeLabel = r.type === 'daily' ? t('demo.type_daily') : (r.type === 'weekly' ? t('demo.type_weekly') : t('demo.type_once'));
+          var statusColor = r.enabled ? '#34c759' : '#8e8e93';
+          html += '<div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid #f0f0f0;">';
+          html += '<div>';
+          html += '<p style="font-size: 15px; font-weight: 500;">' + escapeHtml(r.title) + '</p>';
+          if (r.message) html += '<p style="font-size: 13px; color: #6e6e73;">' + escapeHtml(r.message) + '</p>';
+          html += '<p style="font-size: 12px; color: #8e8e93;">' + formatTime(r.time) + ' · ' + typeLabel + '</p>';
+          html += '</div>';
+          html += '<div style="display: flex; gap: 6px; align-items: center;">';
+          html += '<span style="width: 8px; height: 8px; border-radius: 50%; background: ' + statusColor + '; display: inline-block;"></span>';
+          html += '<button class="btn btn-sm btn-danger-text" onclick="deleteDemoReminder(' + r.id + ')" style="font-size: 12px;">' + t('ch.delete') + '</button>';
+          html += '</div>';
+          html += '</div>';
+        });
+        list.innerHTML = html;
+      } catch (e) {
+        list.innerHTML = '<p style="color: #ff3b30;">' + t('demo.load_failed') + '</p>';
+      }
+    }
+
+    async function deleteDemoReminder(id) {
+      try {
+        await apiFetch('/api/reminders/' + id, { method: 'DELETE' });
+        loadDemoReminders();
+      } catch (e) {}
+    }
+
+    function renderLogsPage() {
+      var container = document.getElementById('logs-content');
+      if (!currentUser) {
+        container.innerHTML =
+          '<div class="card">' +
+            '<div class="login-prompt">' +
+              '<p>' + t('auth.login_to_view_logs') + '</p>' +
+              '<button class="btn btn-primary btn-sm" onclick="requireAuth(function(){ renderLogsPage(); })">' + t('auth.click_to_login') + '</button>' +
+            '</div>' +
+          '</div>';
+        return;
+      }
+
+      container.innerHTML =
+        '<div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap;">' +
+          '<button class="btn btn-sm btn-secondary" onclick="loadLogs()">' + t('logs.refresh') + '</button>' +
+          '<button id="btn-mark-all-read" class="btn btn-sm btn-secondary" onclick="markAllLogsRead()" style="display:none;">' + t('logs.mark_all_read') + '</button>' +
+          '<span style="font-size: 13px; color: #8e8e93;">' + t('logs.recent_hint') + '</span>' +
+        '</div>' +
+        '<div id="logs-container">' +
+          '<div class="empty-state"><p>' + t('logs.loading') + '</p></div>' +
+        '</div>';
+
+      loadLogs();
+    }
+
+    async function loadLogs() {
+      var container = document.getElementById('logs-container');
+      if (!container) return;
+      container.innerHTML = '<div class="empty-state"><p>' + t('logs.loading') + '</p></div>';
+
+      try {
+        var res = await apiFetch('/api/push-logs');
+        var json = await res.json();
+        var logs = json.data || [];
+
+        if (logs.length === 0) {
+          container.innerHTML = '<div class="empty-state"><p>' + t('logs.empty') + '</p></div>';
+          return;
+        }
+
+        var html = '';
+        var unreadFailedCount = 0;
+        logs.forEach(function(log, index) {
+          var isSuccess = log.status === 'success';
+          var statusColor = isSuccess ? '#34c759' : '#ff3b30';
+          var statusText = isSuccess ? t('logs.status_success') : t('logs.status_failed');
+          var logId = 'log-content-' + index;
+          var isUserUnread = !isSuccess && ((log.read_state || 0) & 1) === 0;
+          var tokenExpired = !isSuccess && isTokenExpired(log.response);
+          if (isUserUnread) unreadFailedCount++;
+
+          var cardStyle = 'margin-bottom: 12px; padding: 20px;';
+          if (isUserUnread) cardStyle += ' border-left: 4px solid #ff3b30;';
+          html += '<div class="card" style="' + cardStyle + '">';
+          html += '<div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">';
+          html += '<div style="flex: 1;">';
+          html += '<p style="font-size: 13px; color: #8e8e93; margin-bottom: 4px;">' + t('logs.msg_id') + ': ' + (log.id || '-') + '</p>';
+          html += '<p style="font-size: 15px; font-weight: 600; margin-bottom: 4px; color: ' + statusColor + ';">' + escapeHtml(log.title || t('logs.no_title')) + '</p>';
+          html += '<p style="font-size: 13px; color: #6e6e73;">' + t('logs.push_time') + ': ' + formatTime(log.created_at) + '</p>';
+          if (log.channel_name) {
+            html += '<p style="font-size: 13px; color: #6e6e73;">' + t('logs.col_channel') + ': ' + escapeHtml(log.channel_name) + '</p>';
+          }
+          if (log.ip) {
+            html += '<p style="font-size: 13px; color: #8e8e93;">IP: ' + escapeHtml(log.ip) + '</p>';
+          }
+          html += '</div>';
+          html += '<div style="display: flex; flex-direction: column; align-items: flex-end; gap: 6px;">';
+          html += '<span style="display: inline-block; padding: 2px 10px; border-radius: 980px; font-size: 12px; font-weight: 500; color: #fff; background: ' + statusColor + ';">' + statusText + '</span>';
+          if (tokenExpired) {
+            html += '<span style="display: inline-block; padding: 2px 8px; border-radius: 980px; font-size: 11px; font-weight: 500; color: #c77c00; background: rgba(255,159,10,0.12);">' + t('logs.token_expired') + '</span>';
+          }
+          if (isUserUnread) {
+            html += '<button class="btn btn-sm btn-secondary" style="font-size:11px;padding:2px 10px;" onclick="markLogRead(' + log.id + ')">' + t('logs.mark_read') + '</button>';
+          }
+          html += '</div>';
+          html += '</div>';
+
+          // 渠道平台返回
+          if (log.response) {
+            try {
+              var resp = JSON.parse(log.response);
+              var retCode = resp.ret !== undefined ? resp.ret : resp.errcode;
+              var retExplain = {
+                '0': t('logs.ret_0'),
+                '-2': t('logs.ret_n2'),
+                '-14': t('logs.ret_n14'),
+                '-1': t('logs.ret_n1'),
+              }[String(retCode)] || '';
+              var respText = JSON.stringify(resp, null, 2);
+              html += '<div style="margin-top: 8px; background: ' + (isSuccess ? '#f0faf0' : '#fef0f0') + '; border-radius: 8px; padding: 10px 12px; font-size: 12px;">';
+              html += '<p style="font-size: 12px; color: #6e6e73; margin-bottom: 4px;">' + t('logs.platform_response') + '</p>';
+              if (retExplain) {
+                html += '<p style="font-size: 12px; font-weight: 500; color: ' + (isSuccess ? '#34c759' : '#ff3b30') + '; margin-bottom: 4px;">' + retExplain + '</p>';
+              }
+              html += '<pre style="margin: 0; font-family: monospace; font-size: 12px; white-space: pre-wrap; word-break: break-all; color: #8e8e93;">' + escapeHtml(respText) + '</pre>';
+              html += '</div>';
+            } catch(e) {}
+          }
+
+          // 展开查看内容
+          if (log.content) {
+            html += '<div style="margin-top: 10px;">';
+            html += '<button class="btn btn-sm btn-secondary" onclick="toggleLogContent(\'' + logId + '\', this)" style="font-size: 12px; padding: 3px 10px;">';
+            html += '\u25BC ' + t('logs.view_content');
+            html += '</button>';
+            html += '<div id="' + logId + '" style="display: none; margin-top: 8px; background: #f5f5f7; border-radius: 8px; padding: 12px; font-family: monospace; font-size: 12px; white-space: pre-wrap; word-break: break-all;">';
+            html += escapeHtml(log.content);
+            html += '</div>';
+            html += '</div>';
+          }
+
+          html += '</div>';
+        });
+
+        container.innerHTML = html;
+        var markAllBtn = document.getElementById('btn-mark-all-read');
+        if (markAllBtn) {
+          markAllBtn.style.display = unreadFailedCount > 0 ? 'inline-block' : 'none';
+        }
+      } catch (e) {
+        if (container) container.innerHTML = '<div class="empty-state"><p style="color: #ff3b30;">' + t('logs.load_fail') + '</p></div>';
+      }
+    }
+
+    function toggleLogContent(id, btn) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      if (el.style.display === 'none') {
+        el.style.display = 'block';
+        btn.innerHTML = '\u25B2 ' + t('logs.hide_content');
+      } else {
+        el.style.display = 'none';
+        btn.innerHTML = '\u25BC ' + t('logs.view_content');
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  Init
+    // ═══════════════════════════════════════════════════════════════════
+    async function init() {
+      // Apply initial language
+      applyLanguage(currentLang);
+
+      // Check auth
+      await checkAuth();
+
+      // Always show home first
+      showPage('home');
+      renderHeroContent();
+
+      // Handle resize for mobile nav
+      window.addEventListener('resize', updateMobileNav);
+      updateMobileNav();
+    }
+
+    init();
+  </script>
+
+  <!-- Contact Modal -->
+  <div id="contact-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;z-index:9999;background:rgba(0,0,0,0.4);align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:16px;padding:28px;max-width:420px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.2);">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <h3 style="font-size:18px;font-weight:600;margin:0;" id="contact-modal-title"></h3>
+        <button onclick="closeContactModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#8e8e93;padding:0 4px;">&times;</button>
+      </div>
+      <p style="font-size:13px;color:#6e6e73;margin-bottom:16px;" id="contact-modal-hint"></p>
+      <textarea id="contact-input" maxlength="100" style="width:100%;height:80px;border:1px solid #d2d2d7;border-radius:10px;padding:10px 12px;font-size:14px;resize:none;font-family:inherit;box-sizing:border-box;" oninput="updateContactCount()"></textarea>
+      <p style="text-align:right;font-size:12px;color:#8e8e93;margin:4px 0 16px;"><span id="contact-count">0</span>/100</p>
+      <div id="contact-result" style="margin-bottom:12px;font-size:13px;"></div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;">
+        <button class="btn btn-secondary" onclick="closeContactModal()" id="contact-cancel-btn"></button>
+        <button class="btn btn-primary" onclick="sendContact()" id="contact-send-btn"></button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function openContactModal() {
+      var modal = document.getElementById('contact-modal');
+      document.getElementById('contact-modal-title').textContent = t('contact.title');
+      document.getElementById('contact-modal-hint').textContent = t('contact.hint');
+      document.getElementById('contact-input').placeholder = t('contact.placeholder');
+      document.getElementById('contact-cancel-btn').textContent = t('contact.cancel');
+      document.getElementById('contact-send-btn').textContent = t('contact.send');
+      document.getElementById('contact-input').value = '';
+      document.getElementById('contact-count').textContent = '0';
+      document.getElementById('contact-result').textContent = '';
+      document.getElementById('contact-send-btn').disabled = false;
+      modal.style.display = 'flex';
+    }
+
+    function closeContactModal() {
+      document.getElementById('contact-modal').style.display = 'none';
+    }
+
+    function updateContactCount() {
+      var val = document.getElementById('contact-input').value;
+      document.getElementById('contact-count').textContent = val.length;
+    }
+
+    async function sendContact() {
+      var input = document.getElementById('contact-input');
+      var resultEl = document.getElementById('contact-result');
+      var btn = document.getElementById('contact-send-btn');
+      var msg = input.value.trim();
+      if (!msg) {
+        resultEl.innerHTML = '<span style="color:#ff3b30;">' + t('contact.empty') + '</span>';
+        return;
+      }
+      btn.disabled = true;
+      btn.textContent = t('contact.sending');
+      resultEl.textContent = '';
+      try {
+        var res = await apiFetch('/contact', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: msg })
+        });
+        var json = await res.json();
+        if (json.code === 0) {
+          closeContactModal();
+          showToast(t('contact.success'));
+        } else {
+          resultEl.innerHTML = '<span style="color:#ff3b30;">' + (json.message || 'Failed') + '</span>';
+          btn.disabled = false;
+          btn.textContent = t('contact.send');
+        }
+      } catch (e) {
+        resultEl.innerHTML = '<span style="color:#ff3b30;">' + e.message + '</span>';
+        btn.disabled = false;
+        btn.textContent = t('contact.send');
+      }
+    }
+  </script>
+</body>
+</html>
