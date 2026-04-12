@@ -17,19 +17,69 @@ function checkRateLimit(sendKey) {
   return rateLimits[key] <= 100;
 }
 
+// 推送失败时通知 admin（同一 channel+错误码 1 小时内只通知一次，避免刷屏）
+const adminAlertDedup = {};
+function alertAdminsOnFailure({ userId, nickname, channelId, title, errData, errMsg }) {
+  try {
+    const errKey = errData?.ret ?? errData?.errcode ?? errMsg ?? 'unknown';
+    const dedupKey = `${channelId}:${errKey}`;
+    const hour = Math.floor(Date.now() / 3600000);
+    if (adminAlertDedup[dedupKey] === hour) return;
+    adminAlertDedup[dedupKey] = hour;
+    // 清理旧 key
+    for (const k in adminAlertDedup) {
+      if (adminAlertDedup[k] < hour - 1) delete adminAlertDedup[k];
+    }
+
+    const admins = db.prepare(`
+      SELECT u.id, c.id AS channel_id, c.bot_token, c.wechat_openid, c.context_token
+      FROM users u
+      JOIN channels c ON c.id = (
+        SELECT MAX(id) FROM channels
+        WHERE user_id = u.id AND is_default = 1 AND context_token IS NOT NULL
+      )
+      WHERE u.role = 'admin'
+    `).all();
+
+    const userLabel = nickname || `User#${userId}`;
+    const errStr = errData ? JSON.stringify(errData) : errMsg;
+    const msg = `⚠️ 推送失败报警\n\n用户: ${userLabel} (ID:${userId})\n通道: ${channelId}\n标题: ${title || '(无)'}\n错误: ${errStr}\n时间: ${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}\n\n(同类错误1小时内只提醒一次)`;
+
+    for (const admin of admins) {
+      if (!admin.context_token) continue;
+      ilink.sendMessage(admin.bot_token, admin.wechat_openid, msg, admin.context_token)
+        .then(r => {
+          db.prepare("INSERT INTO push_logs (user_id, title, content, status, ip, channel_id, response) VALUES (?, ?, ?, 'success', ?, ?, ?)")
+            .run(admin.id, '⚠️ 失败报警', msg, 'alert', admin.channel_id, JSON.stringify(r));
+        })
+        .catch(err => console.error('失败报警发送失败:', err.message));
+    }
+  } catch (e) {
+    console.error('alertAdminsOnFailure 错误:', e.message);
+  }
+}
+
 // 解析目标 channels
+// 注意：不再按 status='active' 过滤，因为该标记不一定准确。
+// 只要通道存在且有 context_token 就尝试发送，由 iLink 返回决定成败。
+// 对同一 wechat_openid 的重复通道，取最新的一条（MAX(id)）。
 function resolveChannels(userId, channelParam) {
   if (!channelParam || channelParam === 'default') {
-    // 默认频道
+    // 默认频道：is_default=1 里取最新的
     const ch = db.prepare(
-      `SELECT * FROM channels WHERE user_id = ? AND is_default = 1 AND status = 'active'`
+      `SELECT * FROM channels WHERE user_id = ? AND is_default = 1 AND context_token IS NOT NULL ORDER BY id DESC LIMIT 1`
     ).get(userId);
     return ch ? [ch] : [];
   }
 
   if (channelParam === 'all') {
+    // 每个 wechat_openid 只保留最新通道
     return db.prepare(
-      `SELECT * FROM channels WHERE user_id = ? AND status = 'active'`
+      `SELECT * FROM channels WHERE id IN (
+         SELECT MAX(id) FROM channels
+         WHERE user_id = ? AND context_token IS NOT NULL
+         GROUP BY wechat_openid
+       )`
     ).all(userId);
   }
 
@@ -39,7 +89,7 @@ function resolveChannels(userId, channelParam) {
 
   const placeholders = ids.map(() => '?').join(',');
   return db.prepare(
-    `SELECT * FROM channels WHERE id IN (${placeholders}) AND user_id = ? AND status = 'active'`
+    `SELECT * FROM channels WHERE id IN (${placeholders}) AND user_id = ? AND context_token IS NOT NULL`
   ).all(...ids, userId);
 }
 
@@ -100,9 +150,9 @@ async function handlePush(sendKey, title, content, clientIp, channelParam, req) 
       const errData = error.response?.data;
       const resJson = JSON.stringify(errData || { errcode: -1, errmsg: error.message });
 
-      // session 过期（ret: -14）、HTTP 401/403、或重试后仍 ret: -2 均标记通道失效
+      // session 过期（ret: -14）或 HTTP 401/403 标记通道失效；ret: -2 是临时错误，不标记
       const tokenInvalid = errStatus === 401 || errStatus === 403
-        || (errData && (errData.ret === -14 || errData.ret === -2));
+        || (errData && errData.ret === -14);
       if (tokenInvalid) {
         db.prepare("UPDATE channels SET status = 'inactive' WHERE id = ?").run(channel.id);
         console.error(`⚠️ 通道 ${channel.id} 已标记为 inactive（token 失效）`);
@@ -115,6 +165,14 @@ async function handlePush(sendKey, title, content, clientIp, channelParam, req) 
 
       logActivity(user.id, 'push_fail', { channel_id: channel.id, error: error.message, token_invalid: tokenInvalid }, req);
       console.error('❌ 推送失败:', errData || error.message);
+      alertAdminsOnFailure({
+        userId: user.id,
+        nickname: user.nickname,
+        channelId: channel.id,
+        title,
+        errData,
+        errMsg: error.message,
+      });
       results.push({ channel_id: channel.id, status: 'failed', token_invalid: tokenInvalid });
     }
   }
@@ -185,35 +243,95 @@ router.post('/contact', requireLogin, async (req, res) => {
 
     const clientIp = getClientIp(req);
 
-    // 发给所有 admin
-    const admins = db.prepare(
-      "SELECT u.id, c.id as channel_id, c.bot_token, c.wechat_openid, c.context_token FROM users u JOIN channels c ON c.user_id = u.id AND c.is_default = 1 AND c.status = 'active' WHERE u.role = 'admin'"
-    ).all();
+    // 发给所有 admin（不按 status 过滤，只要有 context_token 就尝试）
+    const admins = db.prepare(`
+      SELECT u.id, c.id AS channel_id, c.bot_token, c.wechat_openid, c.context_token
+      FROM users u
+      JOIN channels c ON c.id = (
+        SELECT MAX(id) FROM channels
+        WHERE user_id = u.id AND is_default = 1 AND context_token IS NOT NULL
+      )
+      WHERE u.role = 'admin'
+    `).all();
     for (const admin of admins) {
       if (admin.context_token) {
         try {
-          const r = await ilink.sendMessage(admin.bot_token, admin.wechat_openid, fullMsg, admin.context_token);
+          let r;
+          try {
+            r = await ilink.sendMessage(admin.bot_token, admin.wechat_openid, fullMsg, admin.context_token);
+          } catch (retryErr) {
+            if (retryErr.response?.data?.ret === -2) {
+              console.log(`⏳ Admin 通道 ${admin.channel_id} ret:-2，1秒后重试...`);
+              await new Promise(resolve => setTimeout(resolve, 1000));
+              r = await ilink.sendMessage(admin.bot_token, admin.wechat_openid, fullMsg, admin.context_token);
+            } else {
+              throw retryErr;
+            }
+          }
           db.prepare("INSERT INTO push_logs (user_id, title, content, status, ip, channel_id, response) VALUES (?, ?, ?, 'success', ?, ?, ?)")
             .run(admin.id, '💬 用户反馈', content, 'contact', admin.channel_id, JSON.stringify(r));
         } catch (e) {
+          const errData = e.response?.data;
+          const errStatus = e.response?.status;
+          const tokenInvalid = errStatus === 401 || errStatus === 403
+            || (errData && errData.ret === -14);
+          if (tokenInvalid) {
+            db.prepare("UPDATE channels SET status = 'inactive' WHERE id = ?").run(admin.channel_id);
+            console.error(`⚠️ Admin 通道 ${admin.channel_id} 已标记为 inactive（token 失效）`);
+          }
           db.prepare("INSERT INTO push_logs (user_id, title, content, status, ip, channel_id, response) VALUES (?, ?, ?, 'failed', ?, ?, ?)")
-            .run(admin.id, '💬 用户反馈', content, 'contact', admin.channel_id, JSON.stringify(e.response?.data || { error: e.message }));
+            .run(admin.id, '💬 用户反馈', content, 'contact', admin.channel_id, JSON.stringify(errData || { error: e.message }));
+          alertAdminsOnFailure({
+            userId: user.id,
+            nickname: user.nickname,
+            channelId: admin.channel_id,
+            title: '💬 用户反馈转发失败',
+            errData,
+            errMsg: e.message,
+          });
         }
       }
     }
 
-    // 发给用户自己（确认副本）
+    // 发给用户自己（确认副本，不按 status 过滤）
     const userCh = db.prepare(
-      "SELECT * FROM channels WHERE user_id = ? AND is_default = 1 AND status = 'active'"
+      "SELECT * FROM channels WHERE user_id = ? AND is_default = 1 AND context_token IS NOT NULL ORDER BY id DESC LIMIT 1"
     ).get(user.id);
     if (userCh && userCh.context_token) {
       try {
-        const r = await ilink.sendMessage(userCh.bot_token, userCh.wechat_openid, '✅ 你的反馈已发送\n\n内容: ' + content, userCh.context_token);
+        let r;
+        try {
+          r = await ilink.sendMessage(userCh.bot_token, userCh.wechat_openid, '✅ 你的反馈已发送\n\n内容: ' + content, userCh.context_token);
+        } catch (retryErr) {
+          if (retryErr.response?.data?.ret === -2) {
+            console.log(`⏳ 用户通道 ${userCh.id} ret:-2，1秒后重试...`);
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            r = await ilink.sendMessage(userCh.bot_token, userCh.wechat_openid, '✅ 你的反馈已发送\n\n内容: ' + content, userCh.context_token);
+          } else {
+            throw retryErr;
+          }
+        }
         db.prepare("INSERT INTO push_logs (user_id, title, content, status, ip, channel_id, response) VALUES (?, ?, ?, 'success', ?, ?, ?)")
           .run(user.id, '✅ 反馈确认', content, clientIp, userCh.id, JSON.stringify(r));
       } catch (e) {
+        const errData = e.response?.data;
+        const errStatus = e.response?.status;
+        const tokenInvalid = errStatus === 401 || errStatus === 403
+          || (errData && errData.ret === -14);
+        if (tokenInvalid) {
+          db.prepare("UPDATE channels SET status = 'inactive' WHERE id = ?").run(userCh.id);
+          console.error(`⚠️ 用户通道 ${userCh.id} 已标记为 inactive（token 失效）`);
+        }
         db.prepare("INSERT INTO push_logs (user_id, title, content, status, ip, channel_id, response) VALUES (?, ?, ?, 'failed', ?, ?, ?)")
-          .run(user.id, '✅ 反馈确认', content, clientIp, userCh.id, JSON.stringify(e.response?.data || { error: e.message }));
+          .run(user.id, '✅ 反馈确认', content, clientIp, userCh.id, JSON.stringify(errData || { error: e.message }));
+        alertAdminsOnFailure({
+          userId: user.id,
+          nickname: user.nickname,
+          channelId: userCh.id,
+          title: '✅ 反馈确认副本失败',
+          errData,
+          errMsg: e.message,
+        });
       }
     }
 
@@ -226,3 +344,4 @@ router.post('/contact', requireLogin, async (req, res) => {
 });
 
 module.exports = router;
+module.exports.alertAdminsOnFailure = alertAdminsOnFailure;

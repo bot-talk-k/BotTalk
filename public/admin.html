@@ -295,6 +295,7 @@
       <div style="position:sticky;top:48px;z-index:99;background:rgba(255,255,255,0.9);backdrop-filter:blur(10px);border-bottom:0.5px solid rgba(0,0,0,0.08);padding:8px 0;">
         <div class="container" style="display:flex;gap:8px;flex-wrap:wrap;">
           <a href="#sec-dashboard" style="padding:4px 12px;border-radius:980px;font-size:13px;color:#0071e3;text-decoration:none;background:rgba(0,113,227,0.06);">仪表盘</a>
+          <a href="#sec-channels" style="padding:4px 12px;border-radius:980px;font-size:13px;color:#0071e3;text-decoration:none;background:rgba(0,113,227,0.06);">通道状态</a>
           <a href="#sec-users" style="padding:4px 12px;border-radius:980px;font-size:13px;color:#0071e3;text-decoration:none;background:rgba(0,113,227,0.06);">用户管理</a>
           <a href="#sec-push-logs" style="padding:4px 12px;border-radius:980px;font-size:13px;color:#0071e3;text-decoration:none;background:rgba(0,113,227,0.06);">推送日志</a>
           <a href="#sec-page-views" style="padding:4px 12px;border-radius:980px;font-size:13px;color:#0071e3;text-decoration:none;background:rgba(0,113,227,0.06);">访问统计</a>
@@ -332,6 +333,46 @@
             <div class="stat-card">
               <div class="stat-value" id="stat-admins">-</div>
               <div class="stat-label">管理员</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value" id="stat-disconnected" style="color:#ff3b30;">-</div>
+              <div class="stat-label">失联通道</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Channel health -->
+      <div id="sec-channels" class="section-gray section">
+        <div class="container">
+          <div class="section-header">
+            <h2>通道状态</h2>
+            <div style="display:flex;gap:8px;">
+              <label style="font-size:13px;color:#8e8e93;display:flex;align-items:center;gap:4px;">
+                <input type="checkbox" id="show-all-channels" onchange="renderChannelsTable()"> 显示全部
+              </label>
+              <button class="btn btn-sm btn-secondary" onclick="loadChannelsHealth()">刷新</button>
+            </div>
+          </div>
+          <div class="card" style="padding:0;overflow:hidden;">
+            <div class="table-scroll">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>用户</th>
+                    <th>通道名</th>
+                    <th>角色</th>
+                    <th>DB状态</th>
+                    <th>连接状态</th>
+                    <th>心跳</th>
+                    <th>原因</th>
+                  </tr>
+                </thead>
+                <tbody id="channels-tbody">
+                  <tr><td colspan="8" style="text-align:center;color:#8e8e93;padding:40px;">加载中...</td></tr>
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
@@ -568,8 +609,67 @@
     // ═══════════════════════════════════════════════════════════════════
     //  Load data
     // ═══════════════════════════════════════════════════════════════════
+    var channelsHealthData = [];
     async function loadData() {
-      await Promise.all([loadStats(), loadUsers(), loadPushLogs(), loadPageViews('30d')]);
+      await Promise.all([loadStats(), loadUsers(), loadPushLogs(), loadPageViews('30d'), loadChannelsHealth()]);
+    }
+
+    async function loadChannelsHealth() {
+      try {
+        var res = await apiFetch('/api/admin/channels');
+        var json = await res.json();
+        if (!json.success) return;
+        channelsHealthData = json.data.channels;
+        var disc = json.data.disconnected;
+        document.getElementById('stat-disconnected').textContent = disc;
+        document.getElementById('stat-disconnected').style.color = disc > 0 ? '#ff3b30' : '#34c759';
+        renderChannelsTable();
+      } catch (e) {
+        console.error('Load channels health error:', e);
+      }
+    }
+
+    function renderChannelsTable() {
+      var showAll = document.getElementById('show-all-channels').checked;
+      var list = showAll ? channelsHealthData : channelsHealthData.filter(function(ch) {
+        return !ch.alive || ch.status !== 'active';
+      });
+      var tbody = document.getElementById('channels-tbody');
+      if (list.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#34c759;padding:40px;">' +
+          (showAll ? '暂无通道' : '所有通道正常') + '</td></tr>';
+        return;
+      }
+      var html = '';
+      list.forEach(function(ch) {
+        var statusBadge = ch.status === 'active'
+          ? '<span class="badge badge-green">active</span>'
+          : (ch.status === 'pending' ? '<span class="badge badge-yellow">pending</span>' : '<span class="badge badge-gray">inactive</span>');
+        var aliveBadge;
+        if (ch.status !== 'active') {
+          aliveBadge = '<span class="badge badge-gray">-</span>';
+        } else if (ch.alive) {
+          aliveBadge = '<span class="badge badge-green">在线</span>';
+        } else {
+          aliveBadge = '<span class="badge badge-red">失联</span>';
+        }
+        var heartbeat = ch.last_ok_seconds_ago !== null ? ch.last_ok_seconds_ago + 's ago' : '-';
+        var reason = ch.reason || '-';
+        var roleBadge = ch.role === 'admin'
+          ? '<span class="badge badge-blue">admin</span>'
+          : '<span class="badge badge-gray">user</span>';
+        html += '<tr>' +
+          '<td>' + ch.id + '</td>' +
+          '<td>' + escapeHtml(ch.nickname) + '</td>' +
+          '<td>' + escapeHtml(ch.name || '-') + '</td>' +
+          '<td>' + roleBadge + '</td>' +
+          '<td>' + statusBadge + '</td>' +
+          '<td>' + aliveBadge + '</td>' +
+          '<td>' + heartbeat + '</td>' +
+          '<td>' + escapeHtml(reason) + '</td>' +
+          '</tr>';
+      });
+      tbody.innerHTML = html;
     }
 
     async function loadPushLogs() {

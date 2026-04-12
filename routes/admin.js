@@ -202,6 +202,47 @@ router.get('/stats', (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════
+//  GET /api/admin/channels — 通道健康状态
+// ═══════════════════════════════════════════════════════════════════
+
+router.get('/channels', (req, res) => {
+  try {
+    const { isChannelAlive } = require('../services/message-poller');
+    const channels = db.prepare(`
+      SELECT c.id, c.name, c.status, c.bot_token, c.wechat_openid, c.is_default, c.created_at,
+             u.id AS user_id, u.nickname, u.role
+      FROM channels c
+      JOIN users u ON c.user_id = u.id
+      ORDER BY c.id
+    `).all();
+
+    const data = channels.map(ch => {
+      const health = isChannelAlive(ch.bot_token);
+      return {
+        id: ch.id,
+        name: ch.name,
+        user_id: ch.user_id,
+        nickname: ch.nickname || ch.wechat_openid?.slice(-6) || `User#${ch.user_id}`,
+        role: ch.role,
+        status: ch.status,
+        is_default: ch.is_default,
+        alive: health.alive,
+        reason: health.reason || null,
+        last_ok_seconds_ago: health.last_ok_seconds_ago ?? null,
+      };
+    });
+
+    // 统计失联数
+    const disconnected = data.filter(ch => ch.status === 'active' && !ch.alive).length;
+
+    res.json({ success: true, data: { channels: data, disconnected } });
+  } catch (err) {
+    console.error('Admin channels error:', err.message);
+    res.status(500).json({ success: false, error: 'Internal error' });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════
 //  GET /api/admin/page-views — 页面访问统计
 // ═══════════════════════════════════════════════════════════════════
 

@@ -1,6 +1,7 @@
 const db = require('./db');
 const ilink = require('./ilink');
 const { getContextToken } = require('./services/message-poller');
+const { alertAdminsOnFailure } = require('./routes/notify');
 
 async function checkReminders() {
   const now = new Date();
@@ -14,7 +15,7 @@ async function checkReminders() {
            u.id as db_user_id, c.bot_token, c.wechat_openid, c.context_token as channel_context_token
     FROM reminders r
     JOIN users u ON r.user_id = u.wechat_openid OR CAST(r.user_id AS INTEGER) = u.id
-    JOIN channels c ON c.user_id = u.id AND c.is_default = 1 AND c.status = 'active'
+    JOIN channels c ON c.user_id = u.id AND c.is_default = 1 AND c.context_token IS NOT NULL
     WHERE r.enabled = 1 AND r.type != 'every2min'
       AND (r.time = ? OR r.time LIKE ?)
   `).all(timeHHMM, '%T' + timeHHMM);
@@ -25,7 +26,7 @@ async function checkReminders() {
            u.id as db_user_id, c.bot_token, c.wechat_openid, c.context_token as channel_context_token
     FROM reminders r
     JOIN users u ON r.user_id = u.wechat_openid OR CAST(r.user_id AS INTEGER) = u.id
-    JOIN channels c ON c.user_id = u.id AND c.is_default = 1 AND c.status = 'active'
+    JOIN channels c ON c.user_id = u.id AND c.is_default = 1 AND c.context_token IS NOT NULL
     WHERE r.enabled = 1 AND r.type = 'every2min'
   `).all() : [];
 
@@ -55,7 +56,18 @@ async function checkReminders() {
         message += '\n\n' + r.message;
       }
 
-      const ilinkRes = await ilink.sendMessage(r.bot_token, r.wechat_openid, message, contextToken);
+      let ilinkRes;
+      try {
+        ilinkRes = await ilink.sendMessage(r.bot_token, r.wechat_openid, message, contextToken);
+      } catch (retryErr) {
+        if (retryErr.response?.data?.ret === -2) {
+          console.log(`⏳ 提醒 ${r.wechat_openid} ret:-2，1秒后重试...`);
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          ilinkRes = await ilink.sendMessage(r.bot_token, r.wechat_openid, message, contextToken);
+        } else {
+          throw retryErr;
+        }
+      }
 
       // 更新发送次数
       db.prepare('UPDATE reminders SET send_count = ? WHERE id = ?').run(sendCount, r.id);
@@ -87,14 +99,39 @@ async function checkReminders() {
 
       console.log(`✅ 提醒发送成功：${r.wechat_openid} - ${r.title} (${sendCount}/${maxCount || '∞'})`);
     } catch (error) {
-      console.error(`❌ 提醒发送失败：${r.wechat_openid}`, error.response?.data || error.message);
+      const errData = error.response?.data;
+      const errStatus = error.response?.status;
+      console.error(`❌ 提醒发送失败：${r.wechat_openid}`, errData || error.message);
       const channelRow = db.prepare("SELECT id FROM channels WHERE bot_token = ? AND wechat_openid = ? LIMIT 1").get(r.bot_token, r.wechat_openid);
+
+      // token 失效检测
+      const tokenInvalid = errStatus === 401 || errStatus === 403 || (errData && errData.ret === -14);
+      if (tokenInvalid && channelRow) {
+        db.prepare("UPDATE channels SET status = 'inactive' WHERE id = ?").run(channelRow.id);
+        console.error(`⚠️ 提醒通道 ${channelRow.id} 已标记为 inactive（token 失效）`);
+      }
+
       try {
         db.prepare(`
           INSERT INTO push_logs (user_id, title, content, status, ip, channel_id, response)
           VALUES (?, ?, ?, 'failed', 'scheduler', ?, ?)
-        `).run(r.db_user_id, r.title, r.message || '', channelRow?.id || null, JSON.stringify(error.response?.data || { error: error.message }));
+        `).run(r.db_user_id, r.title, r.message || '', channelRow?.id || null, JSON.stringify(errData || { error: error.message }));
       } catch (e) {}
+
+      // 通知 admin
+      try {
+        const u = db.prepare('SELECT nickname FROM users WHERE id = ?').get(r.db_user_id);
+        alertAdminsOnFailure({
+          userId: r.db_user_id,
+          nickname: u?.nickname,
+          channelId: channelRow?.id,
+          title: '⏰ 定时提醒: ' + r.title,
+          errData,
+          errMsg: error.message,
+        });
+      } catch (e) {
+        console.error('alert admin 失败:', e.message);
+      }
     }
   }
 }

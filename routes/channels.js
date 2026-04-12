@@ -7,16 +7,56 @@ const { requireLogin } = require('../middleware/auth');
 const { logActivity } = require('../services/logger');
 const { startMessagePoller, getContextToken } = require('../services/message-poller');
 
+// 统一记录欢迎/系统消息的推送结果（成功和失败都记录到 push_logs）
+function logSystemPush(userId, channelId, title, message, resultOrErr, isSuccess) {
+  try {
+    const status = isSuccess ? 'success' : 'failed';
+    const response = isSuccess
+      ? JSON.stringify(resultOrErr)
+      : JSON.stringify(resultOrErr?.response?.data || { error: resultOrErr?.message });
+    db.prepare("INSERT INTO push_logs (user_id, title, content, status, ip, channel_id, response) VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .run(userId, title, message, status, 'system', channelId, response);
+    if (!isSuccess) {
+      const errData = resultOrErr?.response?.data;
+      const errStatus = resultOrErr?.response?.status;
+      if (errStatus === 401 || errStatus === 403 || (errData && errData.ret === -14)) {
+        db.prepare("UPDATE channels SET status = 'inactive' WHERE id = ?").run(channelId);
+        console.error(`⚠️ 通道 ${channelId} 已标记为 inactive（token 失效）`);
+      }
+    }
+  } catch (e) {
+    console.error('logSystemPush 错误:', e.message);
+  }
+}
+
 // 通知所有 admin 用户
 function notifyAdmins(message) {
   try {
-    const admins = db.prepare(
-      "SELECT u.id, c.bot_token, c.wechat_openid, c.context_token FROM users u JOIN channels c ON c.user_id = u.id AND c.is_default = 1 AND c.status = 'active' WHERE u.role = 'admin'"
-    ).all();
+    const admins = db.prepare(`
+      SELECT u.id, c.id AS channel_id, c.bot_token, c.wechat_openid, c.context_token
+      FROM users u
+      JOIN channels c ON c.id = (
+        SELECT MAX(id) FROM channels
+        WHERE user_id = u.id AND is_default = 1 AND context_token IS NOT NULL
+      )
+      WHERE u.role = 'admin'
+    `).all();
+    console.log(`📢 notifyAdmins: 找到 ${admins.length} 个 admin 通道`);
     for (const admin of admins) {
       if (admin.context_token) {
         ilink.sendMessage(admin.bot_token, admin.wechat_openid, message, admin.context_token)
-          .catch(err => console.error('通知 admin 失败:', err.message));
+          .then(r => {
+            db.prepare("INSERT INTO push_logs (user_id, title, content, status, ip, channel_id, response) VALUES (?, ?, ?, 'success', ?, ?, ?)")
+              .run(admin.id, '📢 系统通知', message, 'system', admin.channel_id, JSON.stringify(r));
+          })
+          .catch(err => {
+            console.error('通知 admin 失败:', err.message);
+            const errData = err.response?.data;
+            db.prepare("INSERT INTO push_logs (user_id, title, content, status, ip, channel_id, response) VALUES (?, ?, ?, 'failed', ?, ?, ?)")
+              .run(admin.id, '📢 系统通知', message, 'system', admin.channel_id, JSON.stringify(errData || { error: err.message }));
+          });
+      } else {
+        console.log(`📢 notifyAdmins: admin ${admin.id} 无 context_token，跳过`);
       }
     }
   } catch (e) {
@@ -71,9 +111,9 @@ router.get('/bind-status-public/:qrcode', async (req, res) => {
     const ilinkUserId = result.ilink_user_id || result.user_id;
     const botToken = result.bot_token;
 
-    // 检查该微信是否已有账户
+    // 检查该微信是否已有账户（不按 status 过滤，避免 inactive 通道被误判为新用户）
     const existingChannel = db.prepare(
-      "SELECT c.*, u.send_key FROM channels c JOIN users u ON c.user_id = u.id WHERE c.wechat_openid = ? AND c.status != 'inactive' LIMIT 1"
+      "SELECT c.*, u.send_key FROM channels c JOIN users u ON c.user_id = u.id WHERE c.wechat_openid = ? ORDER BY c.id DESC LIMIT 1"
     ).get(ilinkUserId);
 
     if (existingChannel) {
@@ -87,10 +127,13 @@ router.get('/bind-status-public/:qrcode', async (req, res) => {
       startMessagePoller(botToken, ilinkUserId, (contextToken) => {
         db.prepare("UPDATE channels SET context_token = ?, status = 'active' WHERE id = ?")
           .run(contextToken, existingChannel.id);
-        ilink.sendMessage(botToken, ilinkUserId,
-          '欢迎回来！\n\n你的 BotTalk 通道已重新激活。',
-          contextToken
-        ).catch(err => console.error('发送重绑通知失败:', err.message));
+        const welcomeMsg = '欢迎回来！\n\n你的 BotTalk 通道已重新激活。';
+        ilink.sendMessage(botToken, ilinkUserId, welcomeMsg, contextToken)
+          .then(r => logSystemPush(existingChannel.user_id, existingChannel.id, '🔄 重绑欢迎', welcomeMsg, r, true))
+          .catch(err => {
+            console.error('发送重绑通知失败:', err.message);
+            logSystemPush(existingChannel.user_id, existingChannel.id, '🔄 重绑欢迎', welcomeMsg, err, false);
+          });
       });
 
       req.session.userId = userId;
@@ -131,10 +174,13 @@ router.get('/bind-status-public/:qrcode', async (req, res) => {
     startMessagePoller(botToken, ilinkUserId, (contextToken) => {
       db.prepare("UPDATE channels SET context_token = ?, status = 'active' WHERE id = ?")
         .run(contextToken, channelId);
-      ilink.sendMessage(botToken, ilinkUserId,
-        `🎉 欢迎使用 BotTalk！\n\n你的推送通道已激活。\n访问 ${process.env.BASE_URL || 'https://bot-talk.com'} 查看你的 SendKey 和 API 文档。\n\n💡 由于微信 ClawBot 同一微信号只保持一个活跃通道，绑定新应用会自动失效之前的连接。如果消息未收到，重新扫码即可恢复。`,
-        contextToken
-      ).catch(err => console.error('发送欢迎消息失败:', err.message));
+      const welcomeMsg = `🎉 欢迎使用 BotTalk！\n\n你的推送通道已激活。\n访问 ${process.env.BASE_URL || 'https://bot-talk.com'} 查看你的 SendKey 和 API 文档。\n\n💡 由于微信 ClawBot 同一微信号只保持一个活跃通道，绑定新应用会自动失效之前的连接。如果消息未收到，重新扫码即可恢复。`;
+      ilink.sendMessage(botToken, ilinkUserId, welcomeMsg, contextToken)
+        .then(r => logSystemPush(userId, channelId, '🎉 欢迎消息', welcomeMsg, r, true))
+        .catch(err => {
+          console.error('发送欢迎消息失败:', err.message);
+          logSystemPush(userId, channelId, '🎉 欢迎消息', welcomeMsg, err, false);
+        });
     });
 
     req.session.userId = userId;
@@ -221,9 +267,9 @@ router.get('/bind-status/:qrcode', async (req, res) => {
     const botToken = result.bot_token;
     const userId = req.session.userId;
 
-    // 检查该微信是否已被绑定
+    // 检查该微信是否已被绑定（不按 status 过滤，避免 inactive 通道被误判导致重复创建）
     const existingChannel = db.prepare(
-      "SELECT c.*, u.wechat_openid as owner_openid FROM channels c JOIN users u ON c.user_id = u.id WHERE c.wechat_openid = ? AND c.status != 'inactive'"
+      "SELECT c.*, u.wechat_openid as owner_openid FROM channels c JOIN users u ON c.user_id = u.id WHERE c.wechat_openid = ? ORDER BY c.id DESC LIMIT 1"
     ).get(ilinkUserId);
 
     if (existingChannel) {
@@ -237,10 +283,13 @@ router.get('/bind-status/:qrcode', async (req, res) => {
         startMessagePoller(botToken, ilinkUserId, (contextToken) => {
           db.prepare("UPDATE channels SET context_token = ?, status = 'active' WHERE id = ?")
             .run(contextToken, existingChannel.id);
-          ilink.sendMessage(botToken, ilinkUserId,
-            '通道重新绑定成功！\n\n该通道已激活，可以正常接收消息推送了。',
-            contextToken
-          ).catch(err => console.error('发送重绑通知失败:', err.message));
+          const rebindMsg = '通道重新绑定成功！\n\n该通道已激活，可以正常接收消息推送了。';
+          ilink.sendMessage(botToken, ilinkUserId, rebindMsg, contextToken)
+            .then(r => logSystemPush(userId, existingChannel.id, '🔄 通道重绑', rebindMsg, r, true))
+            .catch(err => {
+              console.error('发送重绑通知失败:', err.message);
+              logSystemPush(userId, existingChannel.id, '🔄 通道重绑', rebindMsg, err, false);
+            });
         });
 
         pendingBindings.delete(req.params.qrcode);
@@ -292,10 +341,13 @@ router.get('/bind-status/:qrcode', async (req, res) => {
       db.prepare(
         "UPDATE channels SET context_token = ?, status = 'active' WHERE id = ?"
       ).run(contextToken, channel.id);
-      ilink.sendMessage(botToken, ilinkUserId,
-        '通道绑定成功！\n\n该通道已激活，可以正常接收消息推送了。',
-        contextToken
-      ).catch(err => console.error('发送绑定通知失败:', err.message));
+      const bindMsg = '通道绑定成功！\n\n该通道已激活，可以正常接收消息推送了。';
+      ilink.sendMessage(botToken, ilinkUserId, bindMsg, contextToken)
+        .then(r => logSystemPush(userId, channel.id, '🆕 通道绑定', bindMsg, r, true))
+        .catch(err => {
+          console.error('发送绑定通知失败:', err.message);
+          logSystemPush(userId, channel.id, '🆕 通道绑定', bindMsg, err, false);
+        });
     });
 
     pendingBindings.delete(req.params.qrcode);

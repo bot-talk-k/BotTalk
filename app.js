@@ -104,7 +104,13 @@ app.listen(PORT, () => {
     const { startMessagePoller } = require('./services/message-poller');
     const activeChannels = db
       .prepare(
-        "SELECT c.id, c.bot_token, c.wechat_openid, c.context_token FROM channels c WHERE c.status = 'active' AND c.context_token IS NOT NULL AND c.bot_token IS NOT NULL"
+        `SELECT c.id, c.bot_token, c.wechat_openid, c.context_token
+         FROM channels c
+         WHERE c.id IN (
+           SELECT MAX(id) FROM channels
+           WHERE context_token IS NOT NULL AND bot_token IS NOT NULL
+           GROUP BY wechat_openid
+         )`
       )
       .all();
 

@@ -91,7 +91,7 @@ function getContextToken(userId) {
   if (contextTokenCache[userId]) return contextTokenCache[userId];
   // 再查 channels 表
   const channel = db.prepare(
-    `SELECT context_token FROM channels WHERE wechat_openid = ? AND status = 'active' AND context_token IS NOT NULL LIMIT 1`
+    `SELECT context_token FROM channels WHERE wechat_openid = ? AND context_token IS NOT NULL ORDER BY id DESC LIMIT 1`
   ).get(userId);
   if (channel?.context_token) {
     contextTokenCache[userId] = channel.context_token;
