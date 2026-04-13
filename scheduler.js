@@ -156,68 +156,9 @@ async function checkReminders() {
 setInterval(checkReminders, 60000);
 console.log('⏰ 定时任务已启动');
 
-// ═══════════════════════════════════════════════════════════════════
-// 24 小时会话到期预警 — iLink session 硬性 24h 限制
-// 通道 bot_token 满 22h 未更新时，主动发消息提醒用户重新扫码
-// ═══════════════════════════════════════════════════════════════════
-
-// 内存去重：同一通道只发一次预警（直到 bot_token 刷新后才能再次发）
-const sessionWarnedChannels = {};
-
-async function checkSessionExpiry() {
-  try {
-    // 找所有接近 22h 但未满 24h 的通道（含 context_token 才能发消息提醒）
-    const channels = db.prepare(`
-      SELECT c.id, c.user_id, c.bot_token, c.wechat_openid, c.context_token, c.bot_token_updated_at,
-             u.nickname,
-             (strftime('%s', 'now') - strftime('%s', c.bot_token_updated_at)) AS age_seconds
-      FROM channels c
-      JOIN users u ON u.id = c.user_id
-      WHERE c.context_token IS NOT NULL
-        AND c.bot_token_updated_at IS NOT NULL
-        AND (strftime('%s', 'now') - strftime('%s', c.bot_token_updated_at)) BETWEEN 79200 AND 86400
-    `).all();
-
-    for (const ch of channels) {
-      // 用 bot_token_updated_at 做去重 key — 一旦重绑后 key 变化，可再次预警
-      const dedupKey = `${ch.id}:${ch.bot_token_updated_at}`;
-      if (sessionWarnedChannels[dedupKey]) continue;
-
-      const hoursRemaining = Math.max(0, Math.round((86400 - ch.age_seconds) / 3600));
-      const msg = `⏱️ BotTalk 通道保活提醒\n\n` +
-        `你已经约 ${24 - hoursRemaining} 小时没有给 Bot 回复消息。微信 ClawBot 平台要求每 24 小时内至少有一次用户→Bot 的消息，否则通道会失联。\n\n` +
-        `✅ 保活方法（只需 1 步）：\n` +
-        `在微信里给我回复任意一个字（如"在" "收到" 等），即可续命 24 小时。无需重新扫码。\n\n` +
-        `如果你已经错过或不确定是否失联，可访问：\n` +
-        `https://bot-talk.com/app?rebind=1 重新扫码（SendKey 不变）。\n\n` +
-        `这是微信 ClawBot 平台当前的限制，我们会持续跟进改进。`;
-
-      try {
-        const r = await enqueueSend(ch.id,
-          () => ilink.sendMessage(ch.bot_token, ch.wechat_openid, msg, ch.context_token),
-          { title: '⏱️ 通道即将到期', source: 'session-warning' });
-        db.prepare(`
-          INSERT INTO push_logs (user_id, title, content, status, ip, channel_id, response)
-          VALUES (?, ?, ?, 'success', 'session-warning', ?, ?)
-        `).run(ch.user_id, '⏱️ 通道即将到期', msg, ch.id, JSON.stringify(r));
-        markSendResult(ch.id, r, true);
-        console.log(`📢 已发送 24h 预警: channel=${ch.id} user=${ch.nickname || ch.user_id}`);
-        sessionWarnedChannels[dedupKey] = Date.now();
-      } catch (e) {
-        console.error(`❌ 24h 预警发送失败 channel=${ch.id}:`, e.response?.data || e.message);
-        markSendResult(ch.id, e, false);
-      }
-    }
-  } catch (e) {
-    console.error('checkSessionExpiry 错误:', e.message);
-  }
-}
-
-// 每 15 分钟检查一次是否有通道接近过期
-setInterval(checkSessionExpiry, 15 * 60 * 1000);
-// 启动 30 秒后先跑一次
-setTimeout(checkSessionExpiry, 30000);
-console.log('⏱️ 24h 会话预警任务已启动');
+// 注意：原先的 checkSessionExpiry（基于"bot_token 满 22-24h 硬过期需重扫"的假设）已移除。
+// 实证发现 context_token 可被用户回复刷新，不需要重扫；且 checkKeepaliveReminders
+// 基于 last_send_success_at + last_inbound_at 更精准，不会误伤刚回复过的用户。
 
 // ═══════════════════════════════════════════════════════════════════
 // 预防性保活提醒 — 在 context_token 还能用的"黄色警告"窗口主动提醒用户回复
@@ -334,4 +275,4 @@ setTimeout(() => {
 setTimeout(checkKeepaliveReminders, 60000);
 console.log('🔔 预防性保活提醒任务已启动');
 
-module.exports = { checkReminders, checkSessionExpiry, checkKeepaliveReminders };
+module.exports = { checkReminders, checkKeepaliveReminders };
