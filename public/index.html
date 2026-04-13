@@ -26,7 +26,7 @@
 
     /* ── Nav ────────────────────────────────────────────────────────── */
     .navbar {
-      position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+      position: fixed; top: 36px; left: 0; right: 0; z-index: 1000;
       height: 48px;
       backdrop-filter: saturate(180%) blur(20px);
       -webkit-backdrop-filter: saturate(180%) blur(20px);
@@ -79,7 +79,7 @@
     .nav-btn-logout:hover { border-color: #ff3b30; color: #ff3b30; }
 
     /* ── Layout ────────────────────────────────────────────────────── */
-    .main { padding-top: 48px; }
+    .main { padding-top: 84px; }
     .container { max-width: 980px; margin: 0 auto; padding: 0 20px; }
 
     /* ── Page transitions ──────────────────────────────────────────── */
@@ -458,7 +458,7 @@
         font-size: 13px; font-weight: 500; white-space: nowrap;
       }
       .nav-mobile-links a.active { color: #0071e3; border-bottom: 2px solid #0071e3; }
-      .main { padding-top: 88px; }
+      .main { padding-top: 120px; }
       .auth-modal { padding: 24px; }
     }
 
@@ -471,6 +471,53 @@
   </style>
 </head>
 <body>
+
+<!-- ═══ 公告跑马灯 ═══ -->
+<div class="announcement-bar">
+  <div class="announcement-track">
+    <span class="announcement-item">📢 <strong>通告：</strong>新用户扫码绑定即注册，老用户随时扫码自动续用可查询历史消息</span>
+    <span class="announcement-sep">•</span>
+    <span class="announcement-item">⏱️ <strong>通告：</strong>微信 ClawBot 平台限制 — 只要你 24 小时内给 Bot 回复任意一条消息（如"在"），通道就能持续保活。平台会尽可能在通道失效之前主动微信提醒你。此为微信侧权宜之计，等待官方修正</span>
+    <span class="announcement-sep">•</span>
+    <span class="announcement-item">📢 <strong>通告：</strong>新用户扫码绑定即注册，老用户随时扫码自动续用可查询历史消息</span>
+    <span class="announcement-sep">•</span>
+    <span class="announcement-item">⏱️ <strong>通告：</strong>微信 ClawBot 平台限制 — 只要你 24 小时内给 Bot 回复任意一条消息（如"在"），通道就能持续保活。平台会尽可能在通道失效之前主动微信提醒你。此为微信侧权宜之计，等待官方修正</span>
+    <span class="announcement-sep">•</span>
+  </div>
+</div>
+<style>
+  .announcement-bar {
+    position: fixed; top: 0; left: 0; right: 0;
+    z-index: 1001;
+    background: linear-gradient(90deg, #fff8e1 0%, #fff3c4 100%);
+    border-bottom: 1px solid rgba(255,149,0,0.25);
+    overflow: hidden;
+    height: 36px;
+    box-sizing: border-box;
+  }
+  .announcement-track {
+    display: inline-block;
+    white-space: nowrap;
+    padding-left: 100%;
+    line-height: 36px;
+    font-size: 13px;
+    color: #7a5a00;
+    animation: announcement-scroll 45s linear infinite;
+    will-change: transform;
+  }
+  .announcement-track:hover { animation-play-state: paused; }
+  .announcement-item { padding: 0 8px; }
+  .announcement-item strong { color: #b06500; }
+  .announcement-sep { color: rgba(122,90,0,0.4); padding: 0 4px; }
+  @keyframes announcement-scroll {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-100%); }
+  }
+  @media (max-width: 640px) {
+    .announcement-bar { height: 32px; }
+    .announcement-track { animation-duration: 50s; font-size: 12px; line-height: 32px; }
+  }
+</style>
 
   <!-- ═══ Navigation ═══ -->
   <nav class="navbar">
@@ -1132,6 +1179,9 @@
               '<button class="btn btn-primary" id="hero-test-btn" onclick="heroSendTest()">' + t('hero.send_test') + '</button>' +
               '<button class="btn btn-secondary" onclick="openContactModal()" title="' + t('contact.tooltip') + '">' + t('contact.btn') + '</button>' +
             '</div>' +
+            '<div style="margin-top:16px;padding:10px 14px;background:rgba(255,149,0,0.06);border:1px solid rgba(255,149,0,0.2);border-radius:10px;font-size:12px;color:#8e8e93;line-height:1.5;text-align:left;">' +
+              '⏱️ 微信通道保活提示：只要你 24 小时内至少给 Bot 回复一条任意消息（如"在"），通道就能持续保活。平台会尽可能在通道失效之前主动微信提醒你，SendKey 始终不变。' +
+            '</div>' +
           '</div>';
         // 渲染完成后刷新未读数
         loadUnreadCount();
@@ -1327,6 +1377,9 @@
           '</button>' +
         '</div>' +
         '<div id="channel-qr-area" class="hidden" style="margin-bottom: 24px;"></div>' +
+        '<div style="background:rgba(0,113,227,0.06);border:1px solid rgba(0,113,227,0.18);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:#1d1d1f;line-height:1.5;">' +
+          '💡 <strong>通道保活小贴士：</strong>如果发现没收到推送，只需在微信给 Bot 回复任意一个字（如"在"），通道即可恢复。无需重新扫码。平台会尽量在失联前主动提醒你。' +
+        '</div>' +
         '<div id="channel-list"></div>';
 
       loadChannels();
@@ -2343,9 +2396,28 @@
       // Check auth
       await checkAuth();
 
-      // Always show home first
-      showPage('home');
-      renderHeroContent();
+      // 处理 ?rebind=1 — 失效后引导用户重新扫码
+      var params = new URLSearchParams(window.location.search);
+      var wantRebind = params.get('rebind') === '1';
+
+      if (wantRebind && currentUser) {
+        // 已登录：去通道页开始扫新码
+        showPage('channelsPage');
+        setTimeout(function() {
+          var addBtn = document.querySelector('[onclick*="addNewChannel"], [onclick*="openAddChannel"]');
+          if (addBtn) addBtn.click();
+        }, 300);
+      } else if (wantRebind && !currentUser) {
+        // 未登录：home 页 + 自动触发扫码
+        showPage('home');
+        setTimeout(function() {
+          if (typeof loadHeroQR === 'function') loadHeroQR();
+        }, 300);
+      } else {
+        // Always show home first
+        showPage('home');
+        renderHeroContent();
+      }
 
       // Handle resize for mobile nav
       window.addEventListener('resize', updateMobileNav);

@@ -17,7 +17,7 @@
 
     /* ── Nav ─────────────────────────────────────────────────────── */
     .navbar {
-      position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+      position: fixed; top: 36px; left: 0; right: 0; z-index: 1000;
       height: 48px;
       backdrop-filter: saturate(180%) blur(20px);
       -webkit-backdrop-filter: saturate(180%) blur(20px);
@@ -51,7 +51,7 @@
     .btn-start:hover { background: #0077ed; }
 
     /* ── Container ──────────────────────────────────────────────── */
-    .main { padding-top: 48px; }
+    .main { padding-top: 84px; }
     .container { max-width: 780px; margin: 0 auto; padding: 0 24px; }
 
     /* ── Hero ───────────────────────────────────────────────────── */
@@ -223,6 +223,54 @@
 </head>
 <body>
 
+<!-- ═══ 公告跑马灯 ═══ -->
+<div class="announcement-bar">
+  <div class="announcement-track">
+    <span class="announcement-item">📢 <strong>通告：</strong>新用户扫码绑定即注册，老用户随时扫码自动续用可查询历史消息</span>
+    <span class="announcement-sep">•</span>
+    <span class="announcement-item">⏱️ <strong>通告：</strong>微信 ClawBot 平台限制 — 只要你 24 小时内给 Bot 回复任意一条消息（如"在"），通道就能持续保活。平台会尽可能在通道失效之前主动微信提醒你。此为微信侧权宜之计，等待官方修正</span>
+    <span class="announcement-sep">•</span>
+    <!-- 重复一遍保证循环平滑 -->
+    <span class="announcement-item">📢 <strong>通告：</strong>新用户扫码绑定即注册，老用户随时扫码自动续用可查询历史消息</span>
+    <span class="announcement-sep">•</span>
+    <span class="announcement-item">⏱️ <strong>通告：</strong>微信 ClawBot 平台限制 — 只要你 24 小时内给 Bot 回复任意一条消息（如"在"），通道就能持续保活。平台会尽可能在通道失效之前主动微信提醒你。此为微信侧权宜之计，等待官方修正</span>
+    <span class="announcement-sep">•</span>
+  </div>
+</div>
+<style>
+  .announcement-bar {
+    position: fixed; top: 0; left: 0; right: 0;
+    z-index: 1001;
+    background: linear-gradient(90deg, #fff8e1 0%, #fff3c4 100%);
+    border-bottom: 1px solid rgba(255,149,0,0.25);
+    overflow: hidden;
+    height: 36px;
+    box-sizing: border-box;
+  }
+  .announcement-track {
+    display: inline-block;
+    white-space: nowrap;
+    padding-left: 100%;
+    line-height: 36px;
+    font-size: 13px;
+    color: #7a5a00;
+    animation: announcement-scroll 45s linear infinite;
+    will-change: transform;
+  }
+  .announcement-track:hover { animation-play-state: paused; }
+  .announcement-item { padding: 0 8px; }
+  .announcement-item strong { color: #b06500; }
+  .announcement-sep { color: rgba(122,90,0,0.4); padding: 0 4px; }
+  @keyframes announcement-scroll {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-100%); }
+  }
+  @media (max-width: 640px) {
+    .announcement-bar { height: 32px; }
+    .announcement-track { animation-duration: 50s; font-size: 12px; line-height: 32px; }
+  }
+</style>
+
 <!-- ── Navbar ──────────────────────────────────────────────────── -->
 <nav class="navbar">
   <div class="navbar-inner">
@@ -291,6 +339,11 @@
     <div class="tip-box">
       <span class="icon">💡</span>
       <span>由于微信 ClawBot 当前策略是同一微信号只保持一个活跃通道，绑定新应用会自动失效之前的连接。如果发现消息未收到，只需重新扫码即可恢复，秒级完成。</span>
+    </div>
+
+    <div class="tip-box" style="background:rgba(255,149,0,0.08);border-color:rgba(255,149,0,0.3);">
+      <span class="icon">⏱️</span>
+      <span><strong>微信通道保活机制：</strong>iLink Bot 协议要求用户每 24 小时内至少给 Bot 回复一条任意消息（如"在"），通道即可持续保活；完全不回复会导致通道失联。这是微信 ClawBot 平台当前的限制。<strong>平台会尽可能在通道失效之前主动通过微信提醒你</strong>，收到提醒时回复一个字即可续命。若已失联，访问 /app 重新扫码即可恢复（SendKey 和 SDK 代码都不变）。后续如微信放开此限制，我们会第一时间跟进。</span>
     </div>
 
     <div class="tip-box">

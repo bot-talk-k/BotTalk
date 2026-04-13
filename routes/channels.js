@@ -1,11 +1,76 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
+const { markSendResult } = require('../services/channel-health');
+const { enqueueSend } = require('../services/push-queue');
 const { generateSendKey } = require('../db');
 const ilink = require('../ilink');
 const { requireLogin } = require('../middleware/auth');
 const { logActivity } = require('../services/logger');
 const { startMessagePoller, getContextToken } = require('../services/message-poller');
+
+// 通道恢复后补发失效期间失败的消息
+async function resendFailedMessages(userId, channelId, botToken, wechatOpenid, contextToken) {
+  try {
+    // 取最新的 20 条失败消息（不限时间，用户可能隔几天才来重绑）
+    // 补发成功后会直接删除原记录，避免下次再次补发
+    const failed = db.prepare(`
+      SELECT id, title, content FROM push_logs
+      WHERE id IN (
+        SELECT id FROM push_logs
+        WHERE user_id = ?
+          AND status = 'failed'
+          AND ip NOT IN ('system', 'system-announce', 'system-warning', 'session-warning', 'alert', 'announce-redo', 'system-backfill', 'system-announce-retry', 'system-announce-retry2', 'health-check', 'resend', 'system-apology', 'resend-notice', 'resend-recovery')
+        ORDER BY id DESC
+        LIMIT 20
+      )
+      ORDER BY id ASC
+    `).all(userId);
+
+    if (failed.length === 0) return;
+
+    console.log(`📬 开始补发 user=${userId} 的 ${failed.length} 条失败消息`);
+
+    // 先发一个头部消息告知用户
+    const header = `📬 通道已恢复\n\n检测到失效期间有 ${failed.length} 条消息未能送达，将依次补发给你。`;
+    try {
+      const r = await enqueueSend(channelId,
+        () => ilink.sendMessage(botToken, wechatOpenid, header, contextToken),
+        { title: '📬 通道恢复', source: 'resend-notice' });
+      db.prepare("INSERT INTO push_logs (user_id, title, content, status, ip, channel_id, response) VALUES (?, ?, ?, 'success', ?, ?, ?)")
+        .run(userId, '📬 通道恢复通知', header, 'resend-notice', channelId, JSON.stringify({ count: failed.length }));
+      markSendResult(channelId, r, true);
+    } catch (e) {
+      console.error('补发头部消息失败:', e.message);
+      markSendResult(channelId, e, false);
+      return; // 头部都发不出去就别硬补发了
+    }
+
+    let okCount = 0;
+    for (const log of failed) {
+      const msg = (log.title || '') + (log.content ? '\n\n' + log.content : '');
+      try {
+        const r = await enqueueSend(channelId,
+          () => ilink.sendMessage(botToken, wechatOpenid, msg, contextToken),
+          { title: log.title + ' [补发]', source: 'resend-recovery' });
+        db.prepare("INSERT INTO push_logs (user_id, title, content, status, ip, channel_id, response) VALUES (?, ?, ?, 'success', ?, ?, ?)")
+          .run(userId, (log.title || '') + ' [补发]', log.content, 'resend-recovery', channelId, JSON.stringify({ ...r, original_log_id: log.id }));
+        // 补发成功，删除原失败记录，防止下次重绑重复补发
+        db.prepare("DELETE FROM push_logs WHERE id = ?").run(log.id);
+        markSendResult(channelId, r, true);
+        okCount++;
+      } catch (e) {
+        console.error(`补发 log ${log.id} 失败:`, e.message);
+        markSendResult(channelId, e, false);
+      }
+      // 队列已保证 10s 间隔，无需额外 sleep
+    }
+
+    console.log(`✅ 补发完成: ${okCount}/${failed.length} 成功`);
+  } catch (e) {
+    console.error('resendFailedMessages 错误:', e.message);
+  }
+}
 
 // 统一记录欢迎/系统消息的推送结果（成功和失败都记录到 push_logs）
 function logSystemPush(userId, channelId, title, message, resultOrErr, isSuccess) {
@@ -16,6 +81,7 @@ function logSystemPush(userId, channelId, title, message, resultOrErr, isSuccess
       : JSON.stringify(resultOrErr?.response?.data || { error: resultOrErr?.message });
     db.prepare("INSERT INTO push_logs (user_id, title, content, status, ip, channel_id, response) VALUES (?, ?, ?, ?, ?, ?, ?)")
       .run(userId, title, message, status, 'system', channelId, response);
+    markSendResult(channelId, resultOrErr, isSuccess);
     if (!isSuccess) {
       const errData = resultOrErr?.response?.data;
       const errStatus = resultOrErr?.response?.status;
@@ -44,16 +110,20 @@ function notifyAdmins(message) {
     console.log(`📢 notifyAdmins: 找到 ${admins.length} 个 admin 通道`);
     for (const admin of admins) {
       if (admin.context_token) {
-        ilink.sendMessage(admin.bot_token, admin.wechat_openid, message, admin.context_token)
+        enqueueSend(admin.channel_id,
+          () => ilink.sendMessage(admin.bot_token, admin.wechat_openid, message, admin.context_token),
+          { title: '📢 系统通知', source: 'notifyAdmins' })
           .then(r => {
             db.prepare("INSERT INTO push_logs (user_id, title, content, status, ip, channel_id, response) VALUES (?, ?, ?, 'success', ?, ?, ?)")
               .run(admin.id, '📢 系统通知', message, 'system', admin.channel_id, JSON.stringify(r));
+            markSendResult(admin.channel_id, r, true);
           })
           .catch(err => {
             console.error('通知 admin 失败:', err.message);
             const errData = err.response?.data;
             db.prepare("INSERT INTO push_logs (user_id, title, content, status, ip, channel_id, response) VALUES (?, ?, ?, 'failed', ?, ?, ?)")
               .run(admin.id, '📢 系统通知', message, 'system', admin.channel_id, JSON.stringify(errData || { error: err.message }));
+            markSendResult(admin.channel_id, err, false);
           });
       } else {
         console.log(`📢 notifyAdmins: admin ${admin.id} 无 context_token，跳过`);
@@ -121,15 +191,20 @@ router.get('/bind-status-public/:qrcode', async (req, res) => {
       const userId = existingChannel.user_id;
 
       db.prepare(
-        "UPDATE channels SET bot_token = ?, context_token = NULL, status = 'pending' WHERE id = ?"
+        "UPDATE channels SET bot_token = ?, context_token = NULL, status = 'pending', bot_token_updated_at = CURRENT_TIMESTAMP WHERE id = ?"
       ).run(botToken, existingChannel.id);
 
       startMessagePoller(botToken, ilinkUserId, (contextToken) => {
         db.prepare("UPDATE channels SET context_token = ?, status = 'active' WHERE id = ?")
           .run(contextToken, existingChannel.id);
-        const welcomeMsg = '欢迎回来！\n\n你的 BotTalk 通道已重新激活。';
-        ilink.sendMessage(botToken, ilinkUserId, welcomeMsg, contextToken)
-          .then(r => logSystemPush(existingChannel.user_id, existingChannel.id, '🔄 重绑欢迎', welcomeMsg, r, true))
+        const welcomeMsg = '✅ 通道已激活（重绑恢复）\n\n欢迎回来！你的 BotTalk 通道已重新激活。';
+        enqueueSend(existingChannel.id,
+          () => ilink.sendMessage(botToken, ilinkUserId, welcomeMsg, contextToken),
+          { title: '🔄 重绑欢迎', source: 'rebind-welcome' })
+          .then(r => {
+            logSystemPush(existingChannel.user_id, existingChannel.id, '🔄 重绑欢迎', welcomeMsg, r, true);
+            resendFailedMessages(existingChannel.user_id, existingChannel.id, botToken, ilinkUserId, contextToken);
+          })
           .catch(err => {
             console.error('发送重绑通知失败:', err.message);
             logSystemPush(existingChannel.user_id, existingChannel.id, '🔄 重绑欢迎', welcomeMsg, err, false);
@@ -166,8 +241,8 @@ router.get('/bind-status-public/:qrcode', async (req, res) => {
     const userId = userInfo.lastInsertRowid;
 
     const channelInfo = db.prepare(
-      `INSERT INTO channels (user_id, name, channel_type, wechat_openid, bot_token, status, is_default)
-       VALUES (?, '默认通道', 'wechat_ilink', ?, ?, 'pending', 1)`
+      `INSERT INTO channels (user_id, name, channel_type, wechat_openid, bot_token, status, is_default, bot_token_updated_at)
+       VALUES (?, '默认通道', 'wechat_ilink', ?, ?, 'pending', 1, CURRENT_TIMESTAMP)`
     ).run(userId, ilinkUserId, botToken);
     const channelId = channelInfo.lastInsertRowid;
 
@@ -175,7 +250,9 @@ router.get('/bind-status-public/:qrcode', async (req, res) => {
       db.prepare("UPDATE channels SET context_token = ?, status = 'active' WHERE id = ?")
         .run(contextToken, channelId);
       const welcomeMsg = `🎉 欢迎使用 BotTalk！\n\n你的推送通道已激活。\n访问 ${process.env.BASE_URL || 'https://bot-talk.com'} 查看你的 SendKey 和 API 文档。\n\n💡 由于微信 ClawBot 同一微信号只保持一个活跃通道，绑定新应用会自动失效之前的连接。如果消息未收到，重新扫码即可恢复。`;
-      ilink.sendMessage(botToken, ilinkUserId, welcomeMsg, contextToken)
+      enqueueSend(channelId,
+        () => ilink.sendMessage(botToken, ilinkUserId, welcomeMsg, contextToken),
+        { title: '🎉 欢迎消息', source: 'new-user-welcome' })
         .then(r => logSystemPush(userId, channelId, '🎉 欢迎消息', welcomeMsg, r, true))
         .catch(err => {
           console.error('发送欢迎消息失败:', err.message);
@@ -276,16 +353,21 @@ router.get('/bind-status/:qrcode', async (req, res) => {
       if (existingChannel.user_id === userId) {
         // 同一用户重新绑定 — 更新 bot_token，重置激活状态
         db.prepare(
-          "UPDATE channels SET bot_token = ?, context_token = NULL, status = 'pending' WHERE id = ?"
+          "UPDATE channels SET bot_token = ?, context_token = NULL, status = 'pending', bot_token_updated_at = CURRENT_TIMESTAMP WHERE id = ?"
         ).run(botToken, existingChannel.id);
 
         // 重启 poller
         startMessagePoller(botToken, ilinkUserId, (contextToken) => {
           db.prepare("UPDATE channels SET context_token = ?, status = 'active' WHERE id = ?")
             .run(contextToken, existingChannel.id);
-          const rebindMsg = '通道重新绑定成功！\n\n该通道已激活，可以正常接收消息推送了。';
-          ilink.sendMessage(botToken, ilinkUserId, rebindMsg, contextToken)
-            .then(r => logSystemPush(userId, existingChannel.id, '🔄 通道重绑', rebindMsg, r, true))
+          const rebindMsg = '✅ 通道已激活（重绑恢复）\n\n通道重新绑定成功！可以正常接收消息推送了。';
+          enqueueSend(existingChannel.id,
+            () => ilink.sendMessage(botToken, ilinkUserId, rebindMsg, contextToken),
+            { title: '🔄 通道重绑', source: 'rebind' })
+            .then(r => {
+              logSystemPush(userId, existingChannel.id, '🔄 通道重绑', rebindMsg, r, true);
+              resendFailedMessages(userId, existingChannel.id, botToken, ilinkUserId, contextToken);
+            })
             .catch(err => {
               console.error('发送重绑通知失败:', err.message);
               logSystemPush(userId, existingChannel.id, '🔄 通道重绑', rebindMsg, err, false);
@@ -330,8 +412,8 @@ router.get('/bind-status/:qrcode', async (req, res) => {
     }
 
     const info = db.prepare(
-      `INSERT INTO channels (user_id, name, channel_type, wechat_openid, bot_token, status, is_default)
-       VALUES (?, ?, 'wechat_ilink', ?, ?, 'pending', ?)`
+      `INSERT INTO channels (user_id, name, channel_type, wechat_openid, bot_token, status, is_default, bot_token_updated_at)
+       VALUES (?, ?, 'wechat_ilink', ?, ?, 'pending', ?, CURRENT_TIMESTAMP)`
     ).run(userId, channelName, ilinkUserId, botToken, isFirst);
 
     const channel = db.prepare('SELECT * FROM channels WHERE id = ?').get(info.lastInsertRowid);
@@ -342,7 +424,9 @@ router.get('/bind-status/:qrcode', async (req, res) => {
         "UPDATE channels SET context_token = ?, status = 'active' WHERE id = ?"
       ).run(contextToken, channel.id);
       const bindMsg = '通道绑定成功！\n\n该通道已激活，可以正常接收消息推送了。';
-      ilink.sendMessage(botToken, ilinkUserId, bindMsg, contextToken)
+      enqueueSend(channel.id,
+        () => ilink.sendMessage(botToken, ilinkUserId, bindMsg, contextToken),
+        { title: '🆕 通道绑定', source: 'new-channel-bind' })
         .then(r => logSystemPush(userId, channel.id, '🆕 通道绑定', bindMsg, r, true))
         .catch(err => {
           console.error('发送绑定通知失败:', err.message);

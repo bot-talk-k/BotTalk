@@ -207,9 +207,11 @@ router.get('/stats', (req, res) => {
 
 router.get('/channels', (req, res) => {
   try {
-    const { isChannelAlive } = require('../services/message-poller');
+    const { getChannelHealth } = require('../services/channel-health');
     const channels = db.prepare(`
       SELECT c.id, c.name, c.status, c.bot_token, c.wechat_openid, c.is_default, c.created_at,
+             c.bot_token_updated_at, c.last_send_success_at, c.consecutive_neg2_count, c.last_neg2_at,
+             c.send_disabled, c.send_disabled_reason, c.send_disabled_at,
              u.id AS user_id, u.nickname, u.role
       FROM channels c
       JOIN users u ON c.user_id = u.id
@@ -217,7 +219,7 @@ router.get('/channels', (req, res) => {
     `).all();
 
     const data = channels.map(ch => {
-      const health = isChannelAlive(ch.bot_token);
+      const h = getChannelHealth(ch);
       return {
         id: ch.id,
         name: ch.name,
@@ -226,16 +228,24 @@ router.get('/channels', (req, res) => {
         role: ch.role,
         status: ch.status,
         is_default: ch.is_default,
-        alive: health.alive,
-        reason: health.reason || null,
-        last_ok_seconds_ago: health.last_ok_seconds_ago ?? null,
+        health: h.health,           // 'green' | 'yellow' | 'red'
+        reason: h.reason,
+        details: h.details,
+        bot_token_updated_at: ch.bot_token_updated_at,
+        last_send_success_at: ch.last_send_success_at,
+        consecutive_neg2_count: ch.consecutive_neg2_count,
+        last_neg2_at: ch.last_neg2_at,
       };
     });
 
-    // 统计失联数
-    const disconnected = data.filter(ch => ch.status === 'active' && !ch.alive).length;
+    const stats = {
+      green: data.filter(d => d.health === 'green').length,
+      yellow: data.filter(d => d.health === 'yellow').length,
+      red: data.filter(d => d.health === 'red').length,
+      disconnected: data.filter(d => d.health === 'red').length, // 兼容旧字段
+    };
 
-    res.json({ success: true, data: { channels: data, disconnected } });
+    res.json({ success: true, data: { channels: data, ...stats } });
   } catch (err) {
     console.error('Admin channels error:', err.message);
     res.status(500).json({ success: false, error: 'Internal error' });

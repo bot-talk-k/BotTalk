@@ -288,6 +288,59 @@ if (!hasRun(13)) {
   markRun(13);
 }
 
+// Migration 14: channels.bot_token_updated_at — 追踪 bot_token 刷新时间，用于 iLink 24h session 预警
+if (!hasRun(14)) {
+  const chCols = db.pragma('table_info(channels)');
+  if (!chCols.some(c => c.name === 'bot_token_updated_at')) {
+    try { db.exec('ALTER TABLE channels ADD COLUMN bot_token_updated_at DATETIME'); } catch (e) {}
+    // 已有数据的 bot_token_updated_at 用 created_at 作初始值（估算）
+    try { db.exec('UPDATE channels SET bot_token_updated_at = created_at WHERE bot_token_updated_at IS NULL'); } catch (e) {}
+  }
+  markRun(14);
+}
+
+// Migration 16: channels 加 send_disabled — 表示 "iLink 拒绝发送但允许接收" 的半死态
+//   （典型场景：账号未实名认证被风控，getUpdates ok 但 sendMessage 返回 ret:-14）
+if (!hasRun(16)) {
+  const chCols = db.pragma('table_info(channels)');
+  if (!chCols.some(c => c.name === 'send_disabled')) {
+    try { db.exec('ALTER TABLE channels ADD COLUMN send_disabled INTEGER DEFAULT 0'); } catch (e) {}
+  }
+  if (!chCols.some(c => c.name === 'send_disabled_reason')) {
+    try { db.exec('ALTER TABLE channels ADD COLUMN send_disabled_reason TEXT'); } catch (e) {}
+  }
+  if (!chCols.some(c => c.name === 'send_disabled_at')) {
+    try { db.exec('ALTER TABLE channels ADD COLUMN send_disabled_at DATETIME'); } catch (e) {}
+  }
+  markRun(16);
+}
+
+// Migration 15: channels 加 last_send_success_at / consecutive_neg2_count / last_neg2_at
+// 用于通道健康度三色展示和 ret:-2 衰退观测
+if (!hasRun(15)) {
+  const chCols = db.pragma('table_info(channels)');
+  if (!chCols.some(c => c.name === 'last_send_success_at')) {
+    try { db.exec('ALTER TABLE channels ADD COLUMN last_send_success_at DATETIME'); } catch (e) {}
+  }
+  if (!chCols.some(c => c.name === 'consecutive_neg2_count')) {
+    try { db.exec('ALTER TABLE channels ADD COLUMN consecutive_neg2_count INTEGER DEFAULT 0'); } catch (e) {}
+  }
+  if (!chCols.some(c => c.name === 'last_neg2_at')) {
+    try { db.exec('ALTER TABLE channels ADD COLUMN last_neg2_at DATETIME'); } catch (e) {}
+  }
+  // 回填 last_send_success_at：从 push_logs 里取每个 channel 最近一次 success 的时间
+  try {
+    db.exec(`
+      UPDATE channels SET last_send_success_at = (
+        SELECT MAX(p.created_at) FROM push_logs p
+        WHERE p.channel_id = channels.id AND p.status = 'success'
+      )
+      WHERE last_send_success_at IS NULL
+    `);
+  } catch (e) {}
+  markRun(15);
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────
 
 function generateSendKey() {

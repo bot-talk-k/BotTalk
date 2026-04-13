@@ -24,7 +24,7 @@
 
     /* ── Nav ────────────────────────────────────────────────────────── */
     .navbar {
-      position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+      position: fixed; top: 36px; left: 0; right: 0; z-index: 1000;
       height: 48px;
       backdrop-filter: saturate(180%) blur(20px);
       -webkit-backdrop-filter: saturate(180%) blur(20px);
@@ -70,7 +70,7 @@
     .nav-btn-logout:hover { border-color: #ff3b30; color: #ff3b30; }
 
     /* ── Layout ────────────────────────────────────────────────────── */
-    .main { padding-top: 48px; }
+    .main { padding-top: 84px; }
     .container { max-width: 980px; margin: 0 auto; padding: 0 20px; }
 
     /* ── Buttons ───────────────────────────────────────────────────── */
@@ -250,12 +250,59 @@
       .stat-value { font-size: 24px; }
       .nav-links { display: none; }
       .navbar { justify-content: space-between; }
-      .main { padding-top: 48px; }
+      .main { padding-top: 84px; }
       .action-btn { font-size: 11px; padding: 3px 8px; }
     }
   </style>
 </head>
 <body>
+
+<!-- ═══ 公告跑马灯 ═══ -->
+<div class="announcement-bar">
+  <div class="announcement-track">
+    <span class="announcement-item">📢 <strong>通告：</strong>新用户扫码绑定即注册，老用户随时扫码自动续用可查询历史消息</span>
+    <span class="announcement-sep">•</span>
+    <span class="announcement-item">⏱️ <strong>通告：</strong>微信 ClawBot 平台限制 — 只要你 24 小时内给 Bot 回复任意一条消息（如"在"），通道就能持续保活。平台会尽可能在通道失效之前主动微信提醒你。此为微信侧权宜之计，等待官方修正</span>
+    <span class="announcement-sep">•</span>
+    <span class="announcement-item">📢 <strong>通告：</strong>新用户扫码绑定即注册，老用户随时扫码自动续用可查询历史消息</span>
+    <span class="announcement-sep">•</span>
+    <span class="announcement-item">⏱️ <strong>通告：</strong>微信 ClawBot 平台限制 — 只要你 24 小时内给 Bot 回复任意一条消息（如"在"），通道就能持续保活。平台会尽可能在通道失效之前主动微信提醒你。此为微信侧权宜之计，等待官方修正</span>
+    <span class="announcement-sep">•</span>
+  </div>
+</div>
+<style>
+  .announcement-bar {
+    position: fixed; top: 0; left: 0; right: 0;
+    z-index: 1001;
+    background: linear-gradient(90deg, #fff8e1 0%, #fff3c4 100%);
+    border-bottom: 1px solid rgba(255,149,0,0.25);
+    overflow: hidden;
+    height: 36px;
+    box-sizing: border-box;
+  }
+  .announcement-track {
+    display: inline-block;
+    white-space: nowrap;
+    padding-left: 100%;
+    line-height: 36px;
+    font-size: 13px;
+    color: #7a5a00;
+    animation: announcement-scroll 45s linear infinite;
+    will-change: transform;
+  }
+  .announcement-track:hover { animation-play-state: paused; }
+  .announcement-item { padding: 0 8px; }
+  .announcement-item strong { color: #b06500; }
+  .announcement-sep { color: rgba(122,90,0,0.4); padding: 0 4px; }
+  @keyframes announcement-scroll {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-100%); }
+  }
+  @media (max-width: 640px) {
+    .announcement-bar { height: 32px; }
+    .announcement-track { animation-duration: 50s; font-size: 12px; line-height: 32px; }
+  }
+</style>
 
   <!-- Navigation -->
   <nav class="navbar">
@@ -363,14 +410,15 @@
                     <th>用户</th>
                     <th>通道名</th>
                     <th>角色</th>
-                    <th>DB状态</th>
-                    <th>连接状态</th>
-                    <th>心跳</th>
-                    <th>原因</th>
+                    <th>健康度</th>
+                    <th>Poller</th>
+                    <th>最近成功</th>
+                    <th>连续 -2</th>
+                    <th>说明</th>
                   </tr>
                 </thead>
                 <tbody id="channels-tbody">
-                  <tr><td colspan="8" style="text-align:center;color:#8e8e93;padding:40px;">加载中...</td></tr>
+                  <tr><td colspan="9" style="text-align:center;color:#8e8e93;padding:40px;">加载中...</td></tr>
                 </tbody>
               </table>
             </div>
@@ -632,41 +680,43 @@
     function renderChannelsTable() {
       var showAll = document.getElementById('show-all-channels').checked;
       var list = showAll ? channelsHealthData : channelsHealthData.filter(function(ch) {
-        return !ch.alive || ch.status !== 'active';
+        return ch.health !== 'green';
       });
       var tbody = document.getElementById('channels-tbody');
       if (list.length === 0) {
         tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#34c759;padding:40px;">' +
-          (showAll ? '暂无通道' : '所有通道正常') + '</td></tr>';
+          (showAll ? '暂无通道' : '所有通道正常（绿色）') + '</td></tr>';
         return;
       }
       var html = '';
       list.forEach(function(ch) {
-        var statusBadge = ch.status === 'active'
-          ? '<span class="badge badge-green">active</span>'
-          : (ch.status === 'pending' ? '<span class="badge badge-yellow">pending</span>' : '<span class="badge badge-gray">inactive</span>');
-        var aliveBadge;
-        if (ch.status !== 'active') {
-          aliveBadge = '<span class="badge badge-gray">-</span>';
-        } else if (ch.alive) {
-          aliveBadge = '<span class="badge badge-green">在线</span>';
-        } else {
-          aliveBadge = '<span class="badge badge-red">失联</span>';
-        }
-        var heartbeat = ch.last_ok_seconds_ago !== null ? ch.last_ok_seconds_ago + 's ago' : '-';
-        var reason = ch.reason || '-';
         var roleBadge = ch.role === 'admin'
           ? '<span class="badge badge-blue">admin</span>'
           : '<span class="badge badge-gray">user</span>';
-        html += '<tr>' +
+        // 健康度三色 badge
+        var healthBadge;
+        if (ch.health === 'green') healthBadge = '<span class="badge badge-green">🟢 正常</span>';
+        else if (ch.health === 'yellow') healthBadge = '<span class="badge" style="background:rgba(255,149,0,0.12);color:#b06500;">🟡 警告</span>';
+        else healthBadge = '<span class="badge badge-red">🔴 异常</span>';
+        var details = ch.details || {};
+        var lastSendOkStr = details.last_send_ok_min !== null
+          ? (details.last_send_ok_min < 60 ? details.last_send_ok_min + ' 分钟前' : Math.round(details.last_send_ok_min/60) + ' 小时前')
+          : '—';
+        var pollerStr = details.poller_alive ? '✅ 活' : ('❌ ' + (details.poller_reason || '挂'));
+        var neg2Str = details.consecutive_neg2_count > 0
+          ? '<span style="color:#b06500;">连续 ' + details.consecutive_neg2_count + ' 次</span>'
+          : '0';
+        var reasonText = ch.reason || '-';
+        html += '<tr title="' + escapeHtml(reasonText) + '">' +
           '<td>' + ch.id + '</td>' +
           '<td>' + escapeHtml(ch.nickname) + '</td>' +
           '<td>' + escapeHtml(ch.name || '-') + '</td>' +
           '<td>' + roleBadge + '</td>' +
-          '<td>' + statusBadge + '</td>' +
-          '<td>' + aliveBadge + '</td>' +
-          '<td>' + heartbeat + '</td>' +
-          '<td>' + escapeHtml(reason) + '</td>' +
+          '<td>' + healthBadge + '</td>' +
+          '<td>' + pollerStr + '</td>' +
+          '<td>' + lastSendOkStr + '</td>' +
+          '<td>' + neg2Str + '</td>' +
+          '<td style="max-width:180px;font-size:12px;color:#6e6e73;">' + escapeHtml(reasonText) + '</td>' +
           '</tr>';
       });
       tbody.innerHTML = html;

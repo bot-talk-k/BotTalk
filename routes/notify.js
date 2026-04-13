@@ -3,6 +3,8 @@ const router = express.Router();
 const db = require('../db');
 const ilink = require('../ilink');
 const { logActivity } = require('../services/logger');
+const { markSendResult, classifyRet14, markSendDisabled } = require('../services/channel-health');
+const { enqueueSend } = require('../services/push-queue');
 
 // 简单内存限流：每 Key 每小时最多 100 条
 const rateLimits = {};
@@ -47,12 +49,18 @@ function alertAdminsOnFailure({ userId, nickname, channelId, title, errData, err
 
     for (const admin of admins) {
       if (!admin.context_token) continue;
-      ilink.sendMessage(admin.bot_token, admin.wechat_openid, msg, admin.context_token)
+      enqueueSend(admin.channel_id,
+        () => ilink.sendMessage(admin.bot_token, admin.wechat_openid, msg, admin.context_token),
+        { title: '⚠️ 失败报警', source: 'alert' })
         .then(r => {
           db.prepare("INSERT INTO push_logs (user_id, title, content, status, ip, channel_id, response) VALUES (?, ?, ?, 'success', ?, ?, ?)")
             .run(admin.id, '⚠️ 失败报警', msg, 'alert', admin.channel_id, JSON.stringify(r));
+          markSendResult(admin.channel_id, r, true);
         })
-        .catch(err => console.error('失败报警发送失败:', err.message));
+        .catch(err => {
+          console.error('失败报警发送失败:', err.message);
+          markSendResult(admin.channel_id, err, false);
+        });
     }
   } catch (e) {
     console.error('alertAdminsOnFailure 错误:', e.message);
@@ -124,14 +132,21 @@ async function handlePush(sendKey, title, content, clientIp, channelParam, req) 
 
     try {
       let ilinkRes;
+      const startedAt = Date.now();
       try {
-        ilinkRes = await ilink.sendMessage(channel.bot_token, channel.wechat_openid, message, channel.context_token);
+        ilinkRes = await enqueueSend(channel.id,
+          () => ilink.sendMessage(channel.bot_token, channel.wechat_openid, message, channel.context_token),
+          { title, source: 'api' });
       } catch (retryErr) {
-        // ret: -2 时等 1 秒自动重试一次
+        // ret: -2 时等 5 秒自动重试一次
         if (retryErr.response?.data?.ret === -2) {
-          console.log(`⏳ 通道 ${channel.id} ret:-2，1秒后重试...`);
-          await new Promise(r => setTimeout(r, 1000));
-          ilinkRes = await ilink.sendMessage(channel.bot_token, channel.wechat_openid, message, channel.context_token);
+          console.log(`⏳ 通道 ${channel.id} ret:-2，5秒后重试...`);
+          await new Promise(r => setTimeout(r, 5000));
+          const delaySec = Math.round((Date.now() - startedAt) / 1000);
+          const retryMessage = `ℹ️ 本消息因通道临时不稳定延迟 ${delaySec} 秒送达\n\n${message}`;
+          ilinkRes = await enqueueSend(channel.id,
+            () => ilink.sendMessage(channel.bot_token, channel.wechat_openid, retryMessage, channel.context_token),
+            { title, source: 'api-retry' });
         } else {
           throw retryErr;
         }
@@ -143,19 +158,38 @@ async function handlePush(sendKey, title, content, clientIp, channelParam, req) 
         VALUES (?, ?, ?, 'success', ?, ?, ?)
       `).run(user.id, title, content, clientIp, channel.id, resJson);
 
+      markSendResult(channel.id, ilinkRes, true);
       logActivity(user.id, 'push_api', { channel_id: channel.id, title }, req);
       results.push({ channel_id: channel.id, status: 'success' });
     } catch (error) {
       const errStatus = error.response?.status;
       const errData = error.response?.data;
       const resJson = JSON.stringify(errData || { errcode: -1, errmsg: error.message });
+      markSendResult(channel.id, error, false);
 
-      // session 过期（ret: -14）或 HTTP 401/403 标记通道失效；ret: -2 是临时错误，不标记
-      const tokenInvalid = errStatus === 401 || errStatus === 403
-        || (errData && errData.ret === -14);
-      if (tokenInvalid) {
+      // ret:-14 分类：调 getUpdates 二次确认是 session 真死还是"半死态"（账号被风控）
+      let tokenInvalid = false;
+      if (errData && errData.ret === -14) {
+        try {
+          const cls = await classifyRet14(channel.id, channel.bot_token);
+          if (cls.trueSessionDeath) {
+            tokenInvalid = true;
+            db.prepare("UPDATE channels SET status = 'inactive' WHERE id = ?").run(channel.id);
+            console.error(`⚠️ 通道 ${channel.id} session 真失效（getUpdates 也 ret:-14），标记 inactive`);
+          } else if (cls.sendDisabled) {
+            markSendDisabled(channel.id, '账号可能被 iLink 风控（sendMessage -14 但 getUpdates 正常）');
+            console.error(`⚠️ 通道 ${channel.id} 半死态：能收不能发（账号可能未实名/被风控）`);
+          }
+        } catch (clsErr) {
+          console.error('classifyRet14 失败，保守当做 session 死:', clsErr.message);
+          tokenInvalid = true;
+          db.prepare("UPDATE channels SET status = 'inactive' WHERE id = ?").run(channel.id);
+        }
+      } else if (errStatus === 401 || errStatus === 403) {
+        // HTTP 401/403 明确的 token 失效
+        tokenInvalid = true;
         db.prepare("UPDATE channels SET status = 'inactive' WHERE id = ?").run(channel.id);
-        console.error(`⚠️ 通道 ${channel.id} 已标记为 inactive（token 失效）`);
+        console.error(`⚠️ 通道 ${channel.id} 已标记为 inactive（HTTP ${errStatus}）`);
       }
 
       db.prepare(`
@@ -257,19 +291,27 @@ router.post('/contact', requireLogin, async (req, res) => {
       if (admin.context_token) {
         try {
           let r;
+          const startedAt = Date.now();
           try {
-            r = await ilink.sendMessage(admin.bot_token, admin.wechat_openid, fullMsg, admin.context_token);
+            r = await enqueueSend(admin.channel_id,
+              () => ilink.sendMessage(admin.bot_token, admin.wechat_openid, fullMsg, admin.context_token),
+              { title: '💬 用户反馈', source: 'contact-admin' });
           } catch (retryErr) {
             if (retryErr.response?.data?.ret === -2) {
-              console.log(`⏳ Admin 通道 ${admin.channel_id} ret:-2，1秒后重试...`);
-              await new Promise(resolve => setTimeout(resolve, 1000));
-              r = await ilink.sendMessage(admin.bot_token, admin.wechat_openid, fullMsg, admin.context_token);
+              console.log(`⏳ Admin 通道 ${admin.channel_id} ret:-2，5秒后重试...`);
+              await new Promise(resolve => setTimeout(resolve, 5000));
+              const delaySec = Math.round((Date.now() - startedAt) / 1000);
+              const retryMsg = `ℹ️ 本消息因通道临时不稳定延迟 ${delaySec} 秒送达\n\n${fullMsg}`;
+              r = await enqueueSend(admin.channel_id,
+                () => ilink.sendMessage(admin.bot_token, admin.wechat_openid, retryMsg, admin.context_token),
+                { title: '💬 用户反馈', source: 'contact-admin-retry' });
             } else {
               throw retryErr;
             }
           }
           db.prepare("INSERT INTO push_logs (user_id, title, content, status, ip, channel_id, response) VALUES (?, ?, ?, 'success', ?, ?, ?)")
             .run(admin.id, '💬 用户反馈', content, 'contact', admin.channel_id, JSON.stringify(r));
+          markSendResult(admin.channel_id, r, true);
         } catch (e) {
           const errData = e.response?.data;
           const errStatus = e.response?.status;
@@ -281,6 +323,7 @@ router.post('/contact', requireLogin, async (req, res) => {
           }
           db.prepare("INSERT INTO push_logs (user_id, title, content, status, ip, channel_id, response) VALUES (?, ?, ?, 'failed', ?, ?, ?)")
             .run(admin.id, '💬 用户反馈', content, 'contact', admin.channel_id, JSON.stringify(errData || { error: e.message }));
+          markSendResult(admin.channel_id, e, false);
           alertAdminsOnFailure({
             userId: user.id,
             nickname: user.nickname,
@@ -300,19 +343,28 @@ router.post('/contact', requireLogin, async (req, res) => {
     if (userCh && userCh.context_token) {
       try {
         let r;
+        const confirmMsg = '✅ 你的反馈已发送\n\n内容: ' + content;
+        const startedAt = Date.now();
         try {
-          r = await ilink.sendMessage(userCh.bot_token, userCh.wechat_openid, '✅ 你的反馈已发送\n\n内容: ' + content, userCh.context_token);
+          r = await enqueueSend(userCh.id,
+            () => ilink.sendMessage(userCh.bot_token, userCh.wechat_openid, confirmMsg, userCh.context_token),
+            { title: '✅ 反馈确认', source: 'contact-user' });
         } catch (retryErr) {
           if (retryErr.response?.data?.ret === -2) {
-            console.log(`⏳ 用户通道 ${userCh.id} ret:-2，1秒后重试...`);
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            r = await ilink.sendMessage(userCh.bot_token, userCh.wechat_openid, '✅ 你的反馈已发送\n\n内容: ' + content, userCh.context_token);
+            console.log(`⏳ 用户通道 ${userCh.id} ret:-2，5秒后重试...`);
+            await new Promise(resolve => setTimeout(resolve, 5000));
+            const delaySec = Math.round((Date.now() - startedAt) / 1000);
+            const retryMsg = `ℹ️ 本消息因通道临时不稳定延迟 ${delaySec} 秒送达\n\n${confirmMsg}`;
+            r = await enqueueSend(userCh.id,
+              () => ilink.sendMessage(userCh.bot_token, userCh.wechat_openid, retryMsg, userCh.context_token),
+              { title: '✅ 反馈确认', source: 'contact-user-retry' });
           } else {
             throw retryErr;
           }
         }
         db.prepare("INSERT INTO push_logs (user_id, title, content, status, ip, channel_id, response) VALUES (?, ?, ?, 'success', ?, ?, ?)")
           .run(user.id, '✅ 反馈确认', content, clientIp, userCh.id, JSON.stringify(r));
+        markSendResult(userCh.id, r, true);
       } catch (e) {
         const errData = e.response?.data;
         const errStatus = e.response?.status;
@@ -324,6 +376,7 @@ router.post('/contact', requireLogin, async (req, res) => {
         }
         db.prepare("INSERT INTO push_logs (user_id, title, content, status, ip, channel_id, response) VALUES (?, ?, ?, 'failed', ?, ?, ?)")
           .run(user.id, '✅ 反馈确认', content, clientIp, userCh.id, JSON.stringify(errData || { error: e.message }));
+        markSendResult(userCh.id, e, false);
         alertAdminsOnFailure({
           userId: user.id,
           nickname: user.nickname,
