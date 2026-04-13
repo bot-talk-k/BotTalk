@@ -165,7 +165,7 @@ router.get('/stats', (req, res) => {
   try {
     const totalUsers = db.prepare('SELECT COUNT(*) AS cnt FROM users').get().cnt;
     const todayPushes = db.prepare(
-      "SELECT COUNT(*) AS cnt FROM push_logs WHERE created_at >= date('now')"
+      "SELECT COUNT(*) AS cnt FROM push_logs WHERE datetime(created_at, '+8 hours') >= date('now', '+8 hours')"
     ).get().cnt;
     const activeChannels = db.prepare(
       "SELECT COUNT(*) AS cnt FROM channels WHERE status = 'active'"
@@ -177,7 +177,7 @@ router.get('/stats', (req, res) => {
       "SELECT COUNT(*) AS cnt FROM users WHERE role = 'admin'"
     ).get().cnt;
     const todayNewUsers = db.prepare(
-      "SELECT COUNT(*) AS cnt FROM users WHERE created_at >= date('now')"
+      "SELECT COUNT(*) AS cnt FROM users WHERE datetime(created_at, '+8 hours') >= date('now', '+8 hours')"
     ).get().cnt;
     const adminUnreadFailed = db.prepare(
       "SELECT COUNT(*) AS cnt FROM push_logs WHERE status = 'failed' AND (read_state & 2) = 0"
@@ -262,14 +262,14 @@ router.get('/page-views', (req, res) => {
   try {
     const { period, page } = req.query;
 
-    // Build date filter
+    // Build date filter（全部按北京时区 UTC+8）
     let dateFilter = '';
     if (period === 'today') {
-      dateFilter = "AND created_at >= date('now')";
+      dateFilter = "AND datetime(created_at, '+8 hours') >= date('now', '+8 hours')";
     } else if (period === '7d') {
-      dateFilter = "AND created_at >= date('now', '-7 days')";
+      dateFilter = "AND datetime(created_at, '+8 hours') >= date('now', '+8 hours', '-7 days')";
     } else if (period === '30d') {
-      dateFilter = "AND created_at >= date('now', '-30 days')";
+      dateFilter = "AND datetime(created_at, '+8 hours') >= date('now', '+8 hours', '-30 days')";
     }
     // 'all' or undefined = no date filter
 
@@ -292,7 +292,7 @@ router.get('/page-views', (req, res) => {
     ).get(...params).cnt;
 
     const today = db.prepare(
-      `SELECT COUNT(*) AS cnt FROM page_views WHERE created_at >= date('now') ${pageFilter} ${excludeAdmin}`
+      `SELECT COUNT(*) AS cnt FROM page_views WHERE datetime(created_at, '+8 hours') >= date('now', '+8 hours') ${pageFilter} ${excludeAdmin}`
     ).get(...params).cnt;
 
     const uniqueIps = db.prepare(
@@ -306,12 +306,12 @@ router.get('/page-views', (req, res) => {
        GROUP BY page ORDER BY count DESC`
     ).all(...params);
 
-    // By day (last 30 days)
+    // By day (last 30 days, 按北京时间分组)
     const byDay = db.prepare(
-      `SELECT date(created_at) AS date, COUNT(*) AS count
+      `SELECT date(created_at, '+8 hours') AS date, COUNT(*) AS count
        FROM page_views
-       WHERE created_at >= date('now', '-30 days') ${pageFilter} ${excludeAdmin}
-       GROUP BY date(created_at) ORDER BY date ASC`
+       WHERE datetime(created_at, '+8 hours') >= date('now', '+8 hours', '-30 days') ${pageFilter} ${excludeAdmin}
+       GROUP BY date(created_at, '+8 hours') ORDER BY date ASC`
     ).all(...params);
 
     // Recent 50 records

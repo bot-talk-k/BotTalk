@@ -1035,7 +1035,7 @@
           var statusBadge = isFailed
             ? '<span class="badge badge-red">失败</span>'
             : '<span class="badge badge-green">成功</span>';
-          var time = log.created_at ? new Date(log.created_at + 'Z').toLocaleString('zh-CN') : '-';
+          var time = log.created_at ? new Date(log.created_at + 'Z').toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }) : '-';
           var rowStyle = isAdminUnread ? ' style="background:rgba(255,59,48,0.04);"' : '';
           var action = isAdminUnread
             ? '<button class="btn btn-sm btn-secondary" style="font-size:11px;padding:2px 10px;" onclick="adminMarkLogRead(' + log.id + ')">已读</button>'
@@ -1338,7 +1338,7 @@
         recentHtml += '<tr>' +
           '<td>' + escapeHtml(r.page) + '</td>' +
           '<td>' + userName + '</td>' +
-          '<td>' + (r.created_at ? new Date(r.created_at + 'Z').toLocaleString('zh-CN') : '-') + '</td>' +
+          '<td>' + (r.created_at ? new Date(r.created_at + 'Z').toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }) : '-') + '</td>' +
           '</tr>';
       });
       document.getElementById('pv-recent-tbody').innerHTML = recentHtml || '<tr><td colspan="3" style="text-align:center;color:#8e8e93;padding:20px;">暂无数据</td></tr>';
