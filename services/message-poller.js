@@ -62,9 +62,32 @@ async function startMessagePoller(botToken, userId, onFirstMessage) {
             // 写入内存缓存
             contextTokenCache[userId] = msg.context_token;
 
-            // 持久化到 channels 表（含 last_inbound_at）
-            db.prepare(`UPDATE channels SET context_token = ?, status = 'active', last_inbound_at = CURRENT_TIMESTAMP WHERE bot_token = ? AND wechat_openid = ?`)
+            // 持久化到 channels 表：刷新 context_token + 复位所有衰退标记
+            // 用户回复证明通道活着，ret:-2 老化状态自动清零
+            db.prepare(`UPDATE channels
+              SET context_token = ?, status = 'active', last_inbound_at = CURRENT_TIMESTAMP,
+                  consecutive_neg2_count = 0
+              WHERE bot_token = ? AND wechat_openid = ?`)
               .run(msg.context_token, botToken, userId);
+
+            // 用户回复 → 标记该通道所有 pending 重试任务 + 恢复探测为"user_reply"恢复
+            try {
+              const chRow = db.prepare('SELECT id FROM channels WHERE bot_token = ? AND wechat_openid = ? LIMIT 1').get(botToken, userId);
+              if (chRow?.id) {
+                const r1 = db.prepare(`UPDATE push_retry_queue
+                  SET status = 'success', recovered_by = 'user_reply',
+                      recovered_at = CURRENT_TIMESTAMP, final_attempt_count = attempts
+                  WHERE channel_id = ? AND status = 'pending'`).run(chRow.id);
+                const r2 = db.prepare(`UPDATE neg2_recovery_probe
+                  SET recovered_at = CURRENT_TIMESTAMP, recovered_by = 'user_reply'
+                  WHERE channel_id = ? AND recovered_at IS NULL AND gave_up_at IS NULL`).run(chRow.id);
+                if (r1.changes > 0 || r2.changes > 0) {
+                  console.log(`♻️ 用户回复恢复: channel=${chRow.id} retry=${r1.changes} probe=${r2.changes}`);
+                }
+              }
+            } catch (e) {
+              console.error('用户回复复位失败:', e.message);
+            }
 
             // 记录 inbound_events（脱敏：仅存前 50 字预览）
             try {
