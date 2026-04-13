@@ -3,6 +3,7 @@ const router = express.Router();
 const db = require('../db');
 const { markSendResult } = require('../services/channel-health');
 const { enqueueSend } = require('../services/push-queue');
+const { appendTip } = require('../services/keepalive-tip');
 const { generateSendKey } = require('../db');
 const ilink = require('../ilink');
 const { requireLogin } = require('../middleware/auth');
@@ -46,9 +47,12 @@ async function resendFailedMessages(userId, channelId, botToken, wechatOpenid, c
       return; // 头部都发不出去就别硬补发了
     }
 
+    // 查通道完整记录用于 appendTip
+    const chRow = db.prepare('SELECT * FROM channels WHERE id = ?').get(channelId);
     let okCount = 0;
     for (const log of failed) {
-      const msg = (log.title || '') + (log.content ? '\n\n' + log.content : '');
+      const baseMsg = (log.title || '') + (log.content ? '\n\n' + log.content : '');
+      const msg = appendTip(baseMsg, chRow);
       try {
         const r = await enqueueSend(channelId,
           () => ilink.sendMessage(botToken, wechatOpenid, msg, contextToken),

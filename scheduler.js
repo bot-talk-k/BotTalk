@@ -4,6 +4,7 @@ const { getContextToken } = require('./services/message-poller');
 const { alertAdminsOnFailure } = require('./routes/notify');
 const { markSendResult } = require('./services/channel-health');
 const { enqueueSend } = require('./services/push-queue');
+const { appendTip } = require('./services/keepalive-tip');
 
 async function checkReminders() {
   const now = new Date();
@@ -59,20 +60,22 @@ async function checkReminders() {
       }
 
       // 先找 channel_id 供队列使用
-      const channelRowForQueue = db.prepare("SELECT id FROM channels WHERE bot_token = ? AND wechat_openid = ? LIMIT 1").get(r.bot_token, r.wechat_openid);
+      const channelRowForQueue = db.prepare("SELECT * FROM channels WHERE bot_token = ? AND wechat_openid = ? LIMIT 1").get(r.bot_token, r.wechat_openid);
       const queueChId = channelRowForQueue?.id;
+      // 追加保活尾巴
+      const finalMessage = appendTip(message, channelRowForQueue);
       let ilinkRes;
       const startedAt = Date.now();
       try {
         ilinkRes = await enqueueSend(queueChId,
-          () => ilink.sendMessage(r.bot_token, r.wechat_openid, message, contextToken),
+          () => ilink.sendMessage(r.bot_token, r.wechat_openid, finalMessage, contextToken),
           { title: r.title, source: 'scheduler' });
       } catch (retryErr) {
         if (retryErr.response?.data?.ret === -2) {
           console.log(`⏳ 提醒 ${r.wechat_openid} ret:-2，5秒后重试...`);
           await new Promise(resolve => setTimeout(resolve, 5000));
           const delaySec = Math.round((Date.now() - startedAt) / 1000);
-          const retryMessage = `ℹ️ 本消息因通道临时不稳定延迟 ${delaySec} 秒送达\n\n${message}`;
+          const retryMessage = `ℹ️ 本消息因通道临时不稳定延迟 ${delaySec} 秒送达\n\n${finalMessage}`;
           ilinkRes = await enqueueSend(queueChId,
             () => ilink.sendMessage(r.bot_token, r.wechat_openid, retryMessage, contextToken),
             { title: r.title, source: 'scheduler-retry' });
@@ -216,4 +219,92 @@ setInterval(checkSessionExpiry, 15 * 60 * 1000);
 setTimeout(checkSessionExpiry, 30000);
 console.log('⏱️ 24h 会话预警任务已启动');
 
-module.exports = { checkReminders, checkSessionExpiry };
+// ═══════════════════════════════════════════════════════════════════
+// 预防性保活提醒 — 在 context_token 还能用的"黄色警告"窗口主动提醒用户回复
+//
+// 触发条件（同时满足）：
+//   1. 有 context_token（能发送）
+//   2. consecutive_neg2_count = 0（尚未 ret:-2）
+//   3. 过去 4 小时没有成功推送 或 从未有过成功推送且通道超过 4h
+//   4. 用户从未回复过 或 最近 20 小时未回复
+//   5. 最近 4 小时内没发过保活提醒（去重）
+//
+// 目的：在通道衰退到 ret:-2 之前，主动让用户发一条消息刷新 context_token
+// ═══════════════════════════════════════════════════════════════════
+
+const lastKeepaliveReminderAt = {}; // channel_id → epoch ms
+
+async function checkKeepaliveReminders() {
+  try {
+    const channels = db.prepare(`
+      SELECT c.id, c.user_id, c.bot_token, c.wechat_openid, c.context_token,
+             c.consecutive_neg2_count, c.last_send_success_at, c.last_inbound_at,
+             c.created_at, c.send_disabled, u.nickname
+      FROM channels c JOIN users u ON u.id = c.user_id
+      WHERE c.context_token IS NOT NULL
+        AND (c.consecutive_neg2_count IS NULL OR c.consecutive_neg2_count = 0)
+        AND (c.send_disabled IS NULL OR c.send_disabled = 0)
+    `).all();
+
+    const now = Date.now();
+    for (const ch of channels) {
+      // 去重：4 小时内已发过就跳过
+      const lastSent = lastKeepaliveReminderAt[ch.id];
+      if (lastSent && now - lastSent < 4 * 60 * 60 * 1000) continue;
+
+      const lastOkAge = ch.last_send_success_at
+        ? now - new Date(ch.last_send_success_at + 'Z').getTime()
+        : now - new Date(ch.created_at + 'Z').getTime();
+      const lastInboundAge = ch.last_inbound_at
+        ? now - new Date(ch.last_inbound_at + 'Z').getTime()
+        : Infinity;
+
+      // 需要保活提醒的条件
+      const needsReminder =
+        lastOkAge > 4 * 60 * 60 * 1000 &&         // 超过 4 小时没成功推送
+        lastInboundAge > 20 * 60 * 60 * 1000;     // 超过 20 小时没回复（或从未）
+
+      if (!needsReminder) continue;
+
+      const okHours = Math.round(lastOkAge / 3600000);
+      const inboundDesc = ch.last_inbound_at
+        ? Math.round(lastInboundAge / 3600000) + ' 小时'
+        : '从未';
+      const msg = '🔔 通道保活提醒\n\n' +
+        `你的 BotTalk 通道距今已 ${okHours} 小时没有成功推送，且 ${inboundDesc} 没有回复过 Bot。\n\n` +
+        '由于腾讯微信 ClawBot 平台目前仍处于测试阶段，需要用户每 24 小时内与通道有互动才能保持活跃。\n\n' +
+        '✅ 保活方法：\n' +
+        '现在给我（Bot）回复任意一字（如"好""1""收到"）即可刷新通道，续命 24 小时。无需重新扫码。\n\n' +
+        '本提醒 4 小时内不会重复发送。';
+
+      try {
+        const r = await enqueueSend(ch.id,
+          () => ilink.sendMessage(ch.bot_token, ch.wechat_openid, msg, ch.context_token),
+          { title: '🔔 保活提醒', source: 'keepalive-reminder' });
+        db.prepare("INSERT INTO push_logs (user_id, title, content, status, ip, channel_id, response) VALUES (?, ?, ?, 'success', ?, ?, ?)")
+          .run(ch.user_id, '🔔 通道保活提醒', msg, 'keepalive-reminder', ch.id, JSON.stringify(r));
+        markSendResult(ch.id, r, true);
+        lastKeepaliveReminderAt[ch.id] = now;
+        console.log(`🔔 保活提醒已发送: channel=${ch.id} user=${ch.nickname} (${okHours}h 无成功推送)`);
+      } catch (e) {
+        const errData = e.response?.data;
+        db.prepare("INSERT INTO push_logs (user_id, title, content, status, ip, channel_id, response) VALUES (?, ?, ?, 'failed', ?, ?, ?)")
+          .run(ch.user_id, '🔔 通道保活提醒', msg, 'keepalive-reminder', ch.id, JSON.stringify(errData || { error: e.message }));
+        markSendResult(ch.id, e, false);
+        console.error(`❌ 保活提醒失败 channel=${ch.id}:`, JSON.stringify(errData));
+        // 即使失败也记录"已尝试"，避免无效重试（会记在内存 dedup 里）
+        lastKeepaliveReminderAt[ch.id] = now;
+      }
+    }
+  } catch (e) {
+    console.error('checkKeepaliveReminders 错误:', e.message);
+  }
+}
+
+// 每 30 分钟扫一次
+setInterval(checkKeepaliveReminders, 30 * 60 * 1000);
+// 启动 60 秒后先跑一次
+setTimeout(checkKeepaliveReminders, 60000);
+console.log('🔔 预防性保活提醒任务已启动');
+
+module.exports = { checkReminders, checkSessionExpiry, checkKeepaliveReminders };

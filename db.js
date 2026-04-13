@@ -299,6 +299,30 @@ if (!hasRun(14)) {
   markRun(14);
 }
 
+// Migration 17: channels.last_inbound_at + inbound_events 表
+// 记录用户 → bot 消息活动，用于精准保活触发和数据分析
+if (!hasRun(17)) {
+  const chCols = db.pragma('table_info(channels)');
+  if (!chCols.some(c => c.name === 'last_inbound_at')) {
+    try { db.exec('ALTER TABLE channels ADD COLUMN last_inbound_at DATETIME'); } catch (e) {}
+  }
+  try {
+    db.exec(`CREATE TABLE IF NOT EXISTS inbound_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      channel_id INTEGER REFERENCES channels(id),
+      wechat_openid TEXT,
+      from_user_id TEXT,
+      message_type INTEGER,
+      has_text INTEGER DEFAULT 0,
+      text_preview TEXT,
+      context_token_prefix TEXT,
+      received_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`);
+    db.exec('CREATE INDEX IF NOT EXISTS idx_inbound_events_channel_time ON inbound_events(channel_id, received_at DESC)');
+  } catch (e) { console.error('migration 17 table error:', e.message); }
+  markRun(17);
+}
+
 // Migration 16: channels 加 send_disabled — 表示 "iLink 拒绝发送但允许接收" 的半死态
 //   （典型场景：账号未实名认证被风控，getUpdates ok 但 sendMessage 返回 ret:-14）
 if (!hasRun(16)) {

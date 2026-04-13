@@ -59,11 +59,15 @@ function getChannelHealth(channel) {
   const neg2Count = channel.consecutive_neg2_count || 0;
   const dbStatus = channel.status;
 
+  const lastInbound = channel.last_inbound_at
+    ? now - new Date(channel.last_inbound_at + 'Z').getTime()
+    : null;
   const details = {
     poller_alive: hb.alive,
     poller_reason: hb.reason || null,
     last_send_ok_min: lastSendOk !== null ? Math.round(lastSendOk / 60000) : null,
     last_neg2_min: lastNeg2 !== null ? Math.round(lastNeg2 / 60000) : null,
+    last_inbound_min: lastInbound !== null ? Math.round(lastInbound / 60000) : null,
     consecutive_neg2_count: neg2Count,
     db_status: dbStatus,
     send_disabled: !!channel.send_disabled,

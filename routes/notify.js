@@ -5,6 +5,7 @@ const ilink = require('../ilink');
 const { logActivity } = require('../services/logger');
 const { markSendResult, classifyRet14, markSendDisabled } = require('../services/channel-health');
 const { enqueueSend } = require('../services/push-queue');
+const { appendTip } = require('../services/keepalive-tip');
 
 // 简单内存限流：每 Key 每小时最多 100 条
 const rateLimits = {};
@@ -121,7 +122,7 @@ async function handlePush(sendKey, title, content, clientIp, channelParam, req) 
     return { code: 40002, message: '没有可用的推送通道，请先绑定并激活通道', data: null };
   }
 
-  const message = title + (content ? '\n\n' + content : '');
+  const baseMessage = title + (content ? '\n\n' + content : '');
   const results = [];
 
   for (const channel of channels) {
@@ -129,6 +130,9 @@ async function handlePush(sendKey, title, content, clientIp, channelParam, req) 
       results.push({ channel_id: channel.id, status: 'skipped', reason: 'no context_token' });
       continue;
     }
+
+    // 业务推送追加保活尾巴（根据通道当前健康度选择短/长版）
+    const message = appendTip(baseMessage, channel);
 
     try {
       let ilinkRes;

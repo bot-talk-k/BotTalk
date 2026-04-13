@@ -212,6 +212,7 @@ router.get('/channels', (req, res) => {
       SELECT c.id, c.name, c.status, c.bot_token, c.wechat_openid, c.is_default, c.created_at,
              c.bot_token_updated_at, c.last_send_success_at, c.consecutive_neg2_count, c.last_neg2_at,
              c.send_disabled, c.send_disabled_reason, c.send_disabled_at,
+             c.last_inbound_at,
              u.id AS user_id, u.nickname, u.role
       FROM channels c
       JOIN users u ON c.user_id = u.id
@@ -233,6 +234,7 @@ router.get('/channels', (req, res) => {
         details: h.details,
         bot_token_updated_at: ch.bot_token_updated_at,
         last_send_success_at: ch.last_send_success_at,
+        last_inbound_at: ch.last_inbound_at,
         consecutive_neg2_count: ch.consecutive_neg2_count,
         last_neg2_at: ch.last_neg2_at,
       };

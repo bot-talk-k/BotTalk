@@ -413,12 +413,13 @@
                     <th>健康度</th>
                     <th>Poller</th>
                     <th>最近成功</th>
+                    <th>最近回复</th>
                     <th>连续 -2</th>
                     <th>说明</th>
                   </tr>
                 </thead>
                 <tbody id="channels-tbody">
-                  <tr><td colspan="9" style="text-align:center;color:#8e8e93;padding:40px;">加载中...</td></tr>
+                  <tr><td colspan="10" style="text-align:center;color:#8e8e93;padding:40px;">加载中...</td></tr>
                 </tbody>
               </table>
             </div>
@@ -684,9 +685,15 @@
       });
       var tbody = document.getElementById('channels-tbody');
       if (list.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#34c759;padding:40px;">' +
+        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#34c759;padding:40px;">' +
           (showAll ? '暂无通道' : '所有通道正常（绿色）') + '</td></tr>';
         return;
+      }
+      function fmtMins(mins) {
+        if (mins === null || mins === undefined) return '—';
+        if (mins < 60) return mins + ' 分钟前';
+        if (mins < 1440) return Math.round(mins/60) + ' 小时前';
+        return Math.round(mins/1440) + ' 天前';
       }
       var html = '';
       list.forEach(function(ch) {
@@ -699,9 +706,10 @@
         else if (ch.health === 'yellow') healthBadge = '<span class="badge" style="background:rgba(255,149,0,0.12);color:#b06500;">🟡 警告</span>';
         else healthBadge = '<span class="badge badge-red">🔴 异常</span>';
         var details = ch.details || {};
-        var lastSendOkStr = details.last_send_ok_min !== null
-          ? (details.last_send_ok_min < 60 ? details.last_send_ok_min + ' 分钟前' : Math.round(details.last_send_ok_min/60) + ' 小时前')
-          : '—';
+        var lastSendOkStr = fmtMins(details.last_send_ok_min);
+        var lastInboundStr = details.last_inbound_min !== null
+          ? (details.last_inbound_min > 360 ? '<span style="color:#b06500;">' + fmtMins(details.last_inbound_min) + '</span>' : fmtMins(details.last_inbound_min))
+          : '<span style="color:#8e8e93;">从未回复</span>';
         var pollerStr = details.poller_alive ? '✅ 活' : ('❌ ' + (details.poller_reason || '挂'));
         var neg2Str = details.consecutive_neg2_count > 0
           ? '<span style="color:#b06500;">连续 ' + details.consecutive_neg2_count + ' 次</span>'
@@ -715,6 +723,7 @@
           '<td>' + healthBadge + '</td>' +
           '<td>' + pollerStr + '</td>' +
           '<td>' + lastSendOkStr + '</td>' +
+          '<td>' + lastInboundStr + '</td>' +
           '<td>' + neg2Str + '</td>' +
           '<td style="max-width:180px;font-size:12px;color:#6e6e73;">' + escapeHtml(reasonText) + '</td>' +
           '</tr>';

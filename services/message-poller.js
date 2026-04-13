@@ -49,9 +49,39 @@ async function startMessagePoller(botToken, userId, onFirstMessage) {
             // 写入内存缓存
             contextTokenCache[userId] = msg.context_token;
 
-            // 持久化到 channels 表
-            db.prepare(`UPDATE channels SET context_token = ?, status = 'active' WHERE bot_token = ? AND wechat_openid = ?`)
+            // 持久化到 channels 表（含 last_inbound_at）
+            db.prepare(`UPDATE channels SET context_token = ?, status = 'active', last_inbound_at = CURRENT_TIMESTAMP WHERE bot_token = ? AND wechat_openid = ?`)
               .run(msg.context_token, botToken, userId);
+
+            // 记录 inbound_events（脱敏：仅存前 50 字预览）
+            try {
+              const channelRow = db.prepare('SELECT id FROM channels WHERE bot_token = ? AND wechat_openid = ? LIMIT 1').get(botToken, userId);
+              let textPreview = null;
+              let hasText = 0;
+              if (msg.item_list && msg.item_list.length > 0) {
+                const txtItem = msg.item_list.find(it => it.text_item?.text);
+                if (txtItem) {
+                  hasText = 1;
+                  textPreview = String(txtItem.text_item.text).substring(0, 50);
+                }
+              }
+              db.prepare(`
+                INSERT INTO inbound_events
+                (channel_id, wechat_openid, from_user_id, message_type, has_text, text_preview, context_token_prefix)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+              `).run(
+                channelRow?.id || null,
+                userId,
+                msg.from_user_id || null,
+                msg.message_type || null,
+                hasText,
+                textPreview,
+                msg.context_token.substring(0, 20)
+              );
+              console.log(`📥 inbound_event 记录: channel=${channelRow?.id} from=${msg.from_user_id} text="${textPreview || '(无)'}"`);
+            } catch (e) {
+              console.error('inbound_events 写入失败:', e.message);
+            }
 
             if (!hasReceivedFirstMessage && onFirstMessage) {
               hasReceivedFirstMessage = true;
