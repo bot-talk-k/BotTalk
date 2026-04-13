@@ -1057,7 +1057,7 @@
           '<button class="nav-btn nav-btn-logout" style="margin-left:4px;" onclick="logout()" data-i18n="nav.logout">' + t('nav.logout') + '</button>';
       } else {
         userArea.innerHTML =
-          '<button class="nav-btn nav-btn-login" onclick="showPage(\'home\');renderHeroContent();" data-i18n="nav.login">' + t('nav.login') + '</button>';
+          '<button class="nav-btn nav-btn-login" onclick="showPage(\'home\');renderHeroContent();setTimeout(loadHeroQR,80);" data-i18n="nav.login">' + t('nav.login') + '</button>';
       }
 
       // Show/hide admin link based on role
@@ -2405,10 +2405,18 @@
       await checkAuth();
 
       // 处理 ?rebind=1 — 失效后引导用户重新扫码
+      // 处理 ?from=intro — 从 intro 页"免费开始使用"过来，自动展开 QR
       var params = new URLSearchParams(window.location.search);
       var wantRebind = params.get('rebind') === '1';
+      var fromIntro = params.get('from') === 'intro';
 
-      if (wantRebind && currentUser) {
+      if (fromIntro && !currentUser) {
+        showPage('home');
+        renderHeroContent();
+        setTimeout(function() {
+          if (typeof loadHeroQR === 'function') loadHeroQR();
+        }, 200);
+      } else if (wantRebind && currentUser) {
         // 已登录：去通道页开始扫新码
         showPage('channelsPage');
         setTimeout(function() {
