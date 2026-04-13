@@ -133,11 +133,17 @@ function maybeSendAck(channelId, botToken, wechatOpenid, contextToken) {
   const now = Date.now();
   if ((lastAckAt[channelId] || 0) > now - ACK_DEDUP_MS) return;
   lastAckAt[channelId] = now;
-  // 首次回复（inbound_events 表里仅有刚插入的这 1 条）→ 专属"测试成功"文案
+  // 如果 5 分钟内刚发过欢迎/重绑消息，说明用户在测试通道 → 专属"测试成功"文案
   let text;
   try {
-    const cnt = db.prepare('SELECT COUNT(*) AS cnt FROM inbound_events WHERE channel_id = ?').get(channelId).cnt;
-    if (cnt <= 1) {
+    const recentWelcome = db.prepare(`
+      SELECT 1 FROM push_logs
+      WHERE channel_id = ? AND ip = 'system'
+        AND (title LIKE '%欢迎%' OR title LIKE '%重绑%')
+        AND created_at >= datetime('now', '-5 minutes')
+      LIMIT 1
+    `).get(channelId);
+    if (recentWelcome) {
       text = '🎉 测试成功！通道工作正常，欢迎使用 BotTalk。\n\n之后正常用 API 推送即可，记得偶尔回复一字保持通道活跃。';
     } else {
       text = ACK_MESSAGES[Math.floor(Math.random() * ACK_MESSAGES.length)];
