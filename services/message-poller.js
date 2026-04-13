@@ -56,6 +56,7 @@ async function startMessagePoller(botToken, userId, onFirstMessage) {
         let batchHasUserText = false;
         let batchChannelId = null;
         let batchContextToken = null;
+        let batchFiredFirstMessage = false;
         for (const msg of result.msgs) {
           if (msg.context_token) {
             // 写入内存缓存
@@ -102,13 +103,15 @@ async function startMessagePoller(botToken, userId, onFirstMessage) {
 
             if (!hasReceivedFirstMessage && onFirstMessage) {
               hasReceivedFirstMessage = true;
+              batchFiredFirstMessage = true;
               onFirstMessage(msg.context_token);
             }
           }
         }
 
         // 整批消息处理完后，统一回一次 ack（不论 N 条都只回 1 条）
-        if (batchHasUserText && batchChannelId && batchContextToken) {
+        // 但若本批触发了 onFirstMessage（首条消息 → welcome 已包含"测试通过"反馈），则跳过 ack 避免重复
+        if (batchHasUserText && batchChannelId && batchContextToken && !batchFiredFirstMessage) {
           maybeSendAck(batchChannelId, botToken, userId, batchContextToken);
         }
       }
@@ -133,24 +136,7 @@ function maybeSendAck(channelId, botToken, wechatOpenid, contextToken) {
   const now = Date.now();
   if ((lastAckAt[channelId] || 0) > now - ACK_DEDUP_MS) return;
   lastAckAt[channelId] = now;
-  // 如果 5 分钟内刚发过欢迎/重绑消息，说明用户在测试通道 → 专属"测试成功"文案
-  let text;
-  try {
-    const recentWelcome = db.prepare(`
-      SELECT 1 FROM push_logs
-      WHERE channel_id = ? AND ip = 'system'
-        AND (title LIKE '%欢迎%' OR title LIKE '%重绑%')
-        AND created_at >= datetime('now', '-5 minutes')
-      LIMIT 1
-    `).get(channelId);
-    if (recentWelcome) {
-      text = '🎉 测试成功！通道工作正常，欢迎使用 BotTalk。\n\n之后正常用 API 推送即可，记得偶尔回复一字保持通道活跃。';
-    } else {
-      text = ACK_MESSAGES[Math.floor(Math.random() * ACK_MESSAGES.length)];
-    }
-  } catch (e) {
-    text = ACK_MESSAGES[Math.floor(Math.random() * ACK_MESSAGES.length)];
-  }
+  const text = ACK_MESSAGES[Math.floor(Math.random() * ACK_MESSAGES.length)];
   // 延迟 require 避免循环依赖
   const { enqueueSend } = require('./push-queue');
   const { markSendResult } = require('./channel-health');

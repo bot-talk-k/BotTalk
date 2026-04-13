@@ -207,7 +207,7 @@ router.get('/bind-status-public/:qrcode', async (req, res) => {
         clearSendDisabled(existingChannel.id);
         markRecoveredByRescan(existingChannel.id);
         probeMarkRescan(existingChannel.id);
-        const welcomeMsg = '✅ 通道已激活（重绑恢复）\n\n欢迎回来！你的 BotTalk 通道已重新激活。\n\n📢 由于 腾讯微信 ClawBot 协议的限制，通道长时间无互动会被微信平台静默断开。\n\n✅ 临时保活方法（直到腾讯修复）：\n• 收到推送后回复一字（"在""好""1"），系统会立即回执确认\n• 没收到回执 = 通道已断 → 回 https://bot-talk.com/app 重新扫码\n• 每天发一字保活，可显著降低断开概率\n\n现在试试回复任意一字测试通道 👇';
+        const welcomeMsg = '✅ 通道已激活（重绑恢复）\n\n欢迎回来！你的 BotTalk 通道已重新激活。你刚才的回复已成功送达，通道测试通过 ✓\n\n📢 由于 腾讯微信 ClawBot 协议的限制，通道长时间无互动会被微信平台静默断开。\n\n✅ 临时保活方法（直到腾讯修复）：\n• 收到推送后回复一字（"在""好""1"），系统会立即回执确认\n• 没收到回执 = 通道已断 → 回 https://bot-talk.com/app 重新扫码\n• 每天发一字保活，可显著降低断开概率';
         enqueueSend(existingChannel.id,
           () => ilink.sendMessage(botToken, ilinkUserId, welcomeMsg, contextToken),
           { title: '🔄 重绑欢迎', source: 'rebind-welcome' })
@@ -262,7 +262,8 @@ router.get('/bind-status-public/:qrcode', async (req, res) => {
       const baseUrl = process.env.BASE_URL || 'https://bot-talk.com';
       const welcomeMsg =
         `🎉 欢迎使用 BotTalk！\n\n` +
-        `你的推送通道已激活成功。访问 ${baseUrl}/app 查看 SendKey 和 API 文档。\n\n` +
+        `你的推送通道已激活成功，刚才的回复已收到，通道测试通过 ✓\n` +
+        `访问 ${baseUrl}/app 查看 SendKey 和 API 文档。\n\n` +
         `━━━━━━━━━━━━\n` +
         `📢 关于通道稳定性（请花 30 秒了解）\n\n` +
         `坦白告知：本服务依赖的是 腾讯微信 ClawBot 通道——这是腾讯仍在内测灰度阶段的协议，存在一个我们无法绕开的限制：` +
@@ -272,8 +273,7 @@ router.get('/bind-status-public/:qrcode', async (req, res) => {
         `• 收到推送后顺手回复一字（"在""好""1"），系统会立即回执确认\n` +
         `• 没收到回执 = 通道已被腾讯断开 → 回 ${baseUrl}/app 重新扫码（数据不丢）\n` +
         `• 即使没收到推送，每天发一字保活，可显著降低断开概率\n\n` +
-        `🙏 这是当前阶段的权衡之计。我们持续跟进腾讯协议更新，一旦官方修复 bug，本提示和保活动作都会立即移除。\n\n` +
-        `现在试试回复任意一字看看 👇`;
+        `🙏 我们持续跟进腾讯协议更新，一旦官方修复 bug，本提示和保活动作都会立即移除。`;
       enqueueSend(channelId,
         () => ilink.sendMessage(botToken, ilinkUserId, welcomeMsg, contextToken),
         { title: '🎉 欢迎消息', source: 'new-user-welcome' })
