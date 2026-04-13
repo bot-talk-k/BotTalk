@@ -347,6 +347,7 @@
           <a href="#sec-push-logs" style="padding:4px 12px;border-radius:980px;font-size:13px;color:#0071e3;text-decoration:none;background:rgba(0,113,227,0.06);">推送日志</a>
           <a href="#sec-page-views" style="padding:4px 12px;border-radius:980px;font-size:13px;color:#0071e3;text-decoration:none;background:rgba(0,113,227,0.06);">访问统计</a>
           <a href="#sec-retry-queue" style="padding:4px 12px;border-radius:980px;font-size:13px;color:#0071e3;text-decoration:none;background:rgba(0,113,227,0.06);">重试队列</a>
+          <a href="#sec-neg2-probe" style="padding:4px 12px;border-radius:980px;font-size:13px;color:#0071e3;text-decoration:none;background:rgba(0,113,227,0.06);">恢复探测</a>
         </div>
       </div>
 
@@ -613,6 +614,43 @@
         </div>
       </div>
 
+      <!-- neg2 recovery probe -->
+      <div id="sec-neg2-probe" class="section-gray section">
+        <div class="container">
+          <div class="section-header">
+            <h2>ret:-2 恢复探测</h2>
+            <button class="btn btn-sm btn-secondary" onclick="loadNeg2Probe()">刷新</button>
+          </div>
+          <p style="color:#8e8e93;font-size:13px;margin:0 0 16px;">
+            重试队列用尽后转入此表，每 60 分钟低频探测一次直到通道自然恢复或 48 次后放弃。
+          </p>
+
+          <div class="stats-grid" style="grid-template-columns: repeat(4, 1fr);">
+            <div class="stat-card"><div class="stat-value" id="np-active">-</div><div class="stat-label">探测中</div></div>
+            <div class="stat-card"><div class="stat-value" id="np-recovered-auto" style="color:#34c759;">-</div><div class="stat-label">自然恢复</div></div>
+            <div class="stat-card"><div class="stat-value" id="np-recovered-rescan" style="color:#0071e3;">-</div><div class="stat-label">重扫恢复</div></div>
+            <div class="stat-card"><div class="stat-value" id="np-gaveup" style="color:#ff3b30;">-</div><div class="stat-label">已放弃</div></div>
+          </div>
+
+          <div class="card" style="padding:0;overflow:hidden;">
+            <div style="padding:16px 20px 8px;font-weight:600;font-size:14px;color:#6e6e73;">最近 100 条</div>
+            <div class="table-scroll">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>通道</th><th>用户</th><th>开始</th><th>探测次数</th>
+                    <th>最近码</th><th>下次/恢复</th><th>状态</th>
+                  </tr>
+                </thead>
+                <tbody id="np-recent-tbody">
+                  <tr><td colspan="7" style="text-align:center;color:#8e8e93;padding:20px;">加载中...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -711,7 +749,58 @@
     // ═══════════════════════════════════════════════════════════════════
     var channelsHealthData = [];
     async function loadData() {
-      await Promise.all([loadStats(), loadUsers(), loadPushLogs(), loadPageViews('30d'), loadChannelsHealth(), loadRetryQueue()]);
+      await Promise.all([loadStats(), loadUsers(), loadPushLogs(), loadPageViews('30d'), loadChannelsHealth(), loadRetryQueue(), loadNeg2Probe()]);
+    }
+
+    async function loadNeg2Probe() {
+      try {
+        var res = await apiFetch('/api/admin/neg2-probe');
+        var json = await res.json();
+        if (!json.success) throw new Error(json.error || 'error');
+        var d = json.data;
+
+        document.getElementById('np-active').textContent = d.stats.active || 0;
+        document.getElementById('np-gaveup').textContent = d.stats.gave_up || 0;
+        var recAuto = 0, recRescan = 0;
+        (d.stats.recovered || []).forEach(function(r) {
+          if (r.recovered_by === 'auto_probe') recAuto = r.cnt;
+          else if (r.recovered_by === 'rescan') recRescan = r.cnt;
+        });
+        document.getElementById('np-recovered-auto').textContent = recAuto;
+        document.getElementById('np-recovered-rescan').textContent = recRescan;
+
+        var tbody = document.getElementById('np-recent-tbody');
+        if (!d.recent || d.recent.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#8e8e93;padding:20px;">暂无数据</td></tr>';
+          return;
+        }
+        tbody.innerHTML = d.recent.map(function(r) {
+          var status, color;
+          if (r.recovered_at) {
+            status = r.recovered_by === 'auto_probe' ? '自然恢复' : r.recovered_by === 'rescan' ? '重扫恢复' : '已恢复';
+            color = '#34c759';
+          } else if (r.gave_up_at) {
+            status = '已放弃'; color = '#ff3b30';
+          } else {
+            status = '探测中'; color = '#ff9500';
+          }
+          var nextOrRec = r.recovered_at ? rqFmtTime(r.recovered_at)
+                        : r.gave_up_at ? rqFmtTime(r.gave_up_at)
+                        : rqFmtTime(r.next_probe_at);
+          var badge = '<span style="display:inline-block;padding:2px 8px;border-radius:6px;font-size:12px;background:' + color + '1a;color:' + color + ';">' + status + '</span>';
+          return '<tr>' +
+            '<td>' + r.channel_id + '</td>' +
+            '<td>' + (r.nickname || 'User#' + r.user_id) + '</td>' +
+            '<td>' + rqFmtTime(r.started_at) + '</td>' +
+            '<td>' + (r.probe_count || 0) + '/48</td>' +
+            '<td>' + (r.last_probe_code == null ? '-' : (r.last_probe_code === 0 ? 'ok' : 'ret:' + r.last_probe_code)) + '</td>' +
+            '<td>' + nextOrRec + '</td>' +
+            '<td>' + badge + '</td>' +
+          '</tr>';
+        }).join('');
+      } catch (e) {
+        console.error('loadNeg2Probe error:', e);
+      }
     }
 
     // ═══════════════════════════════════════════════════════════════════
