@@ -280,7 +280,11 @@ router.get('/page-views', (req, res) => {
       params.push(page);
     }
 
-    const where = `WHERE 1=1 ${dateFilter} ${pageFilter}`;
+    // 排除 admin 用户的访问（他们刷后台不算真实流量）
+    const excludeAdmin = `AND (user_id IS NULL OR user_id NOT IN (SELECT id FROM users WHERE role = 'admin'))`;
+    const excludeAdminPv = `AND (pv.user_id IS NULL OR pv.user_id NOT IN (SELECT id FROM users WHERE role = 'admin'))`;
+
+    const where = `WHERE 1=1 ${dateFilter} ${pageFilter} ${excludeAdmin}`;
 
     // Summary
     const total = db.prepare(
@@ -288,7 +292,7 @@ router.get('/page-views', (req, res) => {
     ).get(...params).cnt;
 
     const today = db.prepare(
-      `SELECT COUNT(*) AS cnt FROM page_views WHERE created_at >= date('now') ${pageFilter}`
+      `SELECT COUNT(*) AS cnt FROM page_views WHERE created_at >= date('now') ${pageFilter} ${excludeAdmin}`
     ).get(...params).cnt;
 
     const uniqueIps = db.prepare(
@@ -306,17 +310,18 @@ router.get('/page-views', (req, res) => {
     const byDay = db.prepare(
       `SELECT date(created_at) AS date, COUNT(*) AS count
        FROM page_views
-       WHERE created_at >= date('now', '-30 days') ${pageFilter}
+       WHERE created_at >= date('now', '-30 days') ${pageFilter} ${excludeAdmin}
        GROUP BY date(created_at) ORDER BY date ASC`
     ).all(...params);
 
     // Recent 50 records
+    const recentWhere = `WHERE 1=1 ${dateFilter.replace(/created_at/g, 'pv.created_at')} ${pageFilter.replace(/page =/g, 'pv.page =')} ${excludeAdminPv}`;
     const recent = db.prepare(
       `SELECT pv.page, pv.tab, pv.ip, pv.user_agent, pv.country, pv.created_at,
               u.nickname
        FROM page_views pv
        LEFT JOIN users u ON pv.user_id = u.id
-       ${where.replace(/created_at/g, 'pv.created_at').replace(/page =/g, 'pv.page =')}
+       ${recentWhere}
        ORDER BY pv.id DESC LIMIT 50`
     ).all(...params);
 
