@@ -467,4 +467,28 @@ router.get('/neg2-probe', (req, res) => {
   }
 });
 
+// ═══════════════════════════════════════════════════════════════════
+//  GET /api/admin/channels/:id/inbounds — 通道最近用户回复
+// ═══════════════════════════════════════════════════════════════════
+
+router.get('/channels/:id/inbounds', (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({ success: false, error: 'Invalid id' });
+    }
+    const events = db.prepare(`
+      SELECT id, message_type, has_text, text_preview, context_token_prefix, received_at
+      FROM inbound_events
+      WHERE channel_id = ?
+      ORDER BY id DESC LIMIT 50
+    `).all(id);
+    const total = db.prepare('SELECT COUNT(*) AS cnt FROM inbound_events WHERE channel_id = ?').get(id).cnt;
+    res.json({ success: true, data: { total, events } });
+  } catch (err) {
+    console.error('Admin channel inbounds error:', err.message);
+    res.status(500).json({ success: false, error: 'Internal error' });
+  }
+});
+
 module.exports = router;

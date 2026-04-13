@@ -322,6 +322,17 @@
   <!-- Toast container -->
   <div class="toast-container" id="toast-container"></div>
 
+  <!-- Channel inbounds modal -->
+  <div id="inbounds-modal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.5);align-items:center;justify-content:center;padding:16px;">
+    <div style="background:#fff;border-radius:14px;padding:20px 22px;max-width:600px;width:100%;max-height:85vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.25);">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <h3 id="inbounds-modal-title" style="margin:0;font-size:16px;font-weight:600;"></h3>
+        <button onclick="document.getElementById('inbounds-modal').style.display='none'" style="background:none;border:none;font-size:22px;cursor:pointer;color:#8e8e93;padding:0 4px;">&times;</button>
+      </div>
+      <div id="inbounds-modal-body" style="font-size:13px;color:#3a3a3c;">加载中...</div>
+    </div>
+  </div>
+
   <div class="main">
 
     <!-- Loading state -->
@@ -753,6 +764,38 @@
       await Promise.all([loadStats(), loadUsers(), loadPushLogs(), loadPageViews('30d'), loadChannelsHealth(), loadRetryQueue(), loadNeg2Probe()]);
     }
 
+    async function showChannelInbounds(channelId, nickname) {
+      var modal = document.getElementById('inbounds-modal');
+      var body = document.getElementById('inbounds-modal-body');
+      document.getElementById('inbounds-modal-title').textContent = '通道 ' + channelId + ' · ' + nickname + ' 最近回复';
+      body.innerHTML = '加载中...';
+      modal.style.display = 'flex';
+      try {
+        var res = await apiFetch('/api/admin/channels/' + channelId + '/inbounds');
+        var json = await res.json();
+        if (!json.success) throw new Error(json.error || 'error');
+        var d = json.data;
+        if (!d.events || d.events.length === 0) {
+          body.innerHTML = '<p style="color:#8e8e93;">该通道暂无任何用户回复记录</p>';
+          return;
+        }
+        var rows = d.events.map(function(ev) {
+          var t = new Date(ev.received_at + 'Z').toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
+          var typeLabel = ev.has_text ? '📝 文本' : ('📦 类型 ' + (ev.message_type || '?'));
+          var preview = ev.text_preview ? '"' + escapeHtml(ev.text_preview) + '"' : '<span style="color:#8e8e93;">(非文本)</span>';
+          return '<tr><td style="padding:8px 6px;border-bottom:1px solid #f0f0f0;">' + t + '</td>' +
+                 '<td style="padding:8px 6px;border-bottom:1px solid #f0f0f0;">' + typeLabel + '</td>' +
+                 '<td style="padding:8px 6px;border-bottom:1px solid #f0f0f0;">' + preview + '</td></tr>';
+        }).join('');
+        body.innerHTML = '<p style="margin:0 0 10px;color:#6e6e73;">总计 ' + d.total + ' 条，显示最近 ' + d.events.length + ' 条</p>' +
+          '<table style="width:100%;border-collapse:collapse;font-size:12px;">' +
+          '<thead><tr style="text-align:left;color:#8e8e93;"><th style="padding:6px;">时间</th><th style="padding:6px;">类型</th><th style="padding:6px;">内容</th></tr></thead>' +
+          '<tbody>' + rows + '</tbody></table>';
+      } catch (e) {
+        body.innerHTML = '<p style="color:#ff3b30;">加载失败：' + e.message + '</p>';
+      }
+    }
+
     async function loadNeg2Probe() {
       try {
         var res = await apiFetch('/api/admin/neg2-probe');
@@ -962,7 +1005,7 @@
         var reasonText = ch.reason || '-';
         html += '<tr title="' + escapeHtml(reasonText) + '">' +
           '<td>' + ch.id + '</td>' +
-          '<td>' + escapeHtml(ch.nickname) + '</td>' +
+          '<td><a href="javascript:void(0)" onclick="showChannelInbounds(' + ch.id + ',\'' + escapeHtml(ch.nickname).replace(/'/g, "\\'") + '\')" style="color:#0071e3;text-decoration:none;">' + escapeHtml(ch.nickname) + '</a></td>' +
           '<td>' + escapeHtml(ch.name || '-') + '</td>' +
           '<td>' + roleBadge + '</td>' +
           '<td>' + healthBadge + '</td>' +
