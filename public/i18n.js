@@ -148,6 +148,7 @@ const I18N = {
     // QR (kept for channel binding)
     'qr.loading': '正在加载二维码...',
     'qr.scan_hint': '请用微信扫描上方二维码',
+    'qr.long_press_hint': '手机访问可长按二维码识别',
     'qr.countdown_prefix': '二维码有效期：',
     'qr.expired': '二维码已过期',
     'qr.retry': '重新获取',
@@ -426,6 +427,7 @@ const I18N = {
     // QR (kept for channel binding)
     'qr.loading': 'Loading QR code...',
     'qr.scan_hint': 'Scan the QR code above with WeChat',
+    'qr.long_press_hint': 'On mobile, long-press the QR to recognize',
     'qr.countdown_prefix': 'QR code expires in: ',
     'qr.expired': 'QR code has expired',
     'qr.retry': 'Refresh',

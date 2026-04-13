@@ -4,6 +4,15 @@ const db = require('../db');
 // 内存缓存
 const contextTokenCache = {};
 const pollerHeartbeat = {}; // botToken -> { lastOk: timestamp, alive: bool }
+const lastAckAt = {};       // channelId -> timestamp（回执去重）
+
+// 回执文案池（轮换避免机械感）
+const ACK_MESSAGES = [
+  '✅ 收到，通道状态已刷新，谢谢配合',
+  '✅ 已收到你的回复，通道保持活跃中',
+  '✅ 收到，谢谢——你的回复有助于通道稳定',
+];
+const ACK_DEDUP_MS = 30 * 1000;
 
 // 启动长轮询服务（持续接收消息）
 async function startMessagePoller(botToken, userId, onFirstMessage) {
@@ -44,6 +53,9 @@ async function startMessagePoller(botToken, userId, onFirstMessage) {
       }
 
       if (result.msgs && result.msgs.length > 0) {
+        let batchHasUserText = false;
+        let batchChannelId = null;
+        let batchContextToken = null;
         for (const msg of result.msgs) {
           if (msg.context_token) {
             // 写入内存缓存
@@ -79,6 +91,11 @@ async function startMessagePoller(botToken, userId, onFirstMessage) {
                 msg.context_token.substring(0, 20)
               );
               console.log(`📥 inbound_event 记录: channel=${channelRow?.id} from=${msg.from_user_id} text="${textPreview || '(无)'}"`);
+              if (hasText) {
+                batchHasUserText = true;
+                batchChannelId = channelRow?.id || null;
+                batchContextToken = msg.context_token;
+              }
             } catch (e) {
               console.error('inbound_events 写入失败:', e.message);
             }
@@ -88,6 +105,11 @@ async function startMessagePoller(botToken, userId, onFirstMessage) {
               onFirstMessage(msg.context_token);
             }
           }
+        }
+
+        // 整批消息处理完后，统一回一次 ack（不论 N 条都只回 1 条）
+        if (batchHasUserText && batchChannelId && batchContextToken) {
+          maybeSendAck(batchChannelId, botToken, userId, batchContextToken);
         }
       }
     } catch (error) {
@@ -103,6 +125,34 @@ async function startMessagePoller(botToken, userId, onFirstMessage) {
       await new Promise(resolve => setTimeout(resolve, 1000));
     }
   }
+}
+
+// 用户回复时秒回一条确认（让用户知道"我们收到了"）
+// 同 channel 30 秒去重；走 push-queue 限流；失败不重试（在 push_logs 可见即可）
+function maybeSendAck(channelId, botToken, wechatOpenid, contextToken) {
+  const now = Date.now();
+  if ((lastAckAt[channelId] || 0) > now - ACK_DEDUP_MS) return;
+  lastAckAt[channelId] = now;
+  const text = ACK_MESSAGES[Math.floor(Math.random() * ACK_MESSAGES.length)];
+  // 延迟 require 避免循环依赖
+  const { enqueueSend } = require('./push-queue');
+  const { markSendResult } = require('./channel-health');
+  enqueueSend(channelId,
+    () => ilink.sendMessage(botToken, wechatOpenid, text, contextToken),
+    { title: 'ack', source: 'inbound-ack' })
+    .then(r => {
+      markSendResult(channelId, r, true);
+      try {
+        db.prepare(`INSERT INTO push_logs (user_id, title, content, status, ip, channel_id, response)
+          SELECT user_id, '✅ 回执', ?, 'success', 'inbound-ack', id, ?
+          FROM channels WHERE id = ?`)
+          .run(text, JSON.stringify(r), channelId);
+      } catch (e) {}
+    })
+    .catch(err => {
+      markSendResult(channelId, err, false);
+      console.error(`📤 ack 失败 channel=${channelId}:`, err.message);
+    });
 }
 
 // 检查通道是否存活（不调 iLink API，只看 poller 心跳）

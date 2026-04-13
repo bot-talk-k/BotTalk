@@ -1217,11 +1217,14 @@
 
         qrArea.innerHTML =
           '<p style="font-size: 15px; font-weight: 500; margin-bottom: 12px;">' + t('hero.scan_to_start') + '</p>' +
-          '<canvas id="hero-qr-canvas" style="border-radius: 12px;"></canvas>' +
+          '<img id="hero-qr-img" alt="QR" style="width:200px;height:200px;border-radius:12px;display:block;margin:0 auto;">' +
+          '<p style="font-size:12px;color:#8e8e93;margin-top:6px;">📱 ' + t('qr.long_press_hint') + '</p>' +
           '<p id="hero-qr-countdown" style="font-size: 13px; color: #8e8e93; margin-top: 8px;"></p>';
 
-        QRCode.toCanvas(document.getElementById('hero-qr-canvas'), qrUrl, {
-          width: 200, margin: 2, color: { dark: '#1d1d1f', light: '#ffffff' }
+        QRCode.toDataURL(qrUrl, {
+          width: 400, margin: 2, color: { dark: '#1d1d1f', light: '#ffffff' }
+        }).then(function(dataUrl) {
+          document.getElementById('hero-qr-img').src = dataUrl;
         });
 
         var remaining = 300;
@@ -1323,6 +1326,7 @@
             '<button class="btn btn-secondary" onclick="showPage(\'logsPage\')" style="padding: 12px 24px;">' + t('nav.logs') + '</button>' +
           '</div>' +
         '</div>';
+      setTimeout(showStabilityNotice, 600);
     }
 
     async function pollHeroActivationThenSuccess(channelId, area, isNew) {
@@ -1524,14 +1528,17 @@
             '</div>' +
             '<h3 style="margin-bottom: 16px;">' + t('ch.scan_new') + '</h3>' +
             '<div class="qr-wrapper" id="ch-qr-wrapper">' +
-              '<canvas id="ch-qr-canvas"></canvas>' +
+              '<img id="ch-qr-img" alt="QR" style="width:200px;height:200px;border-radius:12px;display:block;margin:0 auto;">' +
+              '<p style="font-size:12px;color:#8e8e93;margin-top:6px;text-align:center;">📱 ' + t('qr.long_press_hint') + '</p>' +
               '<p class="qr-countdown" id="ch-qr-countdown"></p>' +
               '<p class="qr-hint">' + t('qr.scan_hint') + '</p>' +
             '</div>' +
           '</div>';
 
-        QRCode.toCanvas(document.getElementById('ch-qr-canvas'), qrUrl, {
-          width: 200, margin: 2, color: { dark: '#1d1d1f', light: '#ffffff' }
+        QRCode.toDataURL(qrUrl, {
+          width: 400, margin: 2, color: { dark: '#1d1d1f', light: '#ffffff' }
+        }).then(function(dataUrl) {
+          document.getElementById('ch-qr-img').src = dataUrl;
         });
 
         var remaining = QR_EXPIRE_SECONDS;
@@ -1675,6 +1682,7 @@
         '</div>';
 
       showToast(t('qr.bind_done'));
+      setTimeout(showStabilityNotice, 800);
 
       setTimeout(function() {
         area.classList.add('hidden');
@@ -2445,7 +2453,51 @@
     </div>
   </div>
 
+  <!-- Stability notice modal (shown after successful bind, with 10-day dismissal) -->
+  <div id="stability-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;z-index:9999;background:rgba(0,0,0,0.5);align-items:center;justify-content:center;padding:16px;">
+    <div style="background:#fff;border-radius:16px;padding:28px 24px;max-width:520px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.25);">
+      <h3 style="font-size:18px;font-weight:700;margin:0 0 16px;color:#1d1d1f;">📢 关于通道稳定性的重要说明</h3>
+      <div style="font-size:14px;line-height:1.7;color:#3a3a3c;">
+        <p>感谢绑定 BotTalk！请花 30 秒了解一个<strong>当前阶段必须配合的小事</strong>：</p>
+        <p>我们底层依赖的是腾讯 <strong>微信 ClawBot 通道</strong>——一个仍在内测灰度阶段的协议。已知不完善：通道如果长时间没有活跃互动，<strong>会被微信平台静默断开</strong>，表现为推送失败、消息收不到。</p>
+        <div style="background:#f5f5f7;border-radius:10px;padding:14px 16px;margin:14px 0;">
+          <p style="margin:0 0 8px;font-weight:600;color:#0071e3;">✅ 临时保活方法（直到腾讯修复）</p>
+          <ul style="margin:0;padding-left:20px;">
+            <li>收到推送后顺手在微信回复一字（"好""在""1"），系统会<strong>立即回执</strong>，证明通道正常</li>
+            <li>如果<strong>没收到回执</strong>，说明通道已被平台断开 → 回到本站<strong>重新扫码</strong>即可（数据不丢）</li>
+            <li>即使近期没收到推送，<strong>每天发一字保活</strong>，可显著降低断开概率</li>
+          </ul>
+        </div>
+        <p style="color:#6e6e73;font-size:13px;">🙏 这是当前阶段的权衡之计。一旦腾讯协议修复，本提示会立即移除。感谢理解。</p>
+      </div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px;flex-wrap:wrap;">
+        <button class="btn btn-secondary" onclick="dismissStabilityNotice(true)" style="padding:10px 16px;">10 天内不再提示</button>
+        <button class="btn btn-primary" onclick="dismissStabilityNotice(false)" style="padding:10px 20px;">我知道了</button>
+      </div>
+    </div>
+  </div>
+
   <script>
+    var STABILITY_NOTICE_KEY = 'bottalk_stability_notice_dismissed_until';
+    function showStabilityNotice() {
+      try {
+        var until = parseInt(localStorage.getItem(STABILITY_NOTICE_KEY) || '0', 10);
+        if (until && Date.now() < until) return; // 10 天内已 dismissed
+      } catch (e) {}
+      var m = document.getElementById('stability-modal');
+      if (m) m.style.display = 'flex';
+    }
+    function dismissStabilityNotice(persist) {
+      var m = document.getElementById('stability-modal');
+      if (m) m.style.display = 'none';
+      if (persist) {
+        try {
+          var tenDays = 10 * 24 * 60 * 60 * 1000;
+          localStorage.setItem(STABILITY_NOTICE_KEY, String(Date.now() + tenDays));
+        } catch (e) {}
+      }
+    }
+
     function openContactModal() {
       var modal = document.getElementById('contact-modal');
       document.getElementById('contact-modal-title').textContent = t('contact.title');
