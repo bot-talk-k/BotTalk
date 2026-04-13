@@ -133,7 +133,18 @@ function maybeSendAck(channelId, botToken, wechatOpenid, contextToken) {
   const now = Date.now();
   if ((lastAckAt[channelId] || 0) > now - ACK_DEDUP_MS) return;
   lastAckAt[channelId] = now;
-  const text = ACK_MESSAGES[Math.floor(Math.random() * ACK_MESSAGES.length)];
+  // 首次回复（inbound_events 表里仅有刚插入的这 1 条）→ 专属"测试成功"文案
+  let text;
+  try {
+    const cnt = db.prepare('SELECT COUNT(*) AS cnt FROM inbound_events WHERE channel_id = ?').get(channelId).cnt;
+    if (cnt <= 1) {
+      text = '🎉 测试成功！通道工作正常，欢迎使用 BotTalk。\n\n之后正常用 API 推送即可，记得偶尔回复一字保持通道活跃。';
+    } else {
+      text = ACK_MESSAGES[Math.floor(Math.random() * ACK_MESSAGES.length)];
+    }
+  } catch (e) {
+    text = ACK_MESSAGES[Math.floor(Math.random() * ACK_MESSAGES.length)];
+  }
   // 延迟 require 避免循环依赖
   const { enqueueSend } = require('./push-queue');
   const { markSendResult } = require('./channel-health');
