@@ -244,7 +244,7 @@ router.get('/bind-status-public/:qrcode', async (req, res) => {
     // ── 全新用户：创建用户 + 创建通道 ──
     const sendKey = generateSendKey();
     const now = new Date();
-    const defaultNickname = now.getFullYear() + String(now.getMonth() + 1).padStart(2, '0') + String(now.getDate()).padStart(2, '0') + '-' + String(now.getHours()).padStart(2, '0') + String(now.getMinutes()).padStart(2, '0');
+    const defaultNickname = now.getFullYear() + String(now.getMonth() + 1).padStart(2, '0') + String(now.getDate()).padStart(2, '0') + String(now.getHours()).padStart(2, '0') + String(now.getMinutes()).padStart(2, '0');
     const userInfo = db.prepare(
       'INSERT INTO users (send_key, wechat_openid, nickname) VALUES (?, ?, ?)'
     ).run(sendKey, ilinkUserId, defaultNickname);
