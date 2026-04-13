@@ -346,6 +346,7 @@
           <a href="#sec-users" style="padding:4px 12px;border-radius:980px;font-size:13px;color:#0071e3;text-decoration:none;background:rgba(0,113,227,0.06);">用户管理</a>
           <a href="#sec-push-logs" style="padding:4px 12px;border-radius:980px;font-size:13px;color:#0071e3;text-decoration:none;background:rgba(0,113,227,0.06);">推送日志</a>
           <a href="#sec-page-views" style="padding:4px 12px;border-radius:980px;font-size:13px;color:#0071e3;text-decoration:none;background:rgba(0,113,227,0.06);">访问统计</a>
+          <a href="#sec-retry-queue" style="padding:4px 12px;border-radius:980px;font-size:13px;color:#0071e3;text-decoration:none;background:rgba(0,113,227,0.06);">重试队列</a>
         </div>
       </div>
 
@@ -562,6 +563,56 @@
         </div>
       </div>
 
+      <!-- Retry queue -->
+      <div id="sec-retry-queue" class="section-gray section">
+        <div class="container">
+          <div class="section-header">
+            <h2>重试队列</h2>
+            <button class="btn btn-sm btn-secondary" onclick="loadRetryQueue()">刷新</button>
+          </div>
+
+          <!-- 状态汇总 -->
+          <div class="stats-grid" style="grid-template-columns: repeat(5, 1fr);" id="rq-summary">
+            <div class="stat-card"><div class="stat-value" id="rq-pending">-</div><div class="stat-label">待重试</div></div>
+            <div class="stat-card"><div class="stat-value" id="rq-due">-</div><div class="stat-label">即将执行</div></div>
+            <div class="stat-card"><div class="stat-value" id="rq-success" style="color:#34c759;">-</div><div class="stat-label">已恢复</div></div>
+            <div class="stat-card"><div class="stat-value" id="rq-exhausted" style="color:#ff3b30;">-</div><div class="stat-label">已放弃</div></div>
+            <div class="stat-card"><div class="stat-value" id="rq-abandoned" style="color:#8e8e93;">-</div><div class="stat-label">通道失效</div></div>
+          </div>
+
+          <!-- 分析（按恢复路径 × 重试次数） -->
+          <div class="card" style="padding:0;overflow:hidden;margin-bottom:16px;">
+            <div style="padding:16px 20px 8px;font-weight:600;font-size:14px;color:#6e6e73;">分析：成功路径 × 最终重试次数</div>
+            <div class="table-scroll">
+              <table class="data-table">
+                <thead><tr><th>恢复路径</th><th>最终重试次数</th><th>数量</th></tr></thead>
+                <tbody id="rq-analytics-tbody">
+                  <tr><td colspan="3" style="text-align:center;color:#8e8e93;padding:20px;">加载中...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- 最近 100 条 -->
+          <div class="card" style="padding:0;overflow:hidden;">
+            <div style="padding:16px 20px 8px;font-weight:600;font-size:14px;color:#6e6e73;">最近 100 条任务</div>
+            <div class="table-scroll">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>ID</th><th>用户</th><th>通道</th><th>标题</th>
+                    <th>首错</th><th>进度</th><th>下次/恢复</th><th>状态</th><th>历史</th>
+                  </tr>
+                </thead>
+                <tbody id="rq-recent-tbody">
+                  <tr><td colspan="9" style="text-align:center;color:#8e8e93;padding:20px;">加载中...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -660,7 +711,111 @@
     // ═══════════════════════════════════════════════════════════════════
     var channelsHealthData = [];
     async function loadData() {
-      await Promise.all([loadStats(), loadUsers(), loadPushLogs(), loadPageViews('30d'), loadChannelsHealth()]);
+      await Promise.all([loadStats(), loadUsers(), loadPushLogs(), loadPageViews('30d'), loadChannelsHealth(), loadRetryQueue()]);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  Retry queue
+    // ═══════════════════════════════════════════════════════════════════
+    function rqFmtTime(t) {
+      if (!t) return '-';
+      var d = new Date(t + (t.indexOf('Z') < 0 ? 'Z' : ''));
+      var diff = (Date.now() - d.getTime()) / 60000;
+      if (diff < 0) return Math.round(-diff) + ' 分后';
+      if (diff < 60) return Math.round(diff) + ' 分前';
+      if (diff < 1440) return Math.round(diff / 60 * 10) / 10 + ' 小时前';
+      return Math.round(diff / 1440 * 10) / 10 + ' 天前';
+    }
+
+    function rqStatusBadge(status, recoveredBy) {
+      var color, text;
+      if (status === 'success') {
+        color = '#34c759';
+        text = recoveredBy === 'retry' ? '重试恢复' : recoveredBy === 'rescan' ? '重扫恢复' : '已恢复';
+      } else if (status === 'pending') {
+        color = '#ff9500';
+        text = '待重试';
+      } else if (status === 'exhausted') {
+        color = '#ff3b30';
+        text = '已用尽';
+      } else if (status === 'abandoned') {
+        color = '#8e8e93';
+        text = '通道失效';
+      } else {
+        color = '#8e8e93'; text = status;
+      }
+      return '<span style="display:inline-block;padding:2px 8px;border-radius:6px;font-size:12px;background:' + color + '1a;color:' + color + ';">' + text + '</span>';
+    }
+
+    async function loadRetryQueue() {
+      try {
+        var res = await apiFetch('/api/admin/retry-queue');
+        var json = await res.json();
+        if (!json.success) throw new Error(json.error || 'error');
+        var data = json.data;
+
+        // Summary
+        var byStatus = {};
+        (data.stats.by_status || []).forEach(function(r) { byStatus[r.status] = r.cnt; });
+        document.getElementById('rq-pending').textContent = byStatus.pending || 0;
+        document.getElementById('rq-due').textContent = data.stats.due_now || 0;
+        document.getElementById('rq-success').textContent = byStatus.success || 0;
+        document.getElementById('rq-exhausted').textContent = byStatus.exhausted || 0;
+        document.getElementById('rq-abandoned').textContent = byStatus.abandoned || 0;
+
+        // Analytics
+        var aTbody = document.getElementById('rq-analytics-tbody');
+        if (!data.analytics || data.analytics.length === 0) {
+          aTbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:#8e8e93;padding:20px;">暂无数据</td></tr>';
+        } else {
+          aTbody.innerHTML = data.analytics.map(function(a) {
+            var pathMap = { retry: '重试成功', rescan: '重扫恢复', channel_dead: '通道失效', no_context_token: '无 context_token' };
+            var label = pathMap[a.recovered_by] || a.recovered_by || '未尽（exhausted）';
+            return '<tr><td>' + label + '</td><td>' + (a.final_attempt_count == null ? '-' : a.final_attempt_count) + '</td><td>' + a.cnt + '</td></tr>';
+          }).join('');
+        }
+
+        // Recent
+        var rTbody = document.getElementById('rq-recent-tbody');
+        if (!data.recent || data.recent.length === 0) {
+          rTbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#8e8e93;padding:20px;">暂无数据</td></tr>';
+        } else {
+          rTbody.innerHTML = data.recent.map(function(r) {
+            var nextOrRec = r.status === 'pending' ? rqFmtTime(r.next_try_at)
+                          : r.recovered_at ? rqFmtTime(r.recovered_at)
+                          : r.last_try_at ? rqFmtTime(r.last_try_at) : '-';
+            var progress = (r.attempts || 0) + '/' + (r.max_attempts || 4);
+            var historyBtn = '<button class="btn btn-sm btn-secondary" onclick=\'showRetryHistory(' + JSON.stringify(r.failure_history || '[]').replace(/\'/g, '&apos;') + ')\'>查看</button>';
+            return '<tr>' +
+              '<td>' + r.id + '</td>' +
+              '<td>' + (r.nickname || 'User#' + r.user_id) + '</td>' +
+              '<td>' + r.channel_id + '</td>' +
+              '<td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + (r.title || '').replace(/"/g,'&quot;') + '">' + (r.title || '(无)') + '</td>' +
+              '<td>' + (r.first_error_code == null ? '-' : 'ret:' + r.first_error_code) + '</td>' +
+              '<td>' + progress + '</td>' +
+              '<td>' + nextOrRec + '</td>' +
+              '<td>' + rqStatusBadge(r.status, r.recovered_by) + '</td>' +
+              '<td>' + historyBtn + '</td>' +
+            '</tr>';
+          }).join('');
+        }
+      } catch (e) {
+        console.error('loadRetryQueue error:', e);
+      }
+    }
+
+    function showRetryHistory(historyJson) {
+      var hist;
+      try { hist = typeof historyJson === 'string' ? JSON.parse(historyJson) : historyJson; } catch (e) { hist = []; }
+      var lines = hist.map(function(h) {
+        var t = new Date(h.at).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
+        var phase = h.phase || '?';
+        var code = h.code != null ? ' ret:' + h.code : '';
+        var msg = h.msg ? ' — ' + h.msg : '';
+        var elapsed = h.elapsed_ms != null ? ' (' + h.elapsed_ms + 'ms)' : '';
+        return '#' + h.attempt + ' ' + t + ' [' + phase + ']' + code + elapsed + msg;
+      }).join('\n');
+      alert(lines || '(无历史)');
     }
 
     async function loadChannelsHealth() {

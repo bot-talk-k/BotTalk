@@ -6,6 +6,7 @@ const { logActivity } = require('../services/logger');
 const { markSendResult, classifyRet14, markSendDisabled } = require('../services/channel-health');
 const { enqueueSend } = require('../services/push-queue');
 const { appendTip } = require('../services/keepalive-tip');
+const { enqueueRetry } = require('../services/retry-queue');
 
 // 简单内存限流：每 Key 每小时最多 100 条
 const rateLimits = {};
@@ -196,12 +197,27 @@ async function handlePush(sendKey, title, content, clientIp, channelParam, req) 
         console.error(`⚠️ 通道 ${channel.id} 已标记为 inactive（HTTP ${errStatus}）`);
       }
 
-      db.prepare(`
+      const logInfo = db.prepare(`
         INSERT INTO push_logs (user_id, title, content, status, ip, channel_id, response)
         VALUES (?, ?, ?, 'failed', ?, ?, ?)
       `).run(user.id, title, content, clientIp, channel.id, resJson);
 
-      logActivity(user.id, 'push_fail', { channel_id: channel.id, error: error.message, token_invalid: tokenInvalid }, req);
+      // 入延时重试队列：ret:-2 或 半死态（send_disabled 未设，真 session 死已标 inactive 除外）
+      const retCode = errData?.ret;
+      const shouldRetry = !tokenInvalid && (retCode === -2 || retCode === -14);
+      if (shouldRetry) {
+        enqueueRetry({
+          userId: user.id,
+          channelId: channel.id,
+          title,
+          content,
+          source: 'api',
+          originalPushLogId: logInfo.lastInsertRowid,
+          firstError: errData || { message: error.message },
+        });
+      }
+
+      logActivity(user.id, 'push_fail', { channel_id: channel.id, error: error.message, token_invalid: tokenInvalid, enqueued_retry: shouldRetry }, req);
       console.error('❌ 推送失败:', errData || error.message);
       alertAdminsOnFailure({
         userId: user.id,

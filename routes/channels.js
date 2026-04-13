@@ -4,6 +4,9 @@ const db = require('../db');
 const { markSendResult } = require('../services/channel-health');
 const { enqueueSend } = require('../services/push-queue');
 const { appendTip } = require('../services/keepalive-tip');
+const { markRecoveredByRescan } = require('../services/retry-queue');
+const { markRecoveredByRescan: probeMarkRescan } = require('../services/neg2-probe');
+const { clearSendDisabled } = require('../services/channel-health');
 const { generateSendKey } = require('../db');
 const ilink = require('../ilink');
 const { requireLogin } = require('../middleware/auth');
@@ -201,6 +204,9 @@ router.get('/bind-status-public/:qrcode', async (req, res) => {
       startMessagePoller(botToken, ilinkUserId, (contextToken) => {
         db.prepare("UPDATE channels SET context_token = ?, status = 'active' WHERE id = ?")
           .run(contextToken, existingChannel.id);
+        clearSendDisabled(existingChannel.id);
+        markRecoveredByRescan(existingChannel.id);
+        probeMarkRescan(existingChannel.id);
         const welcomeMsg = '✅ 通道已激活（重绑恢复）\n\n欢迎回来！你的 BotTalk 通道已重新激活。';
         enqueueSend(existingChannel.id,
           () => ilink.sendMessage(botToken, ilinkUserId, welcomeMsg, contextToken),
@@ -364,6 +370,9 @@ router.get('/bind-status/:qrcode', async (req, res) => {
         startMessagePoller(botToken, ilinkUserId, (contextToken) => {
           db.prepare("UPDATE channels SET context_token = ?, status = 'active' WHERE id = ?")
             .run(contextToken, existingChannel.id);
+          clearSendDisabled(existingChannel.id);
+          markRecoveredByRescan(existingChannel.id);
+        probeMarkRescan(existingChannel.id);
           const rebindMsg = '✅ 通道已激活（重绑恢复）\n\n通道重新绑定成功！可以正常接收消息推送了。';
           enqueueSend(existingChannel.id,
             () => ilink.sendMessage(botToken, ilinkUserId, rebindMsg, contextToken),

@@ -136,4 +136,4 @@ function setContextToken(userId, token) {
   console.log(`✅ 手动设置 ${userId} 的 context_token`);
 }
 
-module.exports = { startMessagePoller, getContextToken, setContextToken, isChannelAlive };
+module.exports = { startMessagePoller, getContextToken, setContextToken, isChannelAlive, _heartbeat: pollerHeartbeat };

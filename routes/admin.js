@@ -403,4 +403,63 @@ router.post('/push-logs/mark-all-read', (req, res) => {
   }
 });
 
+// ═══════════════════════════════════════════════════════════════════
+//  GET /api/admin/retry-queue — 延时重试队列状态
+// ═══════════════════════════════════════════════════════════════════
+
+router.get('/retry-queue', (req, res) => {
+  try {
+    const { getStats } = require('../services/retry-queue');
+    const stats = getStats();
+
+    const recent = db.prepare(`
+      SELECT r.id, r.user_id, r.channel_id, r.title, r.source,
+             r.first_failed_at, r.first_error_code,
+             r.attempts, r.max_attempts, r.next_try_at, r.last_try_at,
+             r.status, r.recovered_by, r.recovered_at,
+             r.final_attempt_count, r.failure_history,
+             u.nickname
+      FROM push_retry_queue r
+      LEFT JOIN users u ON r.user_id = u.id
+      ORDER BY r.id DESC LIMIT 100
+    `).all();
+
+    // 分析：按 recovered_by 统计成功率
+    const analytics = db.prepare(`
+      SELECT recovered_by, final_attempt_count, COUNT(*) AS cnt
+      FROM push_retry_queue
+      WHERE status IN ('success','exhausted','abandoned')
+      GROUP BY recovered_by, final_attempt_count
+      ORDER BY cnt DESC
+    `).all();
+
+    res.json({ success: true, data: { stats, recent, analytics } });
+  } catch (err) {
+    console.error('Admin retry-queue error:', err.message);
+    res.status(500).json({ success: false, error: 'Internal error' });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════
+//  GET /api/admin/neg2-probe — ret:-2 长期探测状态
+// ═══════════════════════════════════════════════════════════════════
+
+router.get('/neg2-probe', (req, res) => {
+  try {
+    const { getStats } = require('../services/neg2-probe');
+    const stats = getStats();
+    const recent = db.prepare(`
+      SELECT p.*, c.user_id, u.nickname
+      FROM neg2_recovery_probe p
+      LEFT JOIN channels c ON c.id = p.channel_id
+      LEFT JOIN users u ON c.user_id = u.id
+      ORDER BY p.started_at DESC LIMIT 100
+    `).all();
+    res.json({ success: true, data: { stats, recent } });
+  } catch (err) {
+    console.error('Admin neg2-probe error:', err.message);
+    res.status(500).json({ success: false, error: 'Internal error' });
+  }
+});
+
 module.exports = router;

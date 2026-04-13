@@ -365,6 +365,67 @@ if (!hasRun(15)) {
   markRun(15);
 }
 
+// Migration 18: push_retry_queue — 延时重试队列（持久化 + 丰富元数据）
+// 数据价值：后期可 SQL 分析"第 N 次重试成功率 / 自然恢复 vs 重试成功比例 / 错误码 × 重试间隔"
+if (!hasRun(18)) {
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS push_retry_queue (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER,
+        channel_id INTEGER,
+        title TEXT,
+        content TEXT,
+        source TEXT,
+        original_push_log_id INTEGER,
+        first_failed_at DATETIME NOT NULL,
+        first_error_code INTEGER,
+        attempts INTEGER DEFAULT 0,
+        max_attempts INTEGER DEFAULT 4,
+        next_try_at DATETIME NOT NULL,
+        last_try_at DATETIME,
+        failure_history TEXT DEFAULT '[]',
+        status TEXT DEFAULT 'pending',
+        recovered_by TEXT,
+        recovered_at DATETIME,
+        final_attempt_count INTEGER,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    db.exec('CREATE INDEX IF NOT EXISTS idx_retry_queue_status_next ON push_retry_queue(status, next_try_at)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_retry_queue_channel ON push_retry_queue(channel_id)');
+  } catch (e) {
+    console.error('migration 18 error:', e.message);
+  }
+  markRun(18);
+}
+
+// Migration 19: neg2_recovery_probe — ret:-2 持续低频恢复探测
+// 当 push_retry_queue 用尽（exhausted）且首错是 ret:-2 时写入此表
+// 数据价值：统计"自然恢复时间分布" + "重扫 vs 自愈 比例"
+if (!hasRun(19)) {
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS neg2_recovery_probe (
+        channel_id INTEGER PRIMARY KEY REFERENCES channels(id),
+        retry_queue_id INTEGER REFERENCES push_retry_queue(id),
+        started_at DATETIME NOT NULL,
+        last_probe_at DATETIME,
+        probe_count INTEGER DEFAULT 0,
+        next_probe_at DATETIME NOT NULL,
+        recovered_at DATETIME,
+        recovered_by TEXT,
+        gave_up_at DATETIME,
+        last_probe_code INTEGER
+      )
+    `);
+    db.exec('CREATE INDEX IF NOT EXISTS idx_neg2_probe_pending ON neg2_recovery_probe(recovered_at, gave_up_at, next_probe_at)');
+  } catch (e) {
+    console.error('migration 19 error:', e.message);
+  }
+  markRun(19);
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────
 
 function generateSendKey() {

@@ -268,10 +268,10 @@ async function checkKeepaliveReminders() {
 
       const okHours = Math.round(lastOkAge / 3600000);
       const inboundDesc = ch.last_inbound_at
-        ? Math.round(lastInboundAge / 3600000) + ' 小时'
-        : '从未';
+        ? `已 ${Math.round(lastInboundAge / 3600000)} 小时未回复 Bot`
+        : '从未回复过 Bot';
       const msg = '🔔 通道保活提醒\n\n' +
-        `你的 BotTalk 通道距今已 ${okHours} 小时没有成功推送，且 ${inboundDesc} 没有回复过 Bot。\n\n` +
+        `你的 BotTalk 通道距今已 ${okHours} 小时没有成功推送，${inboundDesc}。\n\n` +
         '由于腾讯微信 ClawBot 平台目前仍处于测试阶段，需要用户每 24 小时内与通道有互动才能保持活跃。\n\n' +
         '✅ 保活方法：\n' +
         '现在给我（Bot）回复任意一字（如"好""1""收到"）即可刷新通道，续命 24 小时。无需重新扫码。\n\n' +
@@ -303,6 +303,33 @@ async function checkKeepaliveReminders() {
 
 // 每 30 分钟扫一次
 setInterval(checkKeepaliveReminders, 30 * 60 * 1000);
+
+// 延时重试队列：每 30 秒扫描到期任务
+const { processRetries } = require('./services/retry-queue');
+setInterval(() => {
+  processRetries().catch(e => console.error('processRetries 错误:', e.message));
+}, 30000);
+setTimeout(() => {
+  processRetries().catch(e => console.error('processRetries 错误:', e.message));
+}, 45000);
+
+// Poller 监控：每 2 分钟扫描心跳，挂掉自动重启
+const { superviseOnce } = require('./services/poller-supervisor');
+setInterval(() => {
+  superviseOnce().catch(e => console.error('supervisor 错误:', e.message));
+}, 2 * 60 * 1000);
+setTimeout(() => {
+  superviseOnce().catch(e => console.error('supervisor 错误:', e.message));
+}, 90 * 1000);
+
+// neg2-probe 持续探测：每 60 分钟扫一次到期任务（每个通道实际节奏也是 60min）
+const { processProbes } = require('./services/neg2-probe');
+setInterval(() => {
+  processProbes().catch(e => console.error('processProbes 错误:', e.message));
+}, 60 * 60 * 1000);
+setTimeout(() => {
+  processProbes().catch(e => console.error('processProbes 错误:', e.message));
+}, 3 * 60 * 1000);
 // 启动 60 秒后先跑一次
 setTimeout(checkKeepaliveReminders, 60000);
 console.log('🔔 预防性保活提醒任务已启动');
