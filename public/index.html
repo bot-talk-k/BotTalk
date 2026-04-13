@@ -2459,16 +2459,17 @@
       <h3 style="font-size:18px;font-weight:700;margin:0 0 16px;color:#1d1d1f;">📢 关于通道稳定性的重要说明</h3>
       <div style="font-size:14px;line-height:1.7;color:#3a3a3c;">
         <p>感谢绑定 BotTalk！请花 30 秒了解一个<strong>当前阶段必须配合的小事</strong>：</p>
-        <p>我们底层依赖的是腾讯 <strong>微信 ClawBot 通道</strong>——一个仍在内测灰度阶段的协议。已知不完善：通道如果长时间没有活跃互动，<strong>会被微信平台静默断开</strong>，表现为推送失败、消息收不到。</p>
+        <p>坦白告知：本服务依赖的是 <strong>腾讯微信 ClawBot 通道</strong>——这是腾讯仍在内测灰度阶段的协议，存在一个我们无法绕开的限制：通道如果长时间没有用户互动，<strong>会被微信平台静默断开</strong>。这是腾讯方面的不完善，不是 BotTalk 的 bug。</p>
+        <p style="color:#3a3a3c;">想用微信简单接收推送，目前只有这一条相对方便的路（企业微信配置复杂得多）。所以在腾讯修复之前，需要你配合一个小动作：</p>
         <div style="background:#f5f5f7;border-radius:10px;padding:14px 16px;margin:14px 0;">
-          <p style="margin:0 0 8px;font-weight:600;color:#0071e3;">✅ 临时保活方法（直到腾讯修复）</p>
+          <p style="margin:0 0 8px;font-weight:600;color:#0071e3;">✅ 临时保活方法</p>
           <ul style="margin:0;padding-left:20px;">
-            <li>收到推送后顺手在微信回复一字（"好""在""1"），系统会<strong>立即回执</strong>，证明通道正常</li>
-            <li>如果<strong>没收到回执</strong>，说明通道已被平台断开 → 回到本站<strong>重新扫码</strong>即可（数据不丢）</li>
-            <li>即使近期没收到推送，<strong>每天发一字保活</strong>，可显著降低断开概率</li>
+            <li>收到推送后顺手回复一字（"好""在""1"），系统会<strong>立即回执</strong>，证明通道正常</li>
+            <li>如果<strong>没收到回执</strong>，说明通道已被腾讯断开 → 回本站<strong>重新扫码</strong>即可（数据不丢）</li>
+            <li>即使近期没推送，<strong>每天发一字保活</strong>，可显著降低断开概率</li>
           </ul>
         </div>
-        <p style="color:#6e6e73;font-size:13px;">🙏 这是当前阶段的权衡之计。一旦腾讯协议修复，本提示会立即移除。感谢理解。</p>
+        <p style="color:#6e6e73;font-size:13px;">🙏 我们持续跟进腾讯协议更新，一旦官方修复 bug，本提示和保活动作会立即移除。感谢理解。</p>
       </div>
       <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px;flex-wrap:wrap;">
         <button class="btn btn-secondary" onclick="dismissStabilityNotice(true)" style="padding:10px 16px;">10 天内不再提示</button>
