@@ -70,19 +70,19 @@ async function startMessagePoller(botToken, userId, onFirstMessage) {
               WHERE bot_token = ? AND wechat_openid = ?`)
               .run(msg.context_token, botToken, userId);
 
-            // 用户回复 → 标记该通道所有 pending 重试任务 + 恢复探测为"user_reply"恢复
+            // 用户回复 → 把 pending 重试立即置为到期（scheduler 30s 内会重试真正发送）
+            // neg2-probe 的恢复探测则直接标为 user_reply 恢复（本身没消息内容要补发）
             try {
               const chRow = db.prepare('SELECT id FROM channels WHERE bot_token = ? AND wechat_openid = ? LIMIT 1').get(botToken, userId);
               if (chRow?.id) {
                 const r1 = db.prepare(`UPDATE push_retry_queue
-                  SET status = 'success', recovered_by = 'user_reply',
-                      recovered_at = CURRENT_TIMESTAMP, final_attempt_count = attempts
+                  SET next_try_at = CURRENT_TIMESTAMP
                   WHERE channel_id = ? AND status = 'pending'`).run(chRow.id);
                 const r2 = db.prepare(`UPDATE neg2_recovery_probe
                   SET recovered_at = CURRENT_TIMESTAMP, recovered_by = 'user_reply'
                   WHERE channel_id = ? AND recovered_at IS NULL AND gave_up_at IS NULL`).run(chRow.id);
                 if (r1.changes > 0 || r2.changes > 0) {
-                  console.log(`♻️ 用户回复恢复: channel=${chRow.id} retry=${r1.changes} probe=${r2.changes}`);
+                  console.log(`♻️ 用户回复: channel=${chRow.id} 触发 ${r1.changes} 条 pending 重试立即执行, ${r2.changes} 条探测标 user_reply 恢复`);
                 }
               }
             } catch (e) {

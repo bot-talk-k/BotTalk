@@ -134,20 +134,29 @@ async function processOne(item) {
       VALUES (?, ?, ?, 'success', ?, ?, ?)
     `).run(item.user_id, title, item.content, `retry-${attemptNo}`, item.channel_id, JSON.stringify(r));
 
+    // 归因：若 2 分钟内有用户回复，视为 user_reply 触发的恢复
+    const recentReply = db.prepare(`
+      SELECT 1 FROM inbound_events
+      WHERE channel_id = ? AND received_at >= datetime('now', '-2 minutes')
+      LIMIT 1
+    `).get(item.channel_id);
+    const recoveredBy = recentReply ? 'user_reply' : 'retry';
+
     appendHistory(item.id, {
       attempt: attemptNo,
       at: new Date().toISOString(),
       phase: 'retry-success',
+      recovered_by: recoveredBy,
       elapsed_ms: Date.now() - startedAt,
       total_delay_min: delayMin,
     });
     db.prepare(`
       UPDATE push_retry_queue
-      SET status = 'success', recovered_by = 'retry', recovered_at = CURRENT_TIMESTAMP,
+      SET status = 'success', recovered_by = ?, recovered_at = CURRENT_TIMESTAMP,
           attempts = ?, last_try_at = CURRENT_TIMESTAMP, final_attempt_count = ?
       WHERE id = ?
-    `).run(attemptNo, attemptNo, item.id);
-    console.log(`✅ retry-queue id=${item.id} 第 ${attemptNo} 次重试成功（累计延迟 ${delayMin}min）`);
+    `).run(recoveredBy, attemptNo, attemptNo, item.id);
+    console.log(`✅ retry-queue id=${item.id} 第 ${attemptNo} 次重试成功（${recoveredBy}，累计延迟 ${delayMin}min）`);
   } catch (err) {
     markSendResult(item.channel_id, err, false);
     const errData = err.response?.data;
