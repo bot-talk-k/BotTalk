@@ -10,8 +10,11 @@
 // - 队列满时拒绝入队（防止雪崩）
 // - 异常会原样抛给 caller
 
-const MIN_INTERVAL_MS = (parseInt(process.env.PUSH_MIN_INTERVAL_SEC) || 10) * 1000;
-const MAX_QUEUE_SIZE = parseInt(process.env.PUSH_MAX_QUEUE_SIZE) || 50;
+// 使用 Number.isFinite + ?? 避免 0 被 || 兜底掉
+const _minSec = parseInt(process.env.PUSH_MIN_INTERVAL_SEC);
+const MIN_INTERVAL_MS = (Number.isFinite(_minSec) ? _minSec : 10) * 1000;
+const _maxQ = parseInt(process.env.PUSH_MAX_QUEUE_SIZE);
+const MAX_QUEUE_SIZE = Number.isFinite(_maxQ) ? _maxQ : 50;
 
 const queues = new Map();      // channel_id → { items: [], draining: boolean }
 const lastSendAt = new Map();  // channel_id → epoch ms

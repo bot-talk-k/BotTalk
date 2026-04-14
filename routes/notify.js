@@ -202,9 +202,14 @@ async function handlePush(sendKey, title, content, clientIp, channelParam, req) 
         VALUES (?, ?, ?, 'failed', ?, ?, ?)
       `).run(user.id, title, content, clientIp, channel.id, resJson);
 
-      // 入延时重试队列：ret:-2 或 半死态（send_disabled 未设，真 session 死已标 inactive 除外）
+      // 入延时重试队列：
+      //   - ret:-2 / ret:-14 半死态（真 session 死已标 inactive，不重试）
+      //   - 网络错误（无 response，errData 为 undefined）— 可能暂时丢连接，值得重试
+      //   - push-queue 满（QUEUE_FULL）— 罕见，也让它稍后重试
       const retCode = errData?.ret;
-      const shouldRetry = !tokenInvalid && (retCode === -2 || retCode === -14);
+      const isNetworkErr = !errData && !tokenInvalid;
+      const isQueueFull = error.code === 'QUEUE_FULL';
+      const shouldRetry = !tokenInvalid && (retCode === -2 || retCode === -14 || isNetworkErr || isQueueFull);
       if (shouldRetry) {
         enqueueRetry({
           userId: user.id,
@@ -213,7 +218,7 @@ async function handlePush(sendKey, title, content, clientIp, channelParam, req) 
           content,
           source: 'api',
           originalPushLogId: logInfo.lastInsertRowid,
-          firstError: errData || { message: error.message },
+          firstError: errData || { message: error.message, code: error.code || 'network_err' },
         });
       }
 

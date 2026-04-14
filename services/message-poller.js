@@ -5,6 +5,7 @@ const db = require('../db');
 const contextTokenCache = {};
 const pollerHeartbeat = {}; // botToken -> { lastOk: timestamp, alive: bool }
 const lastAckAt = {};       // channelId -> timestamp（回执去重）
+const pollerEpoch = {};     // botToken -> integer（每次 startMessagePoller 递增，旧 loop 发现 epoch 不匹配就退出）
 
 // 回执文案池（轮换避免机械感）
 const ACK_MESSAGES = [
@@ -15,8 +16,12 @@ const ACK_MESSAGES = [
 const ACK_DEDUP_MS = 30 * 1000;
 
 // 启动长轮询服务（持续接收消息）
+// 幂等保护：同一 bot_token 只允许一个 loop 活跃。再次调用会递增 epoch，
+// 旧 loop 在下一次迭代发现 epoch 不匹配就自行 break，避免并发 long-poll。
 async function startMessagePoller(botToken, userId, onFirstMessage) {
-  console.log(`🔄 启动消息轮询服务：${userId}`);
+  const myEpoch = (pollerEpoch[botToken] || 0) + 1;
+  pollerEpoch[botToken] = myEpoch;
+  console.log(`🔄 启动消息轮询服务：${userId} (epoch=${myEpoch})`);
 
   let cursor = '';
   let hasReceivedFirstMessage = false;
@@ -37,8 +42,19 @@ async function startMessagePoller(botToken, userId, onFirstMessage) {
   }
 
   while (true) {
+    // Epoch 检查：如果有更新的 poller 被启动（epoch 递增），本 loop 退出
+    if (pollerEpoch[botToken] !== myEpoch) {
+      console.log(`🛑 ${userId} poller (epoch=${myEpoch}) 退出，已被新 loop (epoch=${pollerEpoch[botToken]}) 取代`);
+      return;
+    }
     try {
       const result = await ilink.getUpdates(botToken, cursor);
+
+      // 再次检查 epoch（await 期间可能已被取代）
+      if (pollerEpoch[botToken] !== myEpoch) {
+        console.log(`🛑 ${userId} poller (epoch=${myEpoch}) 在 getUpdates 后发现被取代，退出`);
+        return;
+      }
 
       // 每次 getUpdates 正常返回（含空轮询）都更新心跳
       pollCount++;

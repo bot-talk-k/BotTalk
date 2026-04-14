@@ -114,7 +114,7 @@ async function sendMessage(botToken, userId, message, contextToken = '') {
   
   try {
     const startTime = Date.now();
-    const res = await axios.post(`${BASE_URL}/ilink/bot/sendmessage`, body, { headers });
+    const res = await axios.post(`${BASE_URL}/ilink/bot/sendmessage`, body, { headers, timeout: 30000 });
     const duration = Date.now() - startTime;
     
     console.log(`✅ sendMessage 响应 (${duration}ms):`, JSON.stringify({
