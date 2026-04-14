@@ -92,14 +92,17 @@ function getChannelHealth(channel) {
   if (neg2Count > 0 && lastNeg2 !== null && lastNeg2 < 60 * 60 * 1000) {
     return { health: 'yellow', reason: `最近 ${Math.round(lastNeg2/60000)} 分钟内出现 ${neg2Count} 次 ret:-2`, details };
   }
-  if (lastSendOk !== null && lastSendOk > 4 * 60 * 60 * 1000) {
-    return { health: 'yellow', reason: `${Math.round(lastSendOk/60000)} 分钟未推送成功（poller 仍活）`, details };
+  // "长时间无成功推送"判黄之前，先给"用户最近回复过"一个豁免：
+  //   用户回复会刷新 context_token，24h 内回过就不算异常（低流量用户不应被持续判黄）
+  const inboundFresh = lastInbound !== null && lastInbound < 24 * 60 * 60 * 1000;
+  if (lastSendOk !== null && lastSendOk > 4 * 60 * 60 * 1000 && !inboundFresh) {
+    return { health: 'yellow', reason: `${Math.round(lastSendOk/60000)} 分钟未推送成功，用户也长时间未回复`, details };
   }
-  if (lastSendOk === null && dbStatus === 'active') {
-    return { health: 'yellow', reason: '通道激活后尚无成功推送记录', details };
+  if (lastSendOk === null && dbStatus === 'active' && !inboundFresh) {
+    return { health: 'yellow', reason: '通道激活后尚无成功推送记录，用户也未回复过', details };
   }
 
-  // 绿：poller 活 + 近期（4h 内）有成功推送 + 无最近 ret:-2
+  // 绿：(4h 内成功推送 OR 24h 内用户回复过) + poller 活 + 无最近 ret:-2
   return { health: 'green', reason: '正常', details };
 }
 
