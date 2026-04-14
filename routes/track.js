@@ -57,6 +57,29 @@ async function updateCountryAsync(ip) {
   }
 }
 
+// 后台回填任务：每 5 分钟扫一次 country 为空的记录，补查 ip-api
+// 场景：容器重启清空 ipCache；首次 async 查询时 ip-api 限流/网络抖动；初始实装前的历史数据
+async function backfillMissingCountries() {
+  try {
+    const rows = db.prepare(
+      "SELECT DISTINCT ip FROM page_views WHERE (country IS NULL OR country = '') AND ip IS NOT NULL LIMIT 20"
+    ).all();
+    if (rows.length === 0) return;
+    for (const { ip } of rows) {
+      await updateCountryAsync(ip);
+      // ip-api 免费档 45/min，保守每条 1.5s
+      await new Promise(r => setTimeout(r, 1500));
+    }
+    console.log(`🌍 country 回填完成：扫描 ${rows.length} 个独立 IP`);
+  } catch (e) {
+    console.error('backfillMissingCountries 错误:', e.message);
+  }
+}
+
+// 启动后 60s 跑一次，之后每 5 分钟
+setTimeout(backfillMissingCountries, 60 * 1000);
+setInterval(backfillMissingCountries, 5 * 60 * 1000);
+
 // Allowed page identifiers
 const VALID_PAGES = ['home', 'key_api', 'push_log', 'demo', 'admin', 'channels', 'intro'];
 
