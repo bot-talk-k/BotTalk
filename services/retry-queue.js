@@ -116,11 +116,18 @@ async function processOne(item) {
     return;
   }
 
-  // 重试消息加延迟前缀（按首失败时间）
-  const delayMin = Math.round((Date.now() - new Date(item.first_failed_at + 'Z').getTime()) / 60000);
+  // 重试消息加延迟前缀：原始时间（北京时区）+ 友好延迟显示
+  const firstFailedAt = new Date(item.first_failed_at + 'Z');
+  const delayMin = Math.round((Date.now() - firstFailedAt.getTime()) / 60000);
+  const delayText = delayMin < 60
+    ? `${delayMin} 分钟`
+    : delayMin < 1440
+      ? `${Math.floor(delayMin/60)} 小时 ${delayMin % 60} 分`
+      : `${Math.floor(delayMin/1440)} 天 ${Math.floor((delayMin % 1440) / 60)} 小时`;
+  const originTime = firstFailedAt.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
   const title = item.title || '';
   const rawBody = title + (item.content ? '\n\n' + item.content : '');
-  const retryMessage = `ℹ️ 本消息因通道临时不稳定延迟约 ${delayMin} 分钟送达（第 ${attemptNo} 次重试）\n\n${rawBody}`;
+  const retryMessage = `ℹ️ 以下消息原本于 ${originTime} 推送（因通道临时不稳定延迟 ${delayText} 送达，第 ${attemptNo} 次重试）\n\n${rawBody}`;
 
   try {
     const r = await enqueueSend(item.channel_id,
