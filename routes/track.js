@@ -61,9 +61,14 @@ async function updateCountryAsync(ip) {
 // 场景：容器重启清空 ipCache；首次 async 查询时 ip-api 限流/网络抖动；初始实装前的历史数据
 async function backfillMissingCountries() {
   try {
-    const rows = db.prepare(
-      "SELECT DISTINCT ip FROM page_views WHERE (country IS NULL OR country = '') AND ip IS NOT NULL LIMIT 20"
-    ).all();
+    // 按最新访问倒序取独立 IP — 先查最近的访客，不浪费在历史数据上
+    const rows = db.prepare(`
+      SELECT ip FROM page_views
+      WHERE (country IS NULL OR country = '') AND ip IS NOT NULL
+      GROUP BY ip
+      ORDER BY MAX(id) DESC
+      LIMIT 20
+    `).all();
     if (rows.length === 0) return;
     for (const { ip } of rows) {
       await updateCountryAsync(ip);
