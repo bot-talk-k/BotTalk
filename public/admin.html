@@ -422,7 +422,7 @@
                   <tr>
                     <th>ID</th>
                     <th>用户</th>
-                    <th>通道名</th>
+                    <th>测试</th>
                     <th>角色</th>
                     <th>健康度</th>
                     <th>Poller</th>
@@ -764,6 +764,34 @@
       await Promise.all([loadStats(), loadUsers(), loadPushLogs(), loadPageViews('30d'), loadChannelsHealth(), loadRetryQueue(), loadNeg2Probe()]);
     }
 
+    async function testSendChannel(channelId, btn) {
+      var origText = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = '发送中...';
+      try {
+        var res = await apiFetch('/api/admin/channels/' + channelId + '/test-send', { method: 'POST' });
+        var json = await res.json();
+        if (json.success) {
+          btn.textContent = '✅ 已发出';
+          btn.style.color = '#34c759';
+          showToast('通道 ' + channelId + ' 测试消息已发送');
+        } else {
+          btn.textContent = '❌ 失败';
+          btn.style.color = '#ff3b30';
+          showToast('通道 ' + channelId + ' 发送失败：' + (json.error || 'unknown'), 4000);
+        }
+      } catch (e) {
+        btn.textContent = '❌ 异常';
+        btn.style.color = '#ff3b30';
+        showToast('请求失败：' + e.message, 4000);
+      }
+      setTimeout(function() {
+        btn.textContent = origText;
+        btn.style.color = '';
+        btn.disabled = false;
+      }, 5000);
+    }
+
     async function showChannelInbounds(channelId, nickname) {
       var modal = document.getElementById('inbounds-modal');
       var body = document.getElementById('inbounds-modal-body');
@@ -1006,7 +1034,7 @@
         html += '<tr title="' + escapeHtml(reasonText) + '">' +
           '<td>' + ch.id + '</td>' +
           '<td><a href="javascript:void(0)" onclick="showChannelInbounds(' + ch.id + ',\'' + escapeHtml(ch.nickname).replace(/'/g, "\\'") + '\')" style="color:#0071e3;text-decoration:none;">' + escapeHtml(ch.nickname) + '</a></td>' +
-          '<td>' + escapeHtml(ch.name || '-') + '</td>' +
+          '<td><button class="btn btn-sm btn-secondary" style="font-size:12px;padding:3px 10px;" onclick="testSendChannel(' + ch.id + ', this)">📤 测试一条</button></td>' +
           '<td>' + roleBadge + '</td>' +
           '<td>' + healthBadge + '</td>' +
           '<td>' + pollerStr + '</td>' +

@@ -468,6 +468,47 @@ router.get('/neg2-probe', (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════
+//  POST /api/admin/channels/:id/test-send — 手动给通道发一条测试消息
+// ═══════════════════════════════════════════════════════════════════
+
+router.post('/channels/:id/test-send', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({ success: false, error: 'Invalid id' });
+    }
+    const ch = db.prepare('SELECT * FROM channels WHERE id = ?').get(id);
+    if (!ch) return res.status(404).json({ success: false, error: '通道不存在' });
+    if (!ch.context_token) return res.json({ success: false, error: '通道未激活（无 context_token）' });
+
+    const ilink = require('../ilink');
+    const { enqueueSend } = require('../services/push-queue');
+    const { markSendResult } = require('../services/channel-health');
+
+    const msg = '🧪 通道连通性测试，请回复"1"';
+
+    try {
+      const r = await enqueueSend(id,
+        () => ilink.sendMessage(ch.bot_token, ch.wechat_openid, msg, ch.context_token),
+        { title: '🧪 管理员测试', source: 'admin-test' });
+      markSendResult(id, r, true);
+      db.prepare("INSERT INTO push_logs (user_id, title, content, status, ip, channel_id, response) VALUES (?, ?, ?, 'success', 'admin-test', ?, ?)")
+        .run(ch.user_id, '🧪 管理员测试', msg, id, JSON.stringify(r));
+      res.json({ success: true, data: { sent: true, response: r } });
+    } catch (err) {
+      markSendResult(id, err, false);
+      const errData = err.response?.data;
+      db.prepare("INSERT INTO push_logs (user_id, title, content, status, ip, channel_id, response) VALUES (?, ?, ?, 'failed', 'admin-test', ?, ?)")
+        .run(ch.user_id, '🧪 管理员测试', msg, id, JSON.stringify(errData || { error: err.message }));
+      res.json({ success: false, error: errData ? JSON.stringify(errData) : err.message });
+    }
+  } catch (err) {
+    console.error('Admin test-send error:', err.message);
+    res.status(500).json({ success: false, error: 'Internal error' });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════
 //  GET /api/admin/channels/:id/inbounds — 通道最近用户回复
 // ═══════════════════════════════════════════════════════════════════
 
