@@ -765,31 +765,21 @@
     }
 
     async function testSendChannel(channelId, btn) {
-      var origText = btn.textContent;
       btn.disabled = true;
       btn.textContent = '发送中...';
       try {
         var res = await apiFetch('/api/admin/channels/' + channelId + '/test-send', { method: 'POST' });
         var json = await res.json();
         if (json.success) {
-          btn.textContent = '✅ 已发出';
-          btn.style.color = '#34c759';
-          showToast('通道 ' + channelId + ' 测试消息已发送');
+          showToast('✅ 通道 ' + channelId + ' 测试消息已发送', 4000);
         } else {
-          btn.textContent = '❌ 失败';
-          btn.style.color = '#ff3b30';
-          showToast('通道 ' + channelId + ' 发送失败：' + (json.error || 'unknown'), 4000);
+          showToast('❌ 通道 ' + channelId + ' 发送失败：' + (json.error || 'unknown'), 8000);
         }
       } catch (e) {
-        btn.textContent = '❌ 异常';
-        btn.style.color = '#ff3b30';
-        showToast('请求失败：' + e.message, 4000);
+        showToast('请求失败：' + e.message, 6000);
       }
-      setTimeout(function() {
-        btn.textContent = origText;
-        btn.style.color = '';
-        btn.disabled = false;
-      }, 5000);
+      // 无论成败都刷新通道列表，反映新的 neg2 计数 + 健康度变化
+      setTimeout(function() { loadChannelsHealth(); }, 500);
     }
 
     async function showChannelInbounds(channelId, nickname) {
