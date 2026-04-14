@@ -510,9 +510,9 @@
           <div class="section-header">
             <h2>访问统计</h2>
             <div style="display:flex;gap:6px;flex-wrap:wrap;">
-              <button class="btn btn-sm btn-secondary" id="pv-btn-today" onclick="loadPageViews('today')">今日</button>
+              <button class="btn btn-sm btn-primary" id="pv-btn-today" onclick="loadPageViews('today')">今日</button>
               <button class="btn btn-sm btn-secondary" id="pv-btn-7d" onclick="loadPageViews('7d')">7天</button>
-              <button class="btn btn-sm btn-primary" id="pv-btn-30d" onclick="loadPageViews('30d')">30天</button>
+              <button class="btn btn-sm btn-secondary" id="pv-btn-30d" onclick="loadPageViews('30d')">30天</button>
               <button class="btn btn-sm btn-secondary" id="pv-btn-all" onclick="loadPageViews('all')">全部</button>
             </div>
           </div>
@@ -761,7 +761,7 @@
     // ═══════════════════════════════════════════════════════════════════
     var channelsHealthData = [];
     async function loadData() {
-      await Promise.all([loadStats(), loadUsers(), loadPushLogs(), loadPageViews('30d'), loadChannelsHealth(), loadRetryQueue(), loadNeg2Probe()]);
+      await Promise.all([loadStats(), loadUsers(), loadPushLogs(), loadPageViews('today'), loadChannelsHealth(), loadRetryQueue(), loadNeg2Probe()]);
     }
 
     async function testSendChannel(channelId, btn) {
