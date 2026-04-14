@@ -127,7 +127,7 @@ async function processOne(item) {
   const originTime = firstFailedAt.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
   const title = item.title || '';
   const rawBody = title + (item.content ? '\n\n' + item.content : '');
-  const retryMessage = `ℹ️ 以下消息原本于 ${originTime} 推送（因通道临时不稳定延迟 ${delayText} 送达，第 ${attemptNo} 次重试）\n\n${rawBody}`;
+  const retryMessage = `ℹ️ 以下消息原本于 ${originTime} 推送（因微信官方通道临时不稳定延迟 ${delayText} 送达，第 ${attemptNo} 次重试）。一天内与 ClawBot 互动一两次任意信息，能避免这类延迟。\n\n${rawBody}`;
 
   try {
     const r = await enqueueSend(item.channel_id,
