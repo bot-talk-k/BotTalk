@@ -167,7 +167,7 @@ console.log('⏰ 定时任务已启动');
 //   1. 有 context_token（能发送）
 //   2. consecutive_neg2_count = 0（尚未 ret:-2）
 //   3. 过去 4 小时没有成功推送 或 从未有过成功推送且通道超过 4h
-//   4. 用户从未回复过 或 最近 20 小时未回复
+//   4. 用户从未回复过 或 最近 22 小时未回复
 //   5. 最近 4 小时内没发过保活提醒（去重）
 //
 // 目的：在通道衰退到 ret:-2 之前，主动让用户发一条消息刷新 context_token
@@ -203,7 +203,7 @@ async function checkKeepaliveReminders() {
       // 需要保活提醒的条件
       const needsReminder =
         lastOkAge > 4 * 60 * 60 * 1000 &&         // 超过 4 小时没成功推送
-        lastInboundAge > 20 * 60 * 60 * 1000;     // 超过 20 小时没回复（或从未）
+        lastInboundAge > 22 * 60 * 60 * 1000;     // 超过 22 小时没回复（或从未）：给用户 2h 缓冲避开睡眠时段
 
       if (!needsReminder) continue;
 
