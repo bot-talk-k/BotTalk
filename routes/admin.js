@@ -218,7 +218,7 @@ router.get('/channels', (req, res) => {
       FROM channels c
       JOIN users u ON c.user_id = u.id
       LEFT JOIN (
-        SELECT channel_id, MAX(created_at) AS max_created
+        SELECT channel_id, MAX(received_at) AS max_created
         FROM inbound_events
         WHERE channel_id IS NOT NULL
         GROUP BY channel_id
