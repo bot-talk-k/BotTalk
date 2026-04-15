@@ -498,21 +498,34 @@ router.post('/channels/:id/test-send', async (req, res) => {
     const { enqueueSend } = require('../services/push-queue');
     const { markSendResult } = require('../services/channel-health');
 
-    const msg = '🧪 通道连通性测试，请回复"1"';
+    const DEFAULT_MSG = '🧪 通道连通性测试，请回复"1"';
+    // 可选 message（管理员编辑后的自定义文案），限 50 字；空/未传则用默认
+    let msg = DEFAULT_MSG;
+    if (typeof req.body?.message === 'string') {
+      const trimmed = req.body.message.trim();
+      if (trimmed.length > 0) {
+        if (trimmed.length > 50) {
+          return res.status(400).json({ success: false, error: '自定义消息不能超过 50 字' });
+        }
+        msg = trimmed;
+      }
+    }
+    const isCustom = msg !== DEFAULT_MSG;
+    const title = isCustom ? '💬 管理员消息' : '🧪 管理员测试';
 
     try {
       const r = await enqueueSend(id,
         () => ilink.sendMessage(ch.bot_token, ch.wechat_openid, msg, ch.context_token),
-        { title: '🧪 管理员测试', source: 'admin-test' });
+        { title, source: 'admin-test' });
       markSendResult(id, r, true);
       db.prepare("INSERT INTO push_logs (user_id, title, content, status, ip, channel_id, response) VALUES (?, ?, ?, 'success', 'admin-test', ?, ?)")
-        .run(ch.user_id, '🧪 管理员测试', msg, id, JSON.stringify(r));
+        .run(ch.user_id, title, msg, id, JSON.stringify(r));
       res.json({ success: true, data: { sent: true, response: r } });
     } catch (err) {
       markSendResult(id, err, false);
       const errData = err.response?.data;
       db.prepare("INSERT INTO push_logs (user_id, title, content, status, ip, channel_id, response) VALUES (?, ?, ?, 'failed', 'admin-test', ?, ?)")
-        .run(ch.user_id, '🧪 管理员测试', msg, id, JSON.stringify(errData || { error: err.message }));
+        .run(ch.user_id, title, msg, id, JSON.stringify(errData || { error: err.message }));
       res.json({ success: false, error: errData ? JSON.stringify(errData) : err.message });
     }
   } catch (err) {

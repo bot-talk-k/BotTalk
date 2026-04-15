@@ -333,6 +333,36 @@
     </div>
   </div>
 
+  <!-- 发送测试消息 modal（可编辑，50 字内） -->
+  <div id="test-send-modal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.5);align-items:center;justify-content:center;padding:16px;">
+    <div style="background:#fff;border-radius:14px;padding:20px 22px;max-width:480px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.25);">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+        <h3 id="test-send-title" style="margin:0;font-size:16px;font-weight:600;">发送测试消息</h3>
+        <button onclick="closeTestSendModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#8e8e93;padding:0 4px;">&times;</button>
+      </div>
+      <div style="font-size:13px;color:#6e6e73;margin-bottom:10px;">默认文案已预填，可直接发送，也可改成自定义消息（最多 50 字）与用户沟通。</div>
+      <textarea id="test-send-text" maxlength="50" rows="3" oninput="updateTestSendCounter()" style="width:100%;box-sizing:border-box;padding:10px 12px;font-size:14px;border:1px solid #d2d2d7;border-radius:8px;resize:vertical;font-family:inherit;"></textarea>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;">
+        <span id="test-send-counter" style="font-size:12px;color:#8e8e93;">0 / 50</span>
+        <div>
+          <button class="btn btn-sm btn-secondary" onclick="closeTestSendModal()" style="margin-right:8px;">取消</button>
+          <button id="test-send-confirm-btn" class="btn btn-sm btn-primary" onclick="confirmTestSend()">发送</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 推送日志完整内容 modal -->
+  <div id="log-detail-modal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.5);align-items:center;justify-content:center;padding:16px;">
+    <div style="background:#fff;border-radius:14px;padding:20px 22px;max-width:600px;width:100%;max-height:85vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.25);">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <h3 id="log-detail-title" style="margin:0;font-size:16px;font-weight:600;"></h3>
+        <button onclick="document.getElementById('log-detail-modal').style.display='none'" style="background:none;border:none;font-size:22px;cursor:pointer;color:#8e8e93;padding:0 4px;">&times;</button>
+      </div>
+      <pre id="log-detail-body" style="font-size:13px;color:#3a3a3c;white-space:pre-wrap;word-break:break-word;background:#f7f7f9;padding:12px 14px;border-radius:8px;margin:0;font-family:inherit;"></pre>
+    </div>
+  </div>
+
   <div class="main">
 
     <!-- Loading state -->
@@ -764,22 +794,77 @@
       await Promise.all([loadStats(), loadUsers(), loadPushLogs(), loadPageViews('today'), loadChannelsHealth(), loadRetryQueue(), loadNeg2Probe()]);
     }
 
-    async function testSendChannel(channelId, btn) {
-      btn.disabled = true;
-      btn.textContent = '发送中...';
+    var TEST_SEND_DEFAULT_MSG = '🧪 通道连通性测试，请回复"1"';
+    var testSendContext = { channelId: null, btn: null };
+
+    function testSendChannel(channelId, btn) {
+      testSendContext.channelId = channelId;
+      testSendContext.btn = btn;
+      document.getElementById('test-send-title').textContent = '发送测试消息 — 通道 ' + channelId;
+      var textarea = document.getElementById('test-send-text');
+      textarea.value = TEST_SEND_DEFAULT_MSG;
+      updateTestSendCounter();
+      document.getElementById('test-send-modal').style.display = 'flex';
+      setTimeout(function() { textarea.focus(); textarea.select(); }, 50);
+    }
+
+    function updateTestSendCounter() {
+      var len = document.getElementById('test-send-text').value.length;
+      var counter = document.getElementById('test-send-counter');
+      counter.textContent = len + ' / 50';
+      counter.style.color = len > 50 ? '#ff3b30' : '#8e8e93';
+    }
+
+    function closeTestSendModal() {
+      document.getElementById('test-send-modal').style.display = 'none';
+      testSendContext = { channelId: null, btn: null };
+    }
+
+    async function confirmTestSend() {
+      var channelId = testSendContext.channelId;
+      var btn = testSendContext.btn;
+      var confirmBtn = document.getElementById('test-send-confirm-btn');
+      var message = document.getElementById('test-send-text').value.trim();
+      if (!message) { showToast('消息不能为空', 3000); return; }
+      if (message.length > 50) { showToast('消息不能超过 50 字', 3000); return; }
+      var isCustom = message !== TEST_SEND_DEFAULT_MSG;
+      var body = isCustom ? { message: message } : undefined;
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = '发送中...';
+      if (btn) { btn.disabled = true; btn.textContent = '发送中...'; }
       try {
-        var res = await apiFetch('/api/admin/channels/' + channelId + '/test-send', { method: 'POST' });
+        var res = await apiFetch('/api/admin/channels/' + channelId + '/test-send', {
+          method: 'POST',
+          headers: body ? { 'Content-Type': 'application/json' } : {},
+          body: body ? JSON.stringify(body) : undefined,
+        });
         var json = await res.json();
         if (json.success) {
-          showToast('✅ 通道 ' + channelId + ' 测试消息已发送', 4000);
+          showToast('✅ 通道 ' + channelId + (isCustom ? ' 自定义消息已发送' : ' 测试消息已发送'), 4000);
+          closeTestSendModal();
         } else {
           showToast('❌ 通道 ' + channelId + ' 发送失败：' + (json.error || 'unknown'), 8000);
         }
       } catch (e) {
         showToast('请求失败：' + e.message, 6000);
+      } finally {
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = '发送';
+        // 通道列表按钮恢复交给 loadChannelsHealth 重绘
       }
-      // 无论成败都刷新通道列表，反映新的 neg2 计数 + 健康度变化
       setTimeout(function() { loadChannelsHealth(); }, 500);
+    }
+
+    function showLogDetail(title, content) {
+      document.getElementById('log-detail-title').textContent = title || '(无标题)';
+      document.getElementById('log-detail-body').textContent = content || '(无内容)';
+      document.getElementById('log-detail-modal').style.display = 'flex';
+    }
+
+    function showLogDetailByIndex(idx) {
+      var log = (window._pushLogsCache || [])[idx];
+      if (!log) return;
+      showLogDetail(log.title, log.content);
     }
 
     async function showChannelInbounds(channelId, nickname) {
@@ -1045,7 +1130,8 @@
         var logs = json.data;
         var html = '';
         var unreadCount = 0;
-        logs.forEach(function(log) {
+        window._pushLogsCache = logs;  // 供 showLogDetailByIndex 查完整 content
+        logs.forEach(function(log, idx) {
           var userName = log.nickname || (log.wechat_openid ? log.wechat_openid.slice(-6) : 'ID:' + log.user_id);
           var isFailed = log.status !== 'success';
           var isAdminUnread = isFailed && ((log.read_state || 0) & 2) === 0;
@@ -1061,7 +1147,7 @@
           html += '<tr' + rowStyle + '>' +
             '<td>' + log.id + '</td>' +
             '<td>' + escapeHtml(userName) + '</td>' +
-            '<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;" title="' + escapeHtml((log.title || '') + (log.content ? '\n\n' + log.content : '')) + '">' + escapeHtml(log.title || '(无标题)') + '</td>' +
+            '<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;color:#0071e3;" title="点击查看完整内容" onclick="showLogDetailByIndex(' + idx + ')">' + escapeHtml(log.title || '(无标题)') + '</td>' +
             '<td>' + statusBadge + '</td>' +
             '<td>' + time + '</td>' +
             '<td>' + action + '</td>' +
