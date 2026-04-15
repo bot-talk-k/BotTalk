@@ -6,7 +6,7 @@ const { enqueueSend } = require('../services/push-queue');
 const { appendTip } = require('../services/keepalive-tip');
 const { markRecoveredByRescan } = require('../services/retry-queue');
 const { markRecoveredByRescan: probeMarkRescan } = require('../services/neg2-probe');
-const { clearSendDisabled } = require('../services/channel-health');
+const { reviveChannel } = require('../services/channel-health');
 const { generateSendKey } = require('../db');
 const ilink = require('../ilink');
 const { requireLogin } = require('../middleware/auth');
@@ -202,9 +202,9 @@ router.get('/bind-status-public/:qrcode', async (req, res) => {
       ).run(botToken, existingChannel.id);
 
       startMessagePoller(botToken, ilinkUserId, (contextToken) => {
-        db.prepare("UPDATE channels SET context_token = ?, status = 'active' WHERE id = ?")
+        db.prepare("UPDATE channels SET context_token = ? WHERE id = ?")
           .run(contextToken, existingChannel.id);
-        clearSendDisabled(existingChannel.id);
+        reviveChannel(existingChannel.id);
         markRecoveredByRescan(existingChannel.id);
         probeMarkRescan(existingChannel.id);
         const welcomeMsg = '✅ 通道已激活（重绑恢复）\n\n欢迎回来！你的 BotTalk 通道已重新激活。你刚才的回复已成功送达，通道测试通过 ✓\n\n📢 由于 腾讯微信 ClawBot 协议的限制，通道长时间无互动会被微信平台静默断开。\n\n✅ 临时保活方法（直到腾讯修复）：\n• 收到推送后回复一字（"在""好""1"），系统会立即回执确认\n• 没收到回执 = 通道已断 → 回 https://bot-talk.com/app 重新扫码\n• 每天发一字保活，可显著降低断开概率';
@@ -382,9 +382,9 @@ router.get('/bind-status/:qrcode', async (req, res) => {
 
         // 重启 poller
         startMessagePoller(botToken, ilinkUserId, (contextToken) => {
-          db.prepare("UPDATE channels SET context_token = ?, status = 'active' WHERE id = ?")
+          db.prepare("UPDATE channels SET context_token = ? WHERE id = ?")
             .run(contextToken, existingChannel.id);
-          clearSendDisabled(existingChannel.id);
+          reviveChannel(existingChannel.id);
           markRecoveredByRescan(existingChannel.id);
         probeMarkRescan(existingChannel.id);
           const rebindMsg = '✅ 通道已激活（重绑恢复）\n\n通道重新绑定成功！可以正常接收消息推送了。\n\n📢 由于 腾讯微信 ClawBot 协议的限制，通道长时间无互动会被微信平台静默断开。\n\n✅ 临时保活方法（直到腾讯修复）：\n• 收到推送后回复一字（"在""好""1"），系统会立即回执确认\n• 没收到回执 = 通道已断 → 回 https://bot-talk.com/app 重新扫码\n• 每天发一字保活，可显著降低断开概率\n\n现在试试回复任意一字测试通道 👇';

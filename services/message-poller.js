@@ -224,7 +224,16 @@ function getContextToken(userId) {
 
 function setContextToken(userId, token) {
   contextTokenCache[userId] = token;
-  db.prepare(`UPDATE channels SET context_token = ?, status = 'active' WHERE wechat_openid = ?`).run(token, userId);
+  // 手动注入 token = 管理员确认通道可用 → 全量复活（status/send_disabled/计数一起清）
+  const rows = db.prepare(`SELECT id FROM channels WHERE wechat_openid = ?`).all(userId);
+  db.prepare(`UPDATE channels SET context_token = ? WHERE wechat_openid = ?`).run(token, userId);
+  try {
+    const { reviveChannel } = require('./channel-health');
+    rows.forEach(r => reviveChannel(r.id));
+  } catch (e) {
+    // channel-health 可能在循环依赖下加载失败；降级为最小更新
+    db.prepare(`UPDATE channels SET status = 'active' WHERE wechat_openid = ?`).run(userId);
+  }
   console.log(`✅ 手动设置 ${userId} 的 context_token`);
 }
 

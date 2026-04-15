@@ -3,7 +3,7 @@ const router = express.Router();
 const db = require('../db');
 const ilink = require('../ilink');
 const { logActivity } = require('../services/logger');
-const { markSendResult, classifyRet14, markSendDisabled } = require('../services/channel-health');
+const { markSendResult, classifyAndMarkRet14 } = require('../services/channel-health');
 const { enqueueSend } = require('../services/push-queue');
 const { appendTip } = require('../services/keepalive-tip');
 const { enqueueRetry } = require('../services/retry-queue');
@@ -172,24 +172,11 @@ async function handlePush(sendKey, title, content, clientIp, channelParam, req) 
       const resJson = JSON.stringify(errData || { errcode: -1, errmsg: error.message });
       markSendResult(channel.id, error, false);
 
-      // ret:-14 分类：调 getUpdates 二次确认是 session 真死还是"半死态"（账号被风控）
+      // ret:-14 分类统一走 channel-health.classifyAndMarkRet14（含并发锁，避免重复 getUpdates）
       let tokenInvalid = false;
       if (errData && errData.ret === -14) {
-        try {
-          const cls = await classifyRet14(channel.id, channel.bot_token);
-          if (cls.trueSessionDeath) {
-            tokenInvalid = true;
-            db.prepare("UPDATE channels SET status = 'inactive' WHERE id = ?").run(channel.id);
-            console.error(`⚠️ 通道 ${channel.id} session 真失效（getUpdates 也 ret:-14），标记 inactive`);
-          } else if (cls.sendDisabled) {
-            markSendDisabled(channel.id, '账号可能被 iLink 风控（sendMessage -14 但 getUpdates 正常）');
-            console.error(`⚠️ 通道 ${channel.id} 半死态：能收不能发（账号可能未实名/被风控）`);
-          }
-        } catch (clsErr) {
-          console.error('classifyRet14 失败，保守当做 session 死:', clsErr.message);
-          tokenInvalid = true;
-          db.prepare("UPDATE channels SET status = 'inactive' WHERE id = ?").run(channel.id);
-        }
+        const cls = await classifyAndMarkRet14(channel.id, channel.bot_token);
+        tokenInvalid = cls.tokenInvalid;
       } else if (errStatus === 401 || errStatus === 403) {
         // HTTP 401/403 明确的 token 失效
         tokenInvalid = true;

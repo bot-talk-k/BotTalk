@@ -2,14 +2,20 @@ const db = require('../db');
 const ilink = require('../ilink');
 const { isChannelAlive } = require('./message-poller');
 
-// 标记 sendMessage 成功 → 更新 last_send_success_at，重置 consecutive_neg2_count
+// 标记 sendMessage 成功 → 刷新 last_send_success_at + 全量复活通道
+// （成功发送是最强的"通道现在可用"信号，同时清掉 send_disabled / 连续失败计数 /
+//  把 status 拉回 active，避免"进去容易出来难"的不对称状态）
 function markSendSuccess(channelId) {
   if (!channelId) return;
   try {
     db.prepare(`
       UPDATE channels
       SET last_send_success_at = CURRENT_TIMESTAMP,
-          consecutive_neg2_count = 0
+          status = 'active',
+          consecutive_neg2_count = 0,
+          send_disabled = 0,
+          send_disabled_reason = NULL,
+          send_disabled_at = NULL
       WHERE id = ?
     `).run(channelId);
   } catch (e) {
@@ -17,8 +23,10 @@ function markSendSuccess(channelId) {
   }
 }
 
-// 标记 sendMessage 返回 ret:-2 → 累加 consecutive_neg2_count，记录时间
-function markNeg2(channelId) {
+// 累计"连续确定性失败"计数（列名历史原因叫 consecutive_neg2_count，但语义
+// 已扩展为任何 iLink 返回确定 ret 的失败——-2/-14/其它非 0 ret 都算）。
+// 网络错误/超时不在此处理，因为无法区分是通道问题还是瞬时抖动。
+function markSendFail(channelId) {
   if (!channelId) return;
   try {
     db.prepare(`
@@ -28,20 +36,96 @@ function markNeg2(channelId) {
       WHERE id = ?
     `).run(channelId);
   } catch (e) {
-    console.error('markNeg2 错误:', e.message);
+    console.error('markSendFail 错误:', e.message);
   }
 }
+// 向后兼容别名（之前叫 markNeg2）
+const markNeg2 = markSendFail;
 
-// 根据 iLink 响应自动决定 mark*
-// r: {errcode: 0, ...} → success；err 对象 → 根据 response.data.ret 判断
+// 防止同一通道被并发触发 classifyRet14（两次 getUpdates 会互相抢长轮询位）
+const classifyInFlight = new Map(); // channelId -> Promise<{tokenInvalid, sendDisabled}>
+
+// -14 分类 + 落库的统一入口。任何 send 路径拿到 -14 都走这里，保证：
+// 1) 不会并发调 classifyRet14（同通道在跑时后来者复用同一 Promise）
+// 2) 分类结果一致落库（真死 → status=inactive；半死态 → send_disabled=1）
+// 返回 { tokenInvalid, sendDisabled }，调用方可据此做同步决策（比如 notify.js 的 shouldRetry）。
+async function classifyAndMarkRet14(channelId, botToken) {
+  if (!channelId || !botToken) return { tokenInvalid: false, sendDisabled: false };
+  if (classifyInFlight.has(channelId)) return classifyInFlight.get(channelId);
+  const p = (async () => {
+    try {
+      const cls = await classifyRet14(channelId, botToken);
+      if (cls.trueSessionDeath) {
+        db.prepare("UPDATE channels SET status = 'inactive' WHERE id = ?").run(channelId);
+        console.error(`⚠️ 通道 ${channelId} session 真失效（getUpdates 也 ret:-14），标记 inactive`);
+        return { tokenInvalid: true, sendDisabled: false };
+      }
+      if (cls.sendDisabled) {
+        markSendDisabled(channelId, '账号可能被 iLink 风控（sendMessage -14 但 getUpdates 正常）');
+        console.error(`⚠️ 通道 ${channelId} 半死态：能收不能发（账号可能未实名/被风控）`);
+        return { tokenInvalid: false, sendDisabled: true };
+      }
+      return { tokenInvalid: false, sendDisabled: false };
+    } catch (e) {
+      console.error('classifyAndMarkRet14 异常，保守当 session 死:', e.message);
+      db.prepare("UPDATE channels SET status = 'inactive' WHERE id = ?").run(channelId);
+      return { tokenInvalid: true, sendDisabled: false };
+    } finally {
+      classifyInFlight.delete(channelId);
+    }
+  })();
+  classifyInFlight.set(channelId, p);
+  return p;
+}
+
+// 根据 iLink 响应自动落库。
+// - 成功 → markSendSuccess（顺便复活通道）
+// - 失败：
+//     · 无 ret（网络/超时）→ 不改状态，避免瞬时抖动误判
+//     · ret === 0（理论不会走到失败分支）→ 忽略
+//     · 其它确定性 ret → markSendFail（累加计数，yellow/red 兜底）
+//     · ret === -14 → 额外触发 classifyAndMarkRet14（fire-and-forget，
+//       注意此处不 await，调用方如果需要 sync 判定 tokenInvalid，
+//       应直接 await classifyAndMarkRet14 自己处理）
 function markSendResult(channelId, resultOrErr, isSuccess) {
   if (!channelId) return;
   if (isSuccess) {
     markSendSuccess(channelId);
-  } else {
-    const ret = resultOrErr?.response?.data?.ret ?? resultOrErr?.ret;
-    if (ret === -2) markNeg2(channelId);
-    // ret:-14 / 其他失败不在 Batch 1 处理（Batch 2 会做分类）
+    return;
+  }
+  const ret = resultOrErr?.response?.data?.ret ?? resultOrErr?.ret;
+  if (ret === null || ret === undefined) return; // 网络/超时不落状态
+  if (ret === 0) return;
+  markSendFail(channelId);
+  if (ret === -14) {
+    try {
+      const row = db.prepare('SELECT bot_token FROM channels WHERE id = ?').get(channelId);
+      if (row?.bot_token) {
+        classifyAndMarkRet14(channelId, row.bot_token).catch(e =>
+          console.error('markSendResult -14 分类失败:', e.message));
+      }
+    } catch (e) {
+      console.error('markSendResult 查 bot_token 失败:', e.message);
+    }
+  }
+}
+
+// 非发送路径的通道复活（例如重扫绑定、手动 setContextToken）：
+// 把 status/send_disabled/连续失败计数一次性复位到"干净的活通道"状态。
+function reviveChannel(channelId) {
+  if (!channelId) return;
+  try {
+    db.prepare(`
+      UPDATE channels
+      SET status = 'active',
+          consecutive_neg2_count = 0,
+          send_disabled = 0,
+          send_disabled_reason = NULL,
+          send_disabled_at = NULL
+      WHERE id = ?
+    `).run(channelId);
+  } catch (e) {
+    console.error('reviveChannel 错误:', e.message);
   }
 }
 
@@ -82,7 +166,7 @@ function getChannelHealth(channel) {
     return { health: 'red', reason: 'poller 心跳失效（' + (hb.reason || '未知') + '）', details };
   }
   if (neg2Count >= 3) {
-    return { health: 'red', reason: `连续 ${neg2Count} 次 ret:-2，context_token 可能老化严重`, details };
+    return { health: 'red', reason: `连续 ${neg2Count} 次发送失败（-2/-14/其它确定 ret）`, details };
   }
   if (dbStatus === 'inactive') {
     return { health: 'red', reason: '通道已标记为 inactive', details };
@@ -90,7 +174,7 @@ function getChannelHealth(channel) {
 
   // 黄：poller 活但近期无成功 / 或最近有过 ret:-2 但 < 3 次
   if (neg2Count > 0 && lastNeg2 !== null && lastNeg2 < 60 * 60 * 1000) {
-    return { health: 'yellow', reason: `最近 ${Math.round(lastNeg2/60000)} 分钟内出现 ${neg2Count} 次 ret:-2`, details };
+    return { health: 'yellow', reason: `最近 ${Math.round(lastNeg2/60000)} 分钟内发送失败 ${neg2Count} 次`, details };
   }
   // "长时间无成功推送"判黄之前，先给"用户最近回复过"一个豁免：
   //   用户回复会刷新 context_token，24h 内回过就不算异常（低流量用户不应被持续判黄）
@@ -165,6 +249,7 @@ function clearSendDisabled(channelId) {
 }
 
 module.exports = {
-  markSendSuccess, markNeg2, markSendResult, getChannelHealth,
-  classifyRet14, markSendDisabled, clearSendDisabled,
+  markSendSuccess, markNeg2, markSendFail, markSendResult, getChannelHealth,
+  classifyRet14, classifyAndMarkRet14, markSendDisabled, clearSendDisabled,
+  reviveChannel,
 };

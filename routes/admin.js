@@ -213,13 +213,26 @@ router.get('/channels', (req, res) => {
              c.bot_token_updated_at, c.last_send_success_at, c.consecutive_neg2_count, c.last_neg2_at,
              c.send_disabled, c.send_disabled_reason, c.send_disabled_at,
              c.last_inbound_at,
+             ie.max_created AS inbound_events_max,
              u.id AS user_id, u.nickname, u.role
       FROM channels c
       JOIN users u ON c.user_id = u.id
+      LEFT JOIN (
+        SELECT channel_id, MAX(created_at) AS max_created
+        FROM inbound_events
+        WHERE channel_id IS NOT NULL
+        GROUP BY channel_id
+      ) ie ON ie.channel_id = c.id
       ORDER BY c.id
     `).all();
 
     const data = channels.map(ch => {
+      // 取 channels.last_inbound_at 与 inbound_events 最大值的较大者，防止 poller
+      // 漏写（无 context_token 的 msg、重启 cursor 重置）导致统计偏旧。
+      const a = ch.last_inbound_at;
+      const b = ch.inbound_events_max;
+      const effectiveInbound = a && b ? (a > b ? a : b) : (a || b || null);
+      ch.last_inbound_at = effectiveInbound;
       const h = getChannelHealth(ch);
       return {
         id: ch.id,
