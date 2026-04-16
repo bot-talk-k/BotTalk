@@ -19,7 +19,7 @@ async function resendFailedMessages(userId, channelId, botToken, wechatOpenid, c
     // 取最新的 20 条失败消息（不限时间，用户可能隔几天才来重绑）
     // 补发成功后会直接删除原记录，避免下次再次补发
     const failed = db.prepare(`
-      SELECT id, title, content FROM push_logs
+      SELECT id, title, content, created_at FROM push_logs
       WHERE id IN (
         SELECT id FROM push_logs
         WHERE user_id = ?
@@ -54,7 +54,12 @@ async function resendFailedMessages(userId, channelId, botToken, wechatOpenid, c
     const chRow = db.prepare('SELECT * FROM channels WHERE id = ?').get(channelId);
     let okCount = 0;
     for (const log of failed) {
-      const baseMsg = (log.title || '') + (log.content ? '\n\n' + log.content : '');
+      // 补发时明确标注原定推送时间（北京时间），让用户知道这条消息本该什么时候收到
+      const origTime = log.created_at
+        ? new Date(log.created_at + 'Z').toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false })
+        : '未知时间';
+      const prefix = `⏰ 原本应于 ${origTime} 推送（通道失联期间未送达，现补发）\n\n`;
+      const baseMsg = prefix + (log.title || '') + (log.content ? '\n\n' + log.content : '');
       const msg = appendTip(baseMsg, chRow);
       try {
         const r = await enqueueSend(channelId,
