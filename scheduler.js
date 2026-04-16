@@ -163,14 +163,18 @@ console.log('⏰ 定时任务已启动');
 // ═══════════════════════════════════════════════════════════════════
 // 预防性保活提醒 — 在 context_token 还能用的"黄色警告"窗口主动提醒用户回复
 //
-// 触发条件（同时满足）：
+// 前置过滤（都要满足）：
 //   1. 有 context_token（能发送）
-//   2. consecutive_neg2_count = 0（尚未 ret:-2）
-//   3. 过去 4 小时没有成功推送 或 从未有过成功推送且通道超过 4h
-//   4. 用户从未回复过 或 最近 22 小时未回复
-//   5. 最近 4 小时内没发过保活提醒（去重）
+//   2. consecutive_neg2_count = 0（尚未开始连续失败）
+//   3. send_disabled = 0（不处于半死态）
+//   4. 最近 4 小时内没发过保活提醒（去重）
 //
-// 目的：在通道衰退到 ret:-2 之前，主动让用户发一条消息刷新 context_token
+// 触发条件（二选一即可）：
+//   A. 时间型：过去 4h 没成功推送 AND 用户超过 22h 未回复
+//   B. 频次型：距上次 inbound 已累计成功推送 ≥ 5 条 AND 距 inbound > 2h
+//
+// Why 频次型：2026-04-15 多样本实锤，context_token 衰退是"时间 + 发送次数"
+// 复合效应。高频推送（每小时）9h 就失败，纯时间阈值对这类用户失效。
 // ═══════════════════════════════════════════════════════════════════
 
 const lastKeepaliveReminderAt = {}; // channel_id → epoch ms
@@ -200,17 +204,29 @@ async function checkKeepaliveReminders() {
         ? now - new Date(ch.last_inbound_at + 'Z').getTime()
         : Infinity;
 
-      // 需要保活提醒的条件
-      const needsReminder =
-        lastOkAge > 4 * 60 * 60 * 1000 &&         // 超过 4 小时没成功推送
-        lastInboundAge > 22 * 60 * 60 * 1000;     // 超过 22 小时没回复（或从未）：给用户 2h 缓冲避开睡眠时段
+      // A: 时间型（低频推送场景的兜底）
+      const timeBasedReminder =
+        lastOkAge > 4 * 60 * 60 * 1000 &&
+        lastInboundAge > 22 * 60 * 60 * 1000;
 
-      if (!needsReminder) continue;
+      // B: 频次型（高频推送场景：距上次回复已推 ≥ 5 条 + 至少 2h 无回复）
+      let sendsSinceInbound = 0;
+      if (lastInboundAge > 2 * 60 * 60 * 1000) {
+        sendsSinceInbound = ch.last_inbound_at
+          ? db.prepare("SELECT COUNT(*) AS c FROM push_logs WHERE channel_id = ? AND status = 'success' AND datetime(created_at) > datetime(?)").get(ch.id, ch.last_inbound_at).c
+          : db.prepare("SELECT COUNT(*) AS c FROM push_logs WHERE channel_id = ? AND status = 'success'").get(ch.id).c;
+      }
+      const freqBasedReminder = sendsSinceInbound >= 5 && lastInboundAge > 2 * 60 * 60 * 1000;
+
+      if (!timeBasedReminder && !freqBasedReminder) continue;
 
       const okHours = Math.round(lastOkAge / 3600000);
       const inboundDesc = ch.last_inbound_at
         ? `已 ${Math.round(lastInboundAge / 3600000)} 小时未回复 Bot`
         : '从未回复过 Bot';
+      const triggerReason = freqBasedReminder
+        ? `(频次触发: 距上次回复已推 ${sendsSinceInbound} 条)`
+        : '(时间触发)';
       const msg = '🔔 通道保活提醒\n\n' +
         `你的 BotTalk 通道距今已 ${okHours} 小时没有成功推送，${inboundDesc}。\n\n` +
         '由于 腾讯微信 ClawBot 协议仍在测试阶段，通道需要用户每 24 小时内与 Bot 有一次互动才能保持活跃。\n\n' +
@@ -227,7 +243,7 @@ async function checkKeepaliveReminders() {
           .run(ch.user_id, '🔔 通道保活提醒', msg, 'keepalive-reminder', ch.id, JSON.stringify(r));
         markSendResult(ch.id, r, true);
         lastKeepaliveReminderAt[ch.id] = now;
-        console.log(`🔔 保活提醒已发送: channel=${ch.id} user=${ch.nickname} (${okHours}h 无成功推送)`);
+        console.log(`🔔 保活提醒已发送: channel=${ch.id} user=${ch.nickname} (${okHours}h 无成功推送) ${triggerReason}`);
       } catch (e) {
         const errData = e.response?.data;
         db.prepare("INSERT INTO push_logs (user_id, title, content, status, ip, channel_id, response) VALUES (?, ?, ?, 'failed', ?, ?, ?)")
