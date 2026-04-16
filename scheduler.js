@@ -209,12 +209,16 @@ async function checkKeepaliveReminders() {
         lastOkAge > 4 * 60 * 60 * 1000 &&
         lastInboundAge > 22 * 60 * 60 * 1000;
 
-      // B: 频次型（高频推送场景：距上次回复已推 ≥ 5 条 + 至少 2h 无回复）
+      // B: 频次型（高频推送场景：距上次回复已真实推业务消息 ≥ 5 条 + 至少 2h 无回复）
+      //   只统计"真实业务推送"（api/scheduler/scheduler-retry），排除补发/欢迎/
+      //   回执/保活提醒本身/管理员测试——这些要么是追回过去漏的、要么是系统自身
+      //   消息，不代表"当前对用户的推送压力"。
+      const COUNTED_SOURCES = "('api','scheduler','scheduler-retry')";
       let sendsSinceInbound = 0;
       if (lastInboundAge > 2 * 60 * 60 * 1000) {
         sendsSinceInbound = ch.last_inbound_at
-          ? db.prepare("SELECT COUNT(*) AS c FROM push_logs WHERE channel_id = ? AND status = 'success' AND datetime(created_at) > datetime(?)").get(ch.id, ch.last_inbound_at).c
-          : db.prepare("SELECT COUNT(*) AS c FROM push_logs WHERE channel_id = ? AND status = 'success'").get(ch.id).c;
+          ? db.prepare(`SELECT COUNT(*) AS c FROM push_logs WHERE channel_id = ? AND status = 'success' AND ip IN ${COUNTED_SOURCES} AND datetime(created_at) > datetime(?)`).get(ch.id, ch.last_inbound_at).c
+          : db.prepare(`SELECT COUNT(*) AS c FROM push_logs WHERE channel_id = ? AND status = 'success' AND ip IN ${COUNTED_SOURCES}`).get(ch.id).c;
       }
       const freqBasedReminder = sendsSinceInbound >= 5 && lastInboundAge > 2 * 60 * 60 * 1000;
 
