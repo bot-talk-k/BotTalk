@@ -152,4 +152,113 @@ async function sendMessage(botToken, userId, message, contextToken = '') {
   }
 }
 
-module.exports = { getQRCode, checkQRStatus, sendMessage, getUpdates };
+// ═══════════════════════════════════════════════════════════════════
+//  图片发送：getUploadUrl → AES-128-ECB 加密上传 CDN → sendMessage(image_item)
+// ═══════════════════════════════════════════════════════════════════
+
+const fs = require('fs');
+
+function aesEcbPaddedSize(n) { return Math.ceil((n + 1) / 16) * 16; }
+
+async function uploadImageToCdn(botToken, toUserId, filePath) {
+  const plaintext = fs.readFileSync(filePath);
+  const rawsize = plaintext.length;
+  const rawfilemd5 = crypto.createHash('md5').update(plaintext).digest('hex');
+  const filesize = aesEcbPaddedSize(rawsize);
+  const filekey = crypto.randomBytes(16).toString('hex');
+  const aeskey = crypto.randomBytes(16);
+
+  const headers = getHeaders(botToken);
+  const resp = await axios.post(`${BASE_URL}/ilink/bot/getuploadurl`, {
+    filekey,
+    media_type: 1,
+    to_user_id: toUserId,
+    rawsize,
+    rawfilemd5,
+    filesize,
+    no_need_thumb: true,
+    aeskey: aeskey.toString('hex'),
+    base_info: { channel_version: '1.0.2' },
+  }, { headers, timeout: 15000 });
+
+  const uploadFullUrl = resp.data.upload_full_url?.trim();
+  const uploadParam = resp.data.upload_param;
+  if (!uploadFullUrl && !uploadParam) {
+    throw new Error('getUploadUrl: 未返回上传 URL，resp=' + JSON.stringify(resp.data));
+  }
+
+  const cdnUrl = uploadFullUrl || (() => {
+    const cdnBase = process.env.ILINK_CDN_BASE || 'https://novac2c.cdn.weixin.qq.com/c2c';
+    return `${cdnBase}/upload?encrypted_query_param=${encodeURIComponent(uploadParam)}&filekey=${encodeURIComponent(filekey)}`;
+  })();
+
+  const cipher = crypto.createCipheriv('aes-128-ecb', aeskey, null);
+  const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()]);
+
+  console.log(`📤 CDN 上传: filekey=${filekey} size=${ciphertext.length} url=${cdnUrl.substring(0, 80)}...`);
+
+  const cdnResp = await axios.post(cdnUrl, ciphertext, {
+    headers: { 'Content-Type': 'application/octet-stream' },
+    timeout: 30000,
+    maxBodyLength: Infinity,
+  });
+
+  const downloadParam = cdnResp.headers['x-encrypted-param'];
+  if (!downloadParam) {
+    throw new Error('CDN 上传成功但缺少 x-encrypted-param 头');
+  }
+
+  console.log(`✅ CDN 上传完成: filekey=${filekey}`);
+  return {
+    filekey,
+    downloadEncryptedQueryParam: downloadParam,
+    aeskeyHex: aeskey.toString('hex'),
+    fileSizeCiphertext: filesize,
+  };
+}
+
+async function sendImage(botToken, userId, filePath, contextToken) {
+  const uploaded = await uploadImageToCdn(botToken, userId, filePath);
+  const clientId = generateClientId();
+  const headers = getHeaders(botToken);
+  const body = {
+    msg: {
+      to_user_id: userId,
+      from_user_id: botToken.split('@')[0] + '@im.bot',
+      client_id: clientId,
+      message_type: 2,
+      message_state: 2,
+      context_token: contextToken || undefined,
+      item_list: [{
+        type: 2,
+        image_item: {
+          media: {
+            encrypt_query_param: uploaded.downloadEncryptedQueryParam,
+            aes_key: Buffer.from(uploaded.aeskeyHex).toString('base64'),
+            encrypt_type: 1,
+          },
+          mid_size: uploaded.fileSizeCiphertext,
+        },
+      }],
+    },
+    base_info: { channel_version: '1.0.2' },
+  };
+
+  console.log(`📤 sendImage: to=${userId} filekey=${uploaded.filekey}`);
+  const res = await axios.post(`${BASE_URL}/ilink/bot/sendmessage`, body, { headers, timeout: 30000 });
+
+  const ret = res.data.ret;
+  const errcode = res.data.errcode;
+  const errmsg = res.data.errmsg || res.data.msg || '';
+  if ((ret !== undefined && ret !== 0) || (errcode !== undefined && errcode !== 0)) {
+    const code = ret !== undefined && ret !== 0 ? ret : errcode;
+    const err = new Error(`sendImage 业务错误: code=${code}, msg=${errmsg}`);
+    err.response = { status: res.status, data: { ret: code, errcode: code, msg: errmsg } };
+    throw err;
+  }
+
+  console.log(`✅ sendImage 成功: to=${userId}`);
+  return { errcode: 0, errmsg: 'ok', http_status: res.status };
+}
+
+module.exports = { getQRCode, checkQRStatus, sendMessage, sendImage, getUpdates };
