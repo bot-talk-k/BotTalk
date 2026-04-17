@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>微信 ClawBot 24 小时互动限制 — 官方说明 | BotTalk</title>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, "SF Pro Display", "PingFang SC", "Helvetica Neue", sans-serif;
+      background: #f5f5f7;
+      color: #1d1d1f;
+      line-height: 1.8;
+      -webkit-font-smoothing: antialiased;
+    }
+    .container {
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 40px 20px 60px;
+    }
+    h1 {
+      font-size: 24px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .subtitle {
+      color: #6e6e73;
+      font-size: 14px;
+      margin-bottom: 32px;
+    }
+    .card {
+      background: #fff;
+      border-radius: 16px;
+      padding: 24px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+    }
+    .card h2 {
+      font-size: 17px;
+      font-weight: 600;
+      margin-bottom: 12px;
+    }
+    .quote-box {
+      background: rgba(255,59,48,0.05);
+      border-left: 4px solid #ff3b30;
+      padding: 16px 20px;
+      border-radius: 0 12px 12px 0;
+      font-size: 16px;
+      font-weight: 500;
+      margin-bottom: 16px;
+    }
+    .screenshot {
+      width: 100%;
+      border-radius: 12px;
+      border: 1px solid #e5e5ea;
+      margin: 16px 0;
+    }
+    .action-box {
+      background: rgba(52,199,89,0.08);
+      border-radius: 12px;
+      padding: 16px 20px;
+    }
+    .action-box strong {
+      color: #1d1d1f;
+    }
+    ul {
+      padding-left: 1.2em;
+      margin: 10px 0;
+    }
+    li {
+      margin-bottom: 6px;
+    }
+    .back-link {
+      display: inline-block;
+      margin-top: 24px;
+      color: #0071e3;
+      text-decoration: none;
+      font-size: 14px;
+    }
+    .back-link:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>微信 ClawBot 24 小时互动限制</h1>
+    <p class="subtitle">官方文档说明 + BotTalk 的应对方案</p>
+
+    <div class="card">
+      <h2>微信官方怎么说的</h2>
+      <div class="quote-box">
+        「当你发消息后，微信 ClawBot 仅接收 OpenClaw 24 小时内的回复。」
+      </div>
+      <p style="color:#6e6e73;font-size:14px;margin-bottom:12px;">以下为微信 ClawBot 功能介绍页面的截图：</p>
+      <img class="screenshot" src="img/clawbot-24h-doc.png" alt="微信 ClawBot 功能介绍截图，标注 24 小时限制">
+    </div>
+
+    <div class="card">
+      <h2>翻译成人话</h2>
+      <p>你通过 BotTalk 收消息时，底层用的是微信 ClawBot 通道。微信平台要求：</p>
+      <p style="font-size:18px;font-weight:600;margin:12px 0;">每隔 24 小时，你至少给 Bot 回一条消息，否则通道会被微信静默断开。</p>
+      <p>这不是 BotTalk 的 bug，是微信 ClawBot 协议的设计限制。所有基于这个通道的服务都面临同样的问题。</p>
+    </div>
+
+    <div class="card">
+      <h2>BotTalk 为你做了什么</h2>
+      <ul>
+        <li><strong>第 22 小时自动提醒</strong> — 在你最后一次回复后的第 22 小时，系统主动发一条提醒，请你回一个字</li>
+        <li><strong>秒回确认</strong> — 你回复后立刻收到确认。没收到确认 = 通道已断</li>
+        <li><strong>断了也能恢复</strong> — 访问 <a href="/app" style="color:#0071e3;">bot-talk.com/app</a> 重新扫码，SendKey 和历史不变</li>
+        <li><strong>失败消息自动补发</strong> — 通道恢复后，失联期间的消息会自动补发，并标注原定推送时间</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2>建议养成的习惯</h2>
+      <div class="action-box">
+        <strong>每次看到推送，顺手回"1"</strong><br>
+        就像微信群里回"收到"一样，一秒钟的事。<br>
+        回一次 = 通道续命 24 小时。
+      </div>
+    </div>
+
+    <a href="/" class="back-link">&larr; 返回 BotTalk 首页</a>
+  </div>
+</body>
+</html>

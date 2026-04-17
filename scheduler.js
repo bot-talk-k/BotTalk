@@ -233,10 +233,12 @@ async function checkKeepaliveReminders() {
         : '(时间触发)';
       const msg = '🔔 通道保活提醒\n\n' +
         `你的 BotTalk 通道距今已 ${okHours} 小时没有成功推送，${inboundDesc}。\n\n` +
-        '由于 腾讯微信 ClawBot 协议仍在测试阶段，通道需要用户每 24 小时内与 Bot 有一次互动才能保持活跃。\n\n' +
-        '✅ 保活方法：\n' +
-        '现在给我（Bot）回复任意一字（如"好""1""收到"）即可刷新通道。无需重新扫码。\n\n' +
-        '💡 如果你任何时候在这里发送任意消息、未获得平台回执，说明你的通道已经被腾讯平台踢掉。届时可随时访问官网 http://bot-talk.com 扫码重绑激活，你的 SendKey 和发送历史不变。\n\n' +
+        '微信官方文档明确：ClawBot「仅接收 24 小时内的回复」。\n' +
+        '超时后通道会被微信静默断开，这不是 BotTalk 的问题。\n\n' +
+        '✅ 现在回复"1"即可续命：\n' +
+        '给我（Bot）回"1"或任意一字，通道立刻刷新。\n\n' +
+        '💡 没收到系统回执？说明通道已断——访问 bot-talk.com/app 扫码重绑即可。\n\n' +
+        '详细说明：bot-talk.com/clawbot-limitation\n' +
         '本提醒 4 小时内不会重复发送。';
 
       try {

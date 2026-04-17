@@ -212,7 +212,7 @@ router.get('/bind-status-public/:qrcode', async (req, res) => {
         reviveChannel(existingChannel.id);
         markRecoveredByRescan(existingChannel.id);
         probeMarkRescan(existingChannel.id);
-        const welcomeMsg = '✅ 通道已激活（重绑恢复）\n\n欢迎回来！你的 BotTalk 通道已重新激活。你刚才的回复已成功送达，通道测试通过 ✓\n\n📢 由于 腾讯微信 ClawBot 协议的限制，通道长时间无互动会被微信平台静默断开。\n\n✅ 临时保活方法（直到腾讯修复）：\n• 收到推送后回复一字（"在""好""1"），系统会立即回执确认\n• 没收到回执 = 通道已断 → 回 https://bot-talk.com/app 重新扫码\n• 每天发一字保活，可显著降低断开概率';
+        const welcomeMsg = '✅ 通道已激活（重绑恢复）\n\n欢迎回来！通道测试通过 ✓\n\n📋 提醒：微信官方确认 ClawBot「仅接收 24 小时内的回复」\n所以每天给我回一字就好（收到推送时回"1"即可）。\n我们会在第 22 小时自动提醒你。\n\n详细说明：https://bot-talk.com/clawbot-limitation';
         enqueueSend(existingChannel.id,
           () => ilink.sendMessage(botToken, ilinkUserId, welcomeMsg, contextToken),
           { title: '🔄 重绑欢迎', source: 'rebind-welcome' })
@@ -267,18 +267,21 @@ router.get('/bind-status-public/:qrcode', async (req, res) => {
       const baseUrl = process.env.BASE_URL || 'https://bot-talk.com';
       const welcomeMsg =
         `🎉 欢迎使用 BotTalk！\n\n` +
-        `你的推送通道已激活成功，刚才的回复已收到，通道测试通过 ✓\n` +
+        `你的推送通道已激活成功 ✓\n` +
         `访问 ${baseUrl}/app 查看 SendKey 和 API 文档。\n\n` +
         `━━━━━━━━━━━━\n` +
-        `📢 关于通道稳定性（请花 30 秒了解）\n\n` +
-        `坦白告知：本服务依赖的是 腾讯微信 ClawBot 通道——这是腾讯仍在内测灰度阶段的协议，存在一个我们无法绕开的限制：` +
-        `通道如果长时间没有用户互动，会被微信平台静默断开。这是腾讯方面的不完善，不是 BotTalk 的 bug。\n\n` +
-        `想用微信简单接收推送，目前只有这一条相对方便的路（企业微信配置复杂得多）。所以在腾讯修复之前，需要你配合一个小动作：\n\n` +
-        `✅ 临时保活方法：\n` +
-        `• 收到推送后顺手回复一字（"在""好""1"），系统会立即回执确认\n` +
-        `• 没收到回执 = 通道已被腾讯断开 → 回 ${baseUrl}/app 重新扫码（数据不丢）\n` +
-        `• 即使没收到推送，每天发一字保活，可显著降低断开概率\n\n` +
-        `🙏 我们持续跟进腾讯协议更新，一旦官方修复 bug，本提示和保活动作都会立即移除。`;
+        `📋 重要：微信官方限制（请花 20 秒了解）\n\n` +
+        `微信 ClawBot 官方文档写道：\n` +
+        `「仅接收 24 小时内的回复」\n\n` +
+        `翻译成人话：你每天需要给我（Bot）回复一条消息，通道才能持续工作。\n` +
+        `这是微信平台的规则，不是 BotTalk 的 bug。\n\n` +
+        `我们能帮你的：\n` +
+        `• 在你最后一次回复后的第 22 小时，自动提醒你保活\n` +
+        `• 你回复后秒回确认——没收到确认 = 通道已断\n` +
+        `• 断了也没事：回 ${baseUrl}/app 扫码即恢复，SendKey 不变\n\n` +
+        `✅ 养成习惯：每次看到推送，顺手回"1"\n` +
+        `就像微信群里回"收到"一样，一秒钟的事。\n\n` +
+        `详细说明：${baseUrl}/clawbot-limitation`;
       enqueueSend(channelId,
         () => ilink.sendMessage(botToken, ilinkUserId, welcomeMsg, contextToken),
         { title: '🎉 欢迎消息', source: 'new-user-welcome' })
@@ -392,7 +395,7 @@ router.get('/bind-status/:qrcode', async (req, res) => {
           reviveChannel(existingChannel.id);
           markRecoveredByRescan(existingChannel.id);
         probeMarkRescan(existingChannel.id);
-          const rebindMsg = '✅ 通道已激活（重绑恢复）\n\n通道重新绑定成功！可以正常接收消息推送了。\n\n📢 由于 腾讯微信 ClawBot 协议的限制，通道长时间无互动会被微信平台静默断开。\n\n✅ 临时保活方法（直到腾讯修复）：\n• 收到推送后回复一字（"在""好""1"），系统会立即回执确认\n• 没收到回执 = 通道已断 → 回 https://bot-talk.com/app 重新扫码\n• 每天发一字保活，可显著降低断开概率\n\n现在试试回复任意一字测试通道 👇';
+          const rebindMsg = '✅ 通道已激活（重绑恢复）\n\n通道重新绑定成功，可正常接收推送了。\n\n📋 提醒：微信官方限制，通道需每 24 小时互动一次。\n收到推送时回复"1"即可保活，我们会在第 22 小时自动提醒。\n\n详细说明：https://bot-talk.com/clawbot-limitation\n\n现在试试回复任意一字测试通道 👇';
           enqueueSend(existingChannel.id,
             () => ilink.sendMessage(botToken, ilinkUserId, rebindMsg, contextToken),
             { title: '🔄 通道重绑', source: 'rebind' })

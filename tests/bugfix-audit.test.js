@@ -189,9 +189,9 @@ async function testCheckSessionExpiryRemoved() {
 
 async function testWelcomeCopy() {
   const src = require('fs').readFileSync(path.join(__dirname, '..', 'routes', 'channels.js'), 'utf8');
-  assert(src.includes('腾讯微信 ClawBot'), '应明确归因腾讯');
+  assert(src.includes('微信 ClawBot'), '应提及微信 ClawBot');
   assert(src.includes('通道测试通过'), '欢迎消息应包含"通道测试通过"反馈');
-  assert(src.includes('每天发一字保活'), '应包含保活方法');
+  assert(src.includes('clawbot-limitation'), '应链接到官方限制说明页');
 }
 
 // ═══════════════════════════════════════════════════════════════════

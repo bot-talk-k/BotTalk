@@ -14,13 +14,13 @@
 
 const MODE = process.env.KEEPALIVE_TIP_MODE || 'long';
 
-const SHORT_TIP = '\n\n—— 💬 回一字 = 通道保活 24 小时';
+const SHORT_TIP = '\n\n—— 💬 回"1"= 通道续命 24h（微信官方限制）';
 
 const LONG_TIP =
   '\n\n━━━━━━━━━━━━━━━━\n' +
-  '💬 保活机制：每次你回复任意一字，保活窗口刷新为 24 小时。' +
-  '若连续不回，系统会在最后一次互动后的第 22 小时自动提醒你——' +
-  '正常用完全无感，快掉线前我们会先喊你一声 🙏';
+  '💬 微信官方限制：ClawBot 仅接收 24 小时内的回复。' +
+  '回复"1"= 通道续命 24 小时。我们会在第 22 小时自动提醒你。' +
+  '详情：bot-talk.com/clawbot-limitation';
 
 // 判断是否用长尾巴（smart 模式下）
 // 触发条件：
