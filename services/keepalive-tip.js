@@ -20,7 +20,7 @@ const LONG_TIP =
   '\n\n━━━━━━━━━━━━━━━━\n' +
   '💬 微信官方限制：ClawBot 仅接收 24 小时内的回复。' +
   '回复"1"= 通道续命 24 小时。我们会在第 22 小时自动提醒你。' +
-  '详情：bot-talk.com/clawbot-limitation';
+  '详情：bot-talk.com/intro#clawbot-limitation';
 
 // 判断是否用长尾巴（smart 模式下）
 // 触发条件：

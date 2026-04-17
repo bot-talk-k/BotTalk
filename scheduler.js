@@ -238,7 +238,7 @@ async function checkKeepaliveReminders() {
         '✅ 现在回复"1"即可续命：\n' +
         '给我（Bot）回"1"或任意一字，通道立刻刷新。\n\n' +
         '💡 没收到系统回执？说明通道已断——访问 bot-talk.com/app 扫码重绑即可。\n\n' +
-        '详细说明：bot-talk.com/clawbot-limitation\n' +
+        '详细说明：bot-talk.com/intro#clawbot-limitation\n' +
         '本提醒 4 小时内不会重复发送。';
 
       try {

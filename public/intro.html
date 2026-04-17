@@ -228,12 +228,12 @@
   <div class="announcement-track">
     <span class="announcement-item">📢 <strong>通告：</strong>新用户扫码绑定即注册，老用户随时扫码自动续用可查询历史消息</span>
     <span class="announcement-sep">•</span>
-    <span class="announcement-item">⏱️ <strong>通告：</strong>微信官方确认 — ClawBot 通道仅接收 24 小时内的用户回复。收到推送后回复"1"即可保活。<a href="clawbot-limitation" style="color:#b06500;">详见官方说明 →</a></span>
+    <span class="announcement-item">⏱️ <strong>通告：</strong>微信官方确认 — ClawBot 通道仅接收 24 小时内的用户回复。收到推送后回复"1"即可保活。<a href="intro#clawbot-limitation" style="color:#b06500;">详见官方说明 →</a></span>
     <span class="announcement-sep">•</span>
     <!-- 重复一遍保证循环平滑 -->
     <span class="announcement-item">📢 <strong>通告：</strong>新用户扫码绑定即注册，老用户随时扫码自动续用可查询历史消息</span>
     <span class="announcement-sep">•</span>
-    <span class="announcement-item">⏱️ <strong>通告：</strong>微信官方确认 — ClawBot 通道仅接收 24 小时内的用户回复。收到推送后回复"1"即可保活。<a href="clawbot-limitation" style="color:#b06500;">详见官方说明 →</a></span>
+    <span class="announcement-item">⏱️ <strong>通告：</strong>微信官方确认 — ClawBot 通道仅接收 24 小时内的用户回复。收到推送后回复"1"即可保活。<a href="intro#clawbot-limitation" style="color:#b06500;">详见官方说明 →</a></span>
     <span class="announcement-sep">•</span>
   </div>
 </div>
@@ -343,7 +343,7 @@
 
     <div class="tip-box" style="background:rgba(255,59,48,0.06);border-color:rgba(255,59,48,0.3);">
       <span class="icon">📋</span>
-      <span><strong>微信官方限制（非 BotTalk bug）：</strong>微信 ClawBot 文档明确写道「仅接收 24 小时内的回复」。每天给 Bot 回复一字（如"1"）即可保活。我们已设置<strong>自动提醒</strong>：在你最后一次回复后的第 22 小时主动提醒你。<a href="clawbot-limitation" style="color:#0071e3;">查看官方说明 →</a></span>
+      <span><strong>微信官方限制（非 BotTalk bug）：</strong>微信 ClawBot 文档明确写道「仅接收 24 小时内的回复」。每天给 Bot 回复一字（如"1"）即可保活。我们已设置<strong>自动提醒</strong>：在你最后一次回复后的第 22 小时主动提醒你。<a href="#clawbot-limitation" style="color:#0071e3;">查看官方说明 →</a></span>
     </div>
 
     <div class="tip-box">
@@ -353,6 +353,47 @@
 
     <div class="url-box">
       https://bot-talk.com/<span class="key-highlight">&lt;SENDKEY&gt;</span>.send?<span class="param">title</span>=你好&<span class="param">desp</span>=这是消息内容
+    </div>
+  </div>
+</section>
+
+<!-- ── ClawBot 24h 官方限制说明 ──────────────────────────────── -->
+<section class="section" id="clawbot-limitation" style="background:#f5f5f7;">
+  <div class="container" style="max-width:680px;">
+    <h2>微信 ClawBot 24 小时互动限制</h2>
+    <p style="color:#6e6e73;margin-bottom:24px;">官方文档说明 + BotTalk 的应对方案</p>
+
+    <div style="background:#fff;border-radius:16px;padding:24px;margin-bottom:20px;box-shadow:0 2px 12px rgba(0,0,0,0.06);">
+      <h3 style="font-size:17px;font-weight:600;margin-bottom:12px;">微信官方怎么说的</h3>
+      <div style="background:rgba(255,59,48,0.05);border-left:4px solid #ff3b30;padding:16px 20px;border-radius:0 12px 12px 0;font-size:16px;font-weight:500;margin-bottom:16px;">
+        「当你发消息后，微信 ClawBot 仅接收 OpenClaw 24 小时内的回复。」
+      </div>
+      <p style="color:#6e6e73;font-size:14px;margin-bottom:12px;">以下为微信 ClawBot 功能介绍页面的截图：</p>
+      <img src="img/clawbot-24h-doc.png" alt="微信 ClawBot 功能介绍截图" style="width:100%;border-radius:12px;border:1px solid #e5e5ea;">
+    </div>
+
+    <div style="background:#fff;border-radius:16px;padding:24px;margin-bottom:20px;box-shadow:0 2px 12px rgba(0,0,0,0.06);">
+      <h3 style="font-size:17px;font-weight:600;margin-bottom:12px;">翻译成人话</h3>
+      <p>你通过 BotTalk 收消息时，底层用的是微信 ClawBot 通道。微信平台要求：</p>
+      <p style="font-size:18px;font-weight:600;margin:12px 0;">每隔 24 小时，你至少给 Bot 回一条消息，否则通道会被微信静默断开。</p>
+      <p>这不是 BotTalk 的 bug，是微信 ClawBot 协议的设计限制。</p>
+    </div>
+
+    <div style="background:#fff;border-radius:16px;padding:24px;margin-bottom:20px;box-shadow:0 2px 12px rgba(0,0,0,0.06);">
+      <h3 style="font-size:17px;font-weight:600;margin-bottom:12px;">BotTalk 为你做了什么</h3>
+      <ul style="padding-left:1.2em;">
+        <li style="margin-bottom:6px;"><strong>第 22 小时自动提醒</strong> — 在你最后一次回复后的第 22 小时，系统主动发一条提醒</li>
+        <li style="margin-bottom:6px;"><strong>秒回确认</strong> — 你回复后立刻收到确认。没收到确认 = 通道已断</li>
+        <li style="margin-bottom:6px;"><strong>断了也能恢复</strong> — 访问 <a href="/app" style="color:#0071e3;">bot-talk.com/app</a> 重新扫码，SendKey 和历史不变</li>
+        <li style="margin-bottom:6px;"><strong>失败消息自动补发</strong> — 通道恢复后，失联期间的消息自动补发，标注原定推送时间</li>
+      </ul>
+    </div>
+
+    <div style="background:rgba(52,199,89,0.08);border-radius:16px;padding:24px;box-shadow:0 2px 12px rgba(0,0,0,0.06);">
+      <h3 style="font-size:17px;font-weight:600;margin-bottom:8px;">建议养成的习惯</h3>
+      <p style="font-size:16px;"><strong>每次看到推送，顺手回"1"</strong><br>
+      就像微信群里回"收到"一样，一秒钟的事。<br>
+      回一次 = 通道续命 24 小时。</p>
     </div>
   </div>
 </section>
