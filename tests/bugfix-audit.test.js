@@ -191,7 +191,7 @@ async function testWelcomeCopy() {
   const src = require('fs').readFileSync(path.join(__dirname, '..', 'routes', 'channels.js'), 'utf8');
   assert(src.includes('微信 ClawBot'), '应提及微信 ClawBot');
   assert(src.includes('通道测试通过'), '欢迎消息应包含"通道测试通过"反馈');
-  assert(src.includes('clawbot-limitation'), '应链接到官方限制说明页');
+  assert(src.includes('假装在和它对话'), '应包含"假装对话"金句');
 }
 
 // ═══════════════════════════════════════════════════════════════════

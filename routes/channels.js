@@ -212,12 +212,13 @@ router.get('/bind-status-public/:qrcode', async (req, res) => {
         reviveChannel(existingChannel.id);
         markRecoveredByRescan(existingChannel.id);
         probeMarkRescan(existingChannel.id);
-        const welcomeMsg = '✅ 通道已激活（重绑恢复）\n\n欢迎回来！通道测试通过 ✓\n\n📋 提醒：微信官方确认 ClawBot「仅接收 24 小时内的回复」\n所以每天给我回一字就好（收到推送时回"1"即可）。\n我们会在第 22 小时自动提醒你。\n\n详细说明：https://bot-talk.com/intro#clawbot-limitation';
+        const welcomeMsg = '✅ 通道已激活（重绑恢复）\n\n欢迎回来！通道测试通过 ✓\n\n📋 提醒：微信官方确认 ClawBot「仅接收 24 小时内的回复」\n所以每天给我回一字就好（收到推送时回"1"即可）。\n我们会在第 22 小时自动提醒你。\n\n只要你假装在和它对话，它就永远不会失联。';
         enqueueSend(existingChannel.id,
           () => ilink.sendMessage(botToken, ilinkUserId, welcomeMsg, contextToken),
           { title: '🔄 重绑欢迎', source: 'rebind-welcome' })
           .then(r => {
             logSystemPush(existingChannel.user_id, existingChannel.id, '🔄 重绑欢迎', welcomeMsg, r, true);
+            ilink.sendImage(botToken, ilinkUserId, require('path').join(__dirname, '..', 'public', 'img', 'clawbot-24h-doc.png'), contextToken).catch(e => console.error('重绑截图发送失败:', e.message));
             resendFailedMessages(existingChannel.user_id, existingChannel.id, botToken, ilinkUserId, contextToken);
           })
           .catch(err => {
@@ -281,11 +282,14 @@ router.get('/bind-status-public/:qrcode', async (req, res) => {
         `• 断了也没事：回 ${baseUrl}/app 扫码即恢复，SendKey 不变\n\n` +
         `✅ 养成习惯：每次看到推送，顺手回"1"\n` +
         `就像微信群里回"收到"一样，一秒钟的事。\n\n` +
-        `详细说明：${baseUrl}/intro#clawbot-limitation`;
+        `只要你假装在和它对话，它就永远不会失联。`;
       enqueueSend(channelId,
         () => ilink.sendMessage(botToken, ilinkUserId, welcomeMsg, contextToken),
         { title: '🎉 欢迎消息', source: 'new-user-welcome' })
-        .then(r => logSystemPush(userId, channelId, '🎉 欢迎消息', welcomeMsg, r, true))
+        .then(r => {
+          logSystemPush(userId, channelId, '🎉 欢迎消息', welcomeMsg, r, true);
+          return ilink.sendImage(botToken, ilinkUserId, require('path').join(__dirname, '..', 'public', 'img', 'clawbot-24h-doc.png'), contextToken).catch(e => console.error('欢迎截图发送失败:', e.message));
+        })
         .catch(err => {
           console.error('发送欢迎消息失败:', err.message);
           logSystemPush(userId, channelId, '🎉 欢迎消息', welcomeMsg, err, false);
@@ -395,12 +399,13 @@ router.get('/bind-status/:qrcode', async (req, res) => {
           reviveChannel(existingChannel.id);
           markRecoveredByRescan(existingChannel.id);
         probeMarkRescan(existingChannel.id);
-          const rebindMsg = '✅ 通道已激活（重绑恢复）\n\n通道重新绑定成功，可正常接收推送了。\n\n📋 提醒：微信官方限制，通道需每 24 小时互动一次。\n收到推送时回复"1"即可保活，我们会在第 22 小时自动提醒。\n\n详细说明：https://bot-talk.com/intro#clawbot-limitation\n\n现在试试回复任意一字测试通道 👇';
+          const rebindMsg = '✅ 通道已激活（重绑恢复）\n\n通道重新绑定成功，可正常接收推送了。\n\n📋 提醒：微信官方限制，通道需每 24 小时互动一次。\n收到推送时回复"1"即可保活，我们会在第 22 小时自动提醒。\n\n只要你假装在和它对话，它就永远不会失联。\n\n现在试试回复任意一字测试通道 👇';
           enqueueSend(existingChannel.id,
             () => ilink.sendMessage(botToken, ilinkUserId, rebindMsg, contextToken),
             { title: '🔄 通道重绑', source: 'rebind' })
             .then(r => {
               logSystemPush(userId, existingChannel.id, '🔄 通道重绑', rebindMsg, r, true);
+              ilink.sendImage(botToken, ilinkUserId, require('path').join(__dirname, '..', 'public', 'img', 'clawbot-24h-doc.png'), contextToken).catch(e => console.error('重绑截图发送失败:', e.message));
               resendFailedMessages(userId, existingChannel.id, botToken, ilinkUserId, contextToken);
             })
             .catch(err => {
