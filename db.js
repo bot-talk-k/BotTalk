@@ -426,6 +426,41 @@ if (!hasRun(19)) {
   markRun(19);
 }
 
+// Migration 20: 补发逐条确认 — paused + triggered_by_reply 列
+// 用户回复只触发 1 条补发，其余保持 paused；每条补发带"回复 1 获取下一条"
+if (!hasRun(20)) {
+  try {
+    db.exec('ALTER TABLE push_retry_queue ADD COLUMN paused INTEGER DEFAULT 0');
+    db.exec('ALTER TABLE push_retry_queue ADD COLUMN triggered_by_reply INTEGER DEFAULT 0');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_retry_queue_paused ON push_retry_queue(paused, status, next_try_at)');
+  } catch (e) {
+    console.error('migration 20 error:', e.message);
+  }
+  markRun(20);
+}
+
+// Migration 21: 把已有 pending 项全部暂停（每通道保留最早的 1 条不暂停）
+// 这是 migration 20 的后续数据修复，确保迁移跑过后已有项也进入逐条模式
+if (!hasRun(21)) {
+  try {
+    const channels = db.prepare('SELECT DISTINCT channel_id FROM push_retry_queue WHERE status = \'pending\'').all();
+    for (const ch of channels) {
+      const oldest = db.prepare(
+        'SELECT id FROM push_retry_queue WHERE channel_id = ? AND status = \'pending\' ORDER BY next_try_at ASC LIMIT 1'
+      ).get(ch.channel_id);
+      if (oldest) {
+        db.prepare(
+          'UPDATE push_retry_queue SET paused = 1 WHERE channel_id = ? AND status = \'pending\' AND id != ?'
+        ).run(ch.channel_id, oldest.id);
+      }
+    }
+    console.log(`📋 migration 21: 已为 ${channels.length} 个通道的 pending 项启用逐条模式`);
+  } catch (e) {
+    console.error('migration 21 error:', e.message);
+  }
+  markRun(21);
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────
 
 function generateSendKey() {

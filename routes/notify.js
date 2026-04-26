@@ -7,6 +7,7 @@ const { markSendResult, classifyAndMarkRet14 } = require('../services/channel-he
 const { enqueueSend } = require('../services/push-queue');
 const { appendTip } = require('../services/keepalive-tip');
 const { enqueueRetry } = require('../services/retry-queue');
+const { cancelPausedForChannel } = require('../services/retry-queue');
 
 // 简单内存限流：每 Key 每小时最多 100 条
 const rateLimits = {};
@@ -164,6 +165,7 @@ async function handlePush(sendKey, title, content, clientIp, channelParam, req) 
       `).run(user.id, title, content, clientIp, channel.id, resJson);
 
       markSendResult(channel.id, ilinkRes, true);
+      cancelPausedForChannel(channel.id); // 通道恢复正常，取消所有 paused 补发
       logActivity(user.id, 'push_api', { channel_id: channel.id, title }, req);
       results.push({ channel_id: channel.id, status: 'success' });
     } catch (error) {
