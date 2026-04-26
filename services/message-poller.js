@@ -176,6 +176,17 @@ async function startMessagePoller(botToken, userId, onFirstMessage) {
         if (batchHasUserText && batchChannelId && batchContextToken && !batchFiredFirstMessage) {
           maybeSendAck(batchChannelId, botToken, userId, batchContextToken);
         }
+
+        // 补发续发：用户回复 → 检查是否有活跃补发引导，有则发下一条
+        try {
+          const ch = db.prepare('SELECT user_id, bot_token FROM channels WHERE id = ?').get(batchChannelId);
+          if (ch) {
+            const { resendNextMessage } = require('../routes/channels');
+            resendNextMessage(batchChannelId, ch.user_id, botToken, userId, batchContextToken);
+          }
+        } catch (e) {
+          console.error('补发续发失败:', e.message);
+        }
       }
     } catch (error) {
       if (error.code === 'SESSION_EXPIRED') {

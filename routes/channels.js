@@ -13,74 +13,105 @@ const { requireLogin } = require('../middleware/auth');
 const { logActivity } = require('../services/logger');
 const { startMessagePoller, getContextToken } = require('../services/message-poller');
 
-// 通道恢复后补发失效期间失败的消息
-async function resendFailedMessages(userId, channelId, botToken, wechatOpenid, contextToken) {
+// 用户回复"1"时，续发下一条补发消息
+async function resendNextMessage(channelId, userId, botToken, wechatOpenid, contextToken) {
   try {
-    // 取最新的 20 条失败消息（不限时间，用户可能隔几天才来重绑）
-    // 补发成功后会直接删除原记录，避免下次再次补发
-    const failed = db.prepare(`
+    // 检查是否有活跃的补发引导（5 分钟内）
+    const prompt = db.prepare(`
+      SELECT * FROM push_logs
+      WHERE channel_id = ? AND source = 'resend-prompt' AND status = 'success'
+      AND datetime(created_at) > datetime('now', '-5 minutes')
+      ORDER BY id DESC LIMIT 1
+    `).get(channelId);
+    if (!prompt) return false; // 无活跃补发引导
+
+    let meta;
+    try { meta = JSON.parse(prompt.response || '{}'); } catch { meta = {}; }
+    if (meta.pending <= 0) return false; // 已全部发完
+
+    // 取下一条失败消息（最早的，按时间顺序补发）
+    const nextLog = db.prepare(`
       SELECT id, title, content, created_at FROM push_logs
       WHERE id IN (
         SELECT id FROM push_logs
         WHERE user_id = ?
           AND status = 'failed'
-          AND ip NOT IN ('system', 'system-announce', 'system-warning', 'session-warning', 'alert', 'announce-redo', 'system-backfill', 'system-announce-retry', 'system-announce-retry2', 'health-check', 'resend', 'system-apology', 'resend-notice', 'resend-recovery')
-        ORDER BY id DESC
-        LIMIT 20
+          AND ip NOT IN ('system', 'system-announce', 'system-warning', 'session-warning', 'alert', 'announce-redo', 'system-backfill', 'system-announce-retry', 'system-announce-retry2', 'health-check', 'resend', 'system-apology', 'resend-notice', 'resend-recovery', 'resend-prompt')
+        ORDER BY id ASC
+        LIMIT 1
       )
-      ORDER BY id ASC
-    `).all(userId);
+    `).get(userId);
+    if (!nextLog) {
+      // 没有更多失败消息了，标记引导为已完成
+      db.prepare("UPDATE push_logs SET content = ? WHERE id = ?")
+        .run(JSON.stringify({ ...meta, pending: 0, completed: true }), prompt.id);
+      return false;
+    }
 
-    if (failed.length === 0) return;
+    const chRow = db.prepare('SELECT * FROM channels WHERE id = ?').get(channelId);
+    const origTime = nextLog.created_at
+      ? new Date(nextLog.created_at + 'Z').toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false })
+      : '未知时间';
+    const prefix = `⏰ 原本应于 ${origTime} 推送（通道失联期间未送达，现补发）\n\n`;
+    const baseMsg = prefix + (nextLog.title || '') + (nextLog.content ? '\n\n' + nextLog.content : '');
+    const remaining = meta.pending - 1;
+    const suffix = `\n\n💬 需要补发更多历史消息吗？回复"1"继续（剩余 ${remaining} 条，5 分钟内有效，无需补发可不理会）`;
+    const msg = appendTip(baseMsg + suffix, chRow);
 
-    console.log(`📬 开始补发 user=${userId} 的 ${failed.length} 条失败消息`);
-
-    // 先发一个头部消息告知用户
-    const header = `📬 通道已恢复\n\n检测到失效期间有 ${failed.length} 条消息未能送达，将依次补发给你。`;
     try {
       const r = await enqueueSend(channelId,
-        () => ilink.sendMessage(botToken, wechatOpenid, header, contextToken),
-        { title: '📬 通道恢复', source: 'resend-notice' });
-      db.prepare("INSERT INTO push_logs (user_id, title, content, status, ip, channel_id, response) VALUES (?, ?, ?, 'success', ?, ?, ?)")
-        .run(userId, '📬 通道恢复通知', header, 'resend-notice', channelId, JSON.stringify({ count: failed.length }));
+        () => ilink.sendMessage(botToken, wechatOpenid, msg, contextToken),
+        { title: '📬 通道恢复补发', source: 'resend-prompt' });
       markSendResult(channelId, r, true);
+      db.prepare("INSERT INTO push_logs (user_id, title, content, status, ip, channel_id, response) VALUES (?, ?, ?, 'success', ?, ?, ?)")
+        .run(userId, '📬 通道恢复补发', msg, 'resend-prompt', channelId,
+          JSON.stringify({ ...meta, pending: remaining, sent: meta.sent + 1 }));
     } catch (e) {
-      console.error('补发头部消息失败:', e.message);
+      console.error('补发续发消息失败:', e.message);
       markSendResult(channelId, e, false);
-      return; // 头部都发不出去就别硬补发了
+      return false;
     }
 
-    // 查通道完整记录用于 appendTip
-    const chRow = db.prepare('SELECT * FROM channels WHERE id = ?').get(channelId);
-    let okCount = 0;
-    for (const log of failed) {
-      // 补发时明确标注原定推送时间（北京时间），让用户知道这条消息本该什么时候收到
-      const origTime = log.created_at
-        ? new Date(log.created_at + 'Z').toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false })
-        : '未知时间';
-      const prefix = `⏰ 原本应于 ${origTime} 推送（通道失联期间未送达，现补发）\n\n`;
-      const baseMsg = prefix + (log.title || '') + (log.content ? '\n\n' + log.content : '');
-      const msg = appendTip(baseMsg, chRow);
-      try {
-        const r = await enqueueSend(channelId,
-          () => ilink.sendMessage(botToken, wechatOpenid, msg, contextToken),
-          { title: log.title + ' [补发]', source: 'resend-recovery' });
-        db.prepare("INSERT INTO push_logs (user_id, title, content, status, ip, channel_id, response) VALUES (?, ?, ?, 'success', ?, ?, ?)")
-          .run(userId, (log.title || '') + ' [补发]', log.content, 'resend-recovery', channelId, JSON.stringify({ ...r, original_log_id: log.id }));
-        // 补发成功，删除原失败记录，防止下次重绑重复补发
-        db.prepare("DELETE FROM push_logs WHERE id = ?").run(log.id);
-        markSendResult(channelId, r, true);
-        okCount++;
-      } catch (e) {
-        console.error(`补发 log ${log.id} 失败:`, e.message);
-        markSendResult(channelId, e, false);
-      }
-      // 队列已保证 10s 间隔，无需额外 sleep
-    }
+    // 删除已发送的那条失败记录
+    db.prepare("DELETE FROM push_logs WHERE id = ?").run(nextLog.id);
 
-    console.log(`✅ 补发完成: ${okCount}/${failed.length} 成功`);
+    console.log(`📬 续发补发: channel=${channelId}（已发 ${meta.sent + 1} 条，剩余 ${remaining} 条）`);
+    return true;
   } catch (e) {
-    console.error('resendFailedMessages 错误:', e.message);
+    console.error('resendNextMessage 错误:', e.message);
+    return false;
+  }
+}
+
+// 超时清理：5 分钟内无回复的补发引导，放弃剩余消息
+function cleanupExpiredResendPrompts() {
+  try {
+    // 找过期的补发引导（5 分钟前发送的，用户没回复）
+    const expired = db.prepare(`
+      SELECT id, user_id, channel_id, response FROM push_logs
+      WHERE source = 'resend-prompt' AND status = 'success'
+      AND datetime(created_at) <= datetime('now', '-5 minutes')
+    `).all();
+    for (const p of expired) {
+      let meta;
+      try { meta = JSON.parse(p.response || '{}'); } catch { meta = {}; }
+      if (meta.completed || meta.expired) continue;
+
+      // 将该 channel 剩余的 resend-prompt 引导标记为废弃
+      db.prepare(`
+        UPDATE push_logs SET status = 'abandoned', response = ?
+        WHERE channel_id = ? AND source = 'resend-prompt' AND status = 'success'
+        AND id != ?
+      `).run(JSON.stringify({ abandoned: true }), p.channel_id, p.id);
+
+      // 标记引导为过期
+      db.prepare("UPDATE push_logs SET content = ? WHERE id = ?")
+        .run(JSON.stringify({ ...meta, expired: true }), p.id);
+
+      console.log(`🧹 补发超时清理: channel=${p.channel_id}（5 分钟内未回复）`);
+    }
+  } catch (e) {
+    console.error('cleanupExpiredResendPrompts 错误:', e.message);
   }
 }
 
@@ -608,3 +639,5 @@ router.delete('/:id', (req, res) => {
 });
 
 module.exports = router;
+module.exports.resendNextMessage = resendNextMessage;
+module.exports.cleanupExpiredResendPrompts = cleanupExpiredResendPrompts;

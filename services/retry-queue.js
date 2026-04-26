@@ -182,27 +182,11 @@ async function processOne(item) {
     `).run(recoveredBy, attemptNo, attemptNo, item.id);
     console.log(`✅ retry-queue id=${item.id} 第 ${attemptNo} 次重试成功（${recoveredBy}，累计延迟 ${delayMin}min）`);
 
-    // 用户回复触发的补发成功后，自动解锁下一条 paused 重试（等用户下次回复触发）
+    // 用户回复触发的补发成功后，不再自动解锁下一条——
+    // 剩余 paused 重试全部取消（补发引导由 resend-prompt 机制接管，
+    // 用户可通过回复"1"在 5 分钟内按需获取更多）
     if (item.triggered_by_reply) {
-      try {
-        const next = db.prepare(`
-          SELECT id FROM push_retry_queue
-          WHERE channel_id = ? AND status = 'pending' AND paused = 1
-          ORDER BY next_try_at ASC
-          LIMIT 1
-        `).get(item.channel_id);
-        if (next) {
-          db.prepare(`
-            UPDATE push_retry_queue
-            SET paused = 0, next_try_at = CURRENT_TIMESTAMP, triggered_by_reply = 1
-            WHERE id = ?
-          `).run(next.id);
-          const remaining = db.prepare(`SELECT COUNT(*) AS c FROM push_retry_queue WHERE channel_id = ? AND status = 'pending' AND paused = 1`).get(item.channel_id).c;
-          console.log(`♻️ 自动解锁下 1 条补发: channel=${item.channel_id}，还剩 ${remaining} 条 paused`);
-        }
-      } catch (e) {
-        console.error('自动解锁下一条补发失败:', e.message);
-      }
+      cancelPausedForChannel(item.channel_id);
     }
   } catch (err) {
     markSendResult(item.channel_id, err, false);
