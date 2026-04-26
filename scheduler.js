@@ -235,7 +235,7 @@ async function checkKeepaliveReminders() {
         `你的 BotTalk 通道距今已 ${okHours} 小时没有成功推送，${inboundDesc}。\n\n` +
         '微信官方文档明确：ClawBot「仅接收 24 小时内的回复」。\n' +
         '超时后通道会被微信静默断开，这不是 BotTalk 的问题。\n\n' +
-        '✅ 现在回复"1"即可续命：\n' +
+        '✅ 现在回复"1"即可保持通道畅通：\n' +
         '给我（Bot）回"1"或任意一字，通道立刻刷新。\n\n' +
         '💡 没收到系统回执？说明通道已断——访问 bot-talk.com/app 扫码重绑即可。\n\n' +
         '详细说明：bot-talk.com/intro#clawbot-limitation\n' +

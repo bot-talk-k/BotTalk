@@ -14,7 +14,7 @@
 
 const MODE = process.env.KEEPALIVE_TIP_MODE || 'long';
 
-const SHORT_TIP = '\n\n—— 💬 回"1"= 通道续命 24h（微信官方限制）';
+const SHORT_TIP = '\n\n—— 💬 回"1"= 通道保持畅通 24h（微信官方限制）';
 
 const LONG_TIP =
   '\n\n━━━━━━━━━━━━━━━━\n' +
