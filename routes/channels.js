@@ -43,7 +43,7 @@ async function resendFailedMessages(userId, channelId, botToken, wechatOpenid, c
     const prefix = `⏰ 原本应于 ${origTime} 推送（通道失联期间未送达，现补发）\n\n`;
     const baseMsg = prefix + (latestLog.title || '') + (latestLog.content ? '\n\n' + latestLog.content : '');
     const summary = total > 1
-      ? `\n\nℹ️ 通道失联期间共有 ${total} 条消息漏发，已为你补发最新 1 条。其余可在网页【推送历史】中查看。`
+      ? `\n\nℹ️ 通道失联期间共有 ${total} 条消息漏发，已补最新 1 条，其余请去官网查"推送历史"。`
       : '';
     const msg = appendTip(baseMsg + summary, chRow);
 
