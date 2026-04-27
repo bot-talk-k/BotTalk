@@ -86,42 +86,15 @@ async function startMessagePoller(botToken, userId, onFirstMessage) {
               WHERE bot_token = ? AND wechat_openid = ?`)
               .run(msg.context_token, botToken, userId);
 
-            // 用户回复 → 把 pending 重试立即置为到期（scheduler 30s 内会重试真正发送）
-            // neg2-probe 的恢复探测则直接标为 user_reply 恢复（本身没消息内容要补发）
+            // 用户回复 → 标记 neg2-probe 为已恢复（纯归因记录，无副作用发送）
             try {
               const chRow = db.prepare('SELECT id FROM channels WHERE bot_token = ? AND wechat_openid = ? LIMIT 1').get(botToken, userId);
               if (chRow?.id) {
-                // 逐条补发：只触发最早到期的一条，其余保持 paused。
-                // 用户每回复一次 → 触发一条补发 + 刷新 context_token，天然保活。
-                // 旧版本无 paused 列，用 try-catch 降级（全部立即触发）。
-                try {
-                  const oldest = db.prepare(`
-                    SELECT id FROM push_retry_queue
-                    WHERE channel_id = ? AND status = 'pending' AND paused = 1
-                    ORDER BY next_try_at ASC
-                    LIMIT 1
-                  `).get(chRow.id);
-                  if (oldest) {
-                    const r1 = db.prepare(`
-                      UPDATE push_retry_queue
-                      SET paused = 0, next_try_at = CURRENT_TIMESTAMP, triggered_by_reply = 1
-                      WHERE id = ?
-                    `).run(oldest.id);
-                    console.log(`♻️ 用户回复: channel=${chRow.id} 触发 1 条补发（逐条模式，其余 ${db.prepare('SELECT COUNT(*) AS c FROM push_retry_queue WHERE channel_id = ? AND status = \'pending\' AND paused = 1').get(chRow.id).c} 条保持 paused）`);
-                  }
-                } catch (e) {
-                  // 降级：无 paused 列时全部触发（兼容旧 schema）
-                  db.prepare(`
-                    UPDATE push_retry_queue
-                    SET next_try_at = CURRENT_TIMESTAMP
-                    WHERE channel_id = ? AND status = 'pending'
-                  `).run(chRow.id);
-                }
                 const r2 = db.prepare(`UPDATE neg2_recovery_probe
                   SET recovered_at = CURRENT_TIMESTAMP, recovered_by = 'user_reply'
                   WHERE channel_id = ? AND recovered_at IS NULL AND gave_up_at IS NULL`).run(chRow.id);
                 if (r2.changes > 0) {
-                  console.log(`♻️ 用户回复: channel=${chRow.id} 触发 ${r2.changes} 条探测标 user_reply 恢复`);
+                  console.log(`♻️ 用户回复: channel=${chRow.id} 标记 ${r2.changes} 条探测为 user_reply 恢复`);
                 }
               }
             } catch (e) {
@@ -175,17 +148,6 @@ async function startMessagePoller(botToken, userId, onFirstMessage) {
         // 但若本批触发了 onFirstMessage（首条消息 → welcome 已包含"测试通过"反馈），则跳过 ack 避免重复
         if (batchHasUserText && batchChannelId && batchContextToken && !batchFiredFirstMessage) {
           maybeSendAck(batchChannelId, botToken, userId, batchContextToken);
-        }
-
-        // 补发续发：用户回复 → 检查是否有活跃补发引导，有则发下一条
-        try {
-          const ch = db.prepare('SELECT user_id, bot_token FROM channels WHERE id = ?').get(batchChannelId);
-          if (ch) {
-            const { resendNextMessage } = require('../routes/channels');
-            resendNextMessage(batchChannelId, ch.user_id, botToken, userId, batchContextToken);
-          }
-        } catch (e) {
-          console.error('补发续发失败:', e.message);
         }
       }
     } catch (error) {

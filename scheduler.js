@@ -277,16 +277,6 @@ setTimeout(() => {
   processRetries().catch(e => console.error('processRetries 错误:', e.message));
 }, 45000);
 
-// 补发引导超时清理：每 1 分钟扫描，5 分钟内无回复的补发引导自动过期
-const { cleanupExpiredResendPrompts } = require('./routes/channels');
-setInterval(() => {
-  cleanupExpiredResendPrompts();
-}, 60000);
-setTimeout(() => {
-  cleanupExpiredResendPrompts();
-}, 60000);
-console.log('🧹 补发超时清理任务已启动');
-
 // Poller 监控：每 2 分钟扫描心跳，挂掉自动重启
 const { superviseOnce } = require('./services/poller-supervisor');
 setInterval(() => {

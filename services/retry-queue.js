@@ -45,7 +45,7 @@ function enqueueRetry({ userId, channelId, title, content, source, originalPushL
         (user_id, channel_id, title, content, source, original_push_log_id,
          first_failed_at, first_error_code, attempts, max_attempts,
          next_try_at, failure_history, status, paused)
-      VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, 0, ?, ?, ?, 'pending', 1)
+      VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, 0, ?, ?, ?, 'pending', 0)
     `).run(
       userId, channelId, title, content, source || 'api', originalPushLogId || null,
       errCode, BACKOFF_MINUTES.length,
@@ -127,24 +127,7 @@ async function processOne(item) {
   const originTime = firstFailedAt.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
   const title = item.title || '';
   const rawBody = title + (item.content ? '\n\n' + item.content : '');
-  const retryMessage = `ℹ️ 以下消息原本于 ${originTime} 推送（因微信官方通道临时不稳定延迟 ${delayText} 送达，第 ${attemptNo} 次重试）。一天内与 ClawBot 互动一两次任意信息，能避免这类延迟。\n\n${rawBody}`;
-
-  // 用户回复触发的补发：附带继续提示，让用户掌握节奏
-  // 统计同 channel 全部 pending（含 paused 等待的 + backoff 等待中的），让用户知道总欠账
-  let continuation = '';
-  if (item.triggered_by_reply) {
-    try {
-      const remaining = db.prepare(
-        `SELECT COUNT(*) AS c FROM push_retry_queue WHERE channel_id = ? AND status = 'pending' AND id != ?`
-      ).get(item.channel_id, item.id);
-      continuation = `\n\n💬 如需更多补发，请回 1，无需补发可以不理会，新消息将继续正常发送（剩余 ${remaining.c} 条）`;
-    } catch {
-      continuation = '\n\n💬 如需更多补发，请回 1，无需补发可以不理会，新消息将继续正常发送';
-    }
-  }
-  const finalMessage = item.triggered_by_reply
-    ? retryMessage + continuation
-    : retryMessage;
+  const finalMessage = `ℹ️ 以下消息原本于 ${originTime} 推送（因微信官方通道临时不稳定延迟 ${delayText} 送达，第 ${attemptNo} 次重试）。一天内与 ClawBot 互动一两次任意信息，能避免这类延迟。\n\n${rawBody}`;
 
   try {
     const r = await enqueueSend(item.channel_id,
@@ -181,13 +164,6 @@ async function processOne(item) {
       WHERE id = ?
     `).run(recoveredBy, attemptNo, attemptNo, item.id);
     console.log(`✅ retry-queue id=${item.id} 第 ${attemptNo} 次重试成功（${recoveredBy}，累计延迟 ${delayMin}min）`);
-
-    // 用户回复触发的补发成功后，不再自动解锁下一条——
-    // 剩余 paused 重试全部取消（补发引导由 resend-prompt 机制接管，
-    // 用户可通过回复"1"在 5 分钟内按需获取更多）
-    if (item.triggered_by_reply) {
-      cancelPausedForChannel(item.channel_id);
-    }
   } catch (err) {
     markSendResult(item.channel_id, err, false);
     const errData = err.response?.data;
@@ -263,29 +239,10 @@ function getStats() {
   }
 }
 
-// 新业务推送成功时，取消该通道所有 paused 补发（通道已恢复正常，无需再补）
-function cancelPausedForChannel(channelId) {
-  try {
-    const info = db.prepare(`
-      UPDATE push_retry_queue
-      SET status = 'abandoned', recovered_by = 'new_push_success'
-      WHERE channel_id = ? AND status = 'pending' AND paused = 1
-    `).run(channelId);
-    if (info.changes > 0) {
-      console.log(`♻️ 新推送成功: channel=${channelId} 取消 ${info.changes} 条 paused 补发`);
-    }
-    return info.changes;
-  } catch (e) {
-    console.error('cancelPausedForChannel 错误:', e.message);
-    return 0;
-  }
-}
-
 module.exports = {
   enqueueRetry,
   processRetries,
   markRecoveredByRescan,
   getStats,
-  cancelPausedForChannel,
   BACKOFF_MINUTES,
 };

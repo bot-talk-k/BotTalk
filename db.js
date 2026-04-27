@@ -461,6 +461,22 @@ if (!hasRun(21)) {
   markRun(21);
 }
 
+// Migration 22: 简化补发逻辑后，把现有 paused=1 的旧 pending 数据标记 abandoned
+// 新逻辑下 paused 列默认 0，旧数据躺着不会被任何路径触发，明确标记便于审计
+if (!hasRun(22)) {
+  try {
+    const r = db.prepare(
+      "UPDATE push_retry_queue SET status='abandoned', recovered_by='cleanup-simplify-v22' WHERE status='pending' AND paused=1"
+    ).run();
+    if (r.changes > 0) {
+      console.log(`📋 migration 22: 已清理 ${r.changes} 条旧 paused 数据为 abandoned`);
+    }
+  } catch (e) {
+    console.error('migration 22 error:', e.message);
+  }
+  markRun(22);
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────
 
 function generateSendKey() {
