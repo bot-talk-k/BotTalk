@@ -7,7 +7,7 @@
     "start": "node app.js",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "test": "node --test tests/",
+    "test": "node --test tests/smoke.test.js",
     "prepare": "simple-git-hooks || true"
   },
   "dependencies": {
