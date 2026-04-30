@@ -75,12 +75,12 @@ test('GET / returns intro page when not logged in', async () => {
   assert.ok(text.length > 100, 'response should be a non-trivial HTML page');
 });
 
-test('GET /b<unknown-key>.send returns 4xx', async () => {
+test('GET /b<unknown-key>.send does not 5xx (Server酱-style returns 200+error in body)', async () => {
   const r = await fetch(`${BASE}/bdeadbeef00000000000000000000000000.send?title=test`);
-  assert.ok(
-    r.status >= 400 && r.status < 500,
-    `expected 4xx for unknown key, got ${r.status}`,
-  );
+  assert.ok(r.status < 500, `unknown key should not produce 5xx, got ${r.status}`);
+  const body = await r.json();
+  // 业务错误码：handlePush 找不到 user 时应返回非 0 code
+  assert.ok(body.code !== 0 && body.code !== 200, `expected error code in body, got ${JSON.stringify(body)}`);
 });
 
 test('database migrations applied (schema_version >= 22)', { skip: 'requires native better-sqlite3 — runs on CI Linux only' }, () => {
