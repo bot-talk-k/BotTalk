@@ -479,6 +479,19 @@ if (!hasRun(22)) {
   markRun(22);
 }
 
+// Migration 23: channels 加 last_long_tip_at —— 用于按"当天首条"判定是否附长尾巴
+if (!hasRun(23)) {
+  try {
+    db.exec('ALTER TABLE channels ADD COLUMN last_long_tip_at DATETIME');
+    console.log('📋 migration 23: channels.last_long_tip_at 已添加');
+  } catch (e) {
+    if (!/duplicate column/i.test(e.message)) {
+      console.error('migration 23 error:', e.message);
+    }
+  }
+  markRun(23);
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────
 
 function generateSendKey() {
