@@ -1,8 +1,19 @@
 node_modules/
 data/
+tests/tmp-data/
 *.log
 .DS_Store
 .env
 **/__pycache__/
-.claude/
+# .claude/：让 settings.json 和 hooks/ 进 git（团队共享 harness 配置）
+# 但忽略易变/敏感的子目录
+.claude/cache/
+.claude/sessions/
+.claude/file-history/
+.claude/shell-snapshots/
+.claude/telemetry/
+.claude/projects/
+.claude/backups/
+.claude/scheduled_tasks.lock
+.claude/*.local.json
 docs/ilink-pitfalls.md

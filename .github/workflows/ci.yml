@@ -33,6 +33,9 @@ jobs:
               - 'services/**'
               - 'middleware/**'
               - 'public/**'
+              - 'eslint.config.js'
+              - 'tests/**'
+              - '.github/workflows/ci.yml'
             python-sdk:
               - 'sdk/python/**'
             node-sdk:
@@ -55,7 +58,15 @@ jobs:
 
       - run: npm ci
 
-      - name: Verify server starts
+      - name: Lint
+        run: npm run lint
+
+      - name: Smoke tests
+        env:
+          UNSKIP_DB_TEST: '1'
+        run: npm test
+
+      - name: Verify server starts (legacy)
         run: |
           node app.js &
           SERVER_PID=$!

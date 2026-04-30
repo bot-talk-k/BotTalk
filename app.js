@@ -5,6 +5,20 @@ const crypto = require('crypto');
 const session = require('express-session');
 const SqliteStore = require('better-sqlite3-session-store')(session);
 const db = require('./db');
+const { reportError } = require('./services/error-reporter');
+
+// 进程级未捕获异常上报到管理员微信（限流 30 分钟/同样错误）
+// uncaughtException：保留 stderr 打印 + 上报，但不退出进程（保持服务运行）
+process.on('uncaughtException', (err) => {
+  console.error('[uncaughtException]', err);
+  reportError(err, { phase: 'uncaughtException' });
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('[unhandledRejection]', reason);
+  reportError(reason instanceof Error ? reason : new Error(String(reason)), {
+    phase: 'unhandledRejection',
+  });
+});
 
 const app = express();
 const PORT = process.env.PORT || 3000;

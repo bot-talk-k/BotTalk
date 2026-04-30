@@ -4,7 +4,11 @@
   "description": "免费开源的微信消息推送服务 - Free & open-source WeChat push notification service",
   "main": "app.js",
   "scripts": {
-    "start": "node app.js"
+    "start": "node app.js",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "test": "node --test tests/",
+    "prepare": "simple-git-hooks || true"
   },
   "dependencies": {
     "axios": "^1.6.7",
@@ -13,6 +17,18 @@
     "cors": "^2.8.5",
     "express": "^4.18.2",
     "express-session": "^1.19.0"
+  },
+  "devDependencies": {
+    "eslint": "^9.18.0",
+    "globals": "^15.14.0",
+    "lint-staged": "^15.3.0",
+    "simple-git-hooks": "^2.11.1"
+  },
+  "simple-git-hooks": {
+    "pre-commit": "npx lint-staged"
+  },
+  "lint-staged": {
+    "*.js": "eslint --fix"
   },
   "repository": {
     "type": "git",

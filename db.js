@@ -3,8 +3,10 @@ const path = require('path');
 const crypto = require('crypto');
 const fs = require('fs');
 
-// 确保 data 目录存在
-const dataDir = path.join(__dirname, 'data');
+// 确保 data 目录存在（DATABASE_DIR 环境变量覆盖默认路径，用于测试隔离）
+const dataDir = process.env.DATABASE_DIR
+  ? path.resolve(process.env.DATABASE_DIR)
+  : path.join(__dirname, 'data');
 if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
 }
