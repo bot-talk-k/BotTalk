@@ -186,6 +186,11 @@ func (c *Client) doRequest(endpoint string, params url.Values, method string) (*
 	}
 
 	if apiResp.Code != 0 {
+		// 50001 carries reason + hint that tell the developer exactly what
+		// the receiver should do (most often: reply to ClawBot in WeChat).
+		if apiResp.Code == 50001 && apiResp.Data != nil {
+			return nil, newErrorFromResponse(apiResp.Code, apiResp.Message, apiResp.Data.Reason, apiResp.Data.Hint)
+		}
 		return nil, newErrorFromCode(apiResp.Code, apiResp.Message)
 	}
 

@@ -128,7 +128,7 @@ async function handlePush(sendKey, title, content, clientIp, channelParam, req) 
 
   for (const channel of channels) {
     if (!channel.context_token) {
-      results.push({ channel_id: channel.id, status: 'skipped', reason: 'no context_token' });
+      results.push({ channel_id: channel.id, status: 'skipped', reason: 'no_context_token' });
       continue;
     }
 
@@ -174,9 +174,11 @@ async function handlePush(sendKey, title, content, clientIp, channelParam, req) 
 
       // ret:-14 分类统一走 channel-health.classifyAndMarkRet14（含并发锁，避免重复 getUpdates）
       let tokenInvalid = false;
+      let sendDisabled = false;
       if (errData && errData.ret === -14) {
         const cls = await classifyAndMarkRet14(channel.id, channel.bot_token);
         tokenInvalid = cls.tokenInvalid;
+        sendDisabled = cls.sendDisabled;
       } else if (errStatus === 401 || errStatus === 403) {
         // HTTP 401/403 明确的 token 失效
         tokenInvalid = true;
@@ -219,15 +221,74 @@ async function handlePush(sendKey, title, content, clientIp, channelParam, req) 
         errData,
         errMsg: error.message,
       });
-      results.push({ channel_id: channel.id, status: 'failed', token_invalid: tokenInvalid });
+      // 失败原因细分（开发者可据此精准提示终端用户）：
+      //   channel_dead       — token 真死(ret:-14 + getUpdates 也死 / HTTP 401/403)，必须重新扫码
+      //   account_restricted — ret:-14 半死态(getUpdates 仍正常)，账号被 iLink 风控；回复救不了
+      //   context_expired    — ret:-2 context_token 老化，让用户回 ClawBot 一句即可解锁（最常见）
+      //   queue_full         — 服务端 push-queue 满（罕见）
+      //   network            — 网络/超时（无 errData）
+      //   ilink_other        — iLink 返回了其他确定 ret
+      let reason;
+      if (tokenInvalid) reason = 'channel_dead';
+      else if (sendDisabled) reason = 'account_restricted';
+      else if (isQueueFull) reason = 'queue_full';
+      else if (isNetworkErr) reason = 'network';
+      else if (retCode === -2) reason = 'context_expired';
+      else if (retCode === -14) reason = 'context_expired'; // 既不 dead 也不 restricted 的 -14 兜底为 context 老化
+      else reason = 'ilink_other';
+      results.push({
+        channel_id: channel.id,
+        status: 'failed',
+        token_invalid: tokenInvalid,
+        reason,
+        ret_code: retCode ?? null,
+      });
     }
   }
 
   const anySuccess = results.some(r => r.status === 'success');
+  if (anySuccess) {
+    return { code: 0, message: 'success', data: { results } };
+  }
+
+  // 全部失败 — 给调用者一个明确的"该让终端用户做什么"的提示。
+  // 决策树（优先级从严到松，"严"= 用户回复也救不了）：
+  //   1) 任一 channel_dead       → 必须重扫
+  //   2) 任一 account_restricted → 账号被风控，回复无效
+  //   3) 全部 skipped(无 token)  → 通道未绑定/已硬过期
+  //   4) 任一 context_expired    → 让用户回复 ClawBot 即可解锁（最常见、最可恢复）
+  //   5) 网络/queue/其它          → 通用兜底
+  const failedResults = results.filter(r => r.status !== 'success');
+  const anyDead = failedResults.some(r => r.reason === 'channel_dead');
+  const anyRestricted = failedResults.some(r => r.reason === 'account_restricted');
+  const allSkipped = failedResults.every(r => r.status === 'skipped');
+  const anyContextExpired = failedResults.some(r => r.reason === 'context_expired');
+
+  let reason, hint;
+  if (anyDead) {
+    reason = 'channel_dead';
+    hint = '推送通道已失效（token 死亡），必须由收信人重新扫码绑定 ClawBot。回复无法解决。';
+  } else if (anyRestricted) {
+    reason = 'account_restricted';
+    hint = '收信人微信账号疑似被 iLink 风控（能收消息但不能被推送）。建议联系平台或换号绑定，回复无法解决。';
+  } else if (allSkipped) {
+    reason = 'no_channel';
+    hint = '指定的通道未绑定或 context_token 已彻底过期。请检查 channel 参数，或让收信人重新扫码绑定。';
+  } else if (anyContextExpired) {
+    reason = 'context_expired';
+    hint =
+      '通道因长期无互动暂时受限（iLink ret:-2 / context_token 老化）。最常见解法：让收信人在微信里向 ClawBot 回复任意一条消息。' +
+      '系统会在 +2/+7/+22/+82 分钟 4 次自动退避重试，回复触发的瞬间命中下一次重试即丝滑补发，无需重扫码。' +
+      '若超过 1.5 小时仍未恢复，可能已升级为 channel_dead，需重扫。';
+  } else {
+    reason = 'transient';
+    hint = '推送暂时失败（网络抖动或服务端排队）。系统已自动入队重试（2/5/15/60 分钟退避），通常会自动恢复；长期未恢复请联系管理员。';
+  }
+
   return {
-    code: anySuccess ? 0 : 50001,
-    message: anySuccess ? 'success' : '全部推送失败',
-    data: { results }
+    code: 50001,
+    message: '全部推送失败',
+    data: { results, reason, hint }
   };
 }
 

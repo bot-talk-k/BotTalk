@@ -1,6 +1,7 @@
 package bottalk
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -264,6 +265,89 @@ func TestSend_PushFailedError(t *testing.T) {
 	_, err := c.Send("Hello")
 	if !IsPushFailed(err) {
 		t.Errorf("expected PushFailedError, got %T: %v", err, err)
+	}
+}
+
+func TestSend_PushFailedWithReasonAndHint(t *testing.T) {
+	srv := mockServer(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{
+			"code": 50001,
+			"message": "全部推送失败",
+			"data": {
+				"results": [{"channel_id": 1, "status": "failed", "token_invalid": false, "reason": "context_expired", "ret_code": -2}],
+				"reason": "context_expired",
+				"hint": "让收信人在微信里向 ClawBot 回复任意一条消息"
+			}
+		}`)
+	})
+	defer srv.Close()
+
+	c := New("test-key", WithBaseURL(srv.URL))
+	_, err := c.Send("Hello")
+	if !IsPushFailed(err) {
+		t.Fatalf("expected PushFailedError, got %T: %v", err, err)
+	}
+	var pe *PushFailedError
+	if !errors.As(err, &pe) {
+		t.Fatalf("expected *PushFailedError, got %T", err)
+	}
+	if pe.Reason != ReasonContextExpired {
+		t.Errorf("expected Reason=context_expired, got %q", pe.Reason)
+	}
+	if !strings.Contains(pe.Hint, "回复") {
+		t.Errorf("expected hint to mention 回复, got %q", pe.Hint)
+	}
+	if !pe.IsRecoverableByReply() {
+		t.Error("expected IsRecoverableByReply() = true for context_expired")
+	}
+}
+
+func TestSend_PushFailedChannelDeadNotRecoverable(t *testing.T) {
+	srv := mockServer(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{
+			"code": 50001,
+			"message": "全部推送失败",
+			"data": {
+				"results": [{"channel_id": 1, "status": "failed", "token_invalid": true, "reason": "channel_dead"}],
+				"reason": "channel_dead",
+				"hint": "必须由收信人重新扫码绑定 ClawBot"
+			}
+		}`)
+	})
+	defer srv.Close()
+
+	c := New("test-key", WithBaseURL(srv.URL))
+	_, err := c.Send("Hello")
+	var pe *PushFailedError
+	if !errors.As(err, &pe) {
+		t.Fatalf("expected *PushFailedError, got %T", err)
+	}
+	if pe.Reason != ReasonChannelDead {
+		t.Errorf("expected Reason=channel_dead, got %q", pe.Reason)
+	}
+	if pe.IsRecoverableByReply() {
+		t.Error("expected IsRecoverableByReply() = false for channel_dead")
+	}
+}
+
+func TestSend_PushFailedBackCompatNoReason(t *testing.T) {
+	// Server may omit reason/hint (older deployment) — must still raise PushFailedError.
+	srv := mockServer(errorHandler(50001, "All channels failed"))
+	defer srv.Close()
+
+	c := New("test-key", WithBaseURL(srv.URL))
+	_, err := c.Send("Hello")
+	var pe *PushFailedError
+	if !errors.As(err, &pe) {
+		t.Fatalf("expected *PushFailedError, got %T", err)
+	}
+	if pe.Reason != "" {
+		t.Errorf("expected empty Reason, got %q", pe.Reason)
+	}
+	if pe.IsRecoverableByReply() {
+		t.Error("expected IsRecoverableByReply() = false when reason is empty")
 	}
 }
 

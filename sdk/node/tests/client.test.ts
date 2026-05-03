@@ -305,6 +305,66 @@ describe('send() server errors', () => {
     );
   });
 
+  it('should populate reason + hint on 50001 (context_expired)', async () => {
+    mockFetch({
+      code: 50001,
+      message: '全部推送失败',
+      data: {
+        results: [
+          { channel_id: 1, status: 'failed', token_invalid: false, reason: 'context_expired', ret_code: -2 },
+        ],
+        reason: 'context_expired',
+        hint: '让收信人在微信里向 ClawBot 回复任意一条消息',
+      },
+    });
+    const client = new BotTalk('testkey');
+    await assert.rejects(
+      () => client.send('Hi'),
+      (err: any) => {
+        assert.ok(err instanceof PushFailedError);
+        assert.equal(err.reason, 'context_expired');
+        assert.ok(err.hint && err.hint.includes('回复'));
+        assert.equal(err.isRecoverableByReply, true);
+        return true;
+      }
+    );
+  });
+
+  it('should mark channel_dead as NOT recoverable by reply', async () => {
+    mockFetch({
+      code: 50001,
+      message: '全部推送失败',
+      data: {
+        results: [{ channel_id: 1, status: 'failed', token_invalid: true, reason: 'channel_dead' }],
+        reason: 'channel_dead',
+        hint: '必须由收信人重新扫码绑定 ClawBot',
+      },
+    });
+    const client = new BotTalk('testkey');
+    await assert.rejects(
+      () => client.send('Hi'),
+      (err: any) => {
+        assert.equal(err.reason, 'channel_dead');
+        assert.equal(err.isRecoverableByReply, false);
+        return true;
+      }
+    );
+  });
+
+  it('should accept 50001 without reason/hint (back-compat)', async () => {
+    mockFetch({ code: 50001, message: 'all failed', data: { results: [] } });
+    const client = new BotTalk('testkey');
+    await assert.rejects(
+      () => client.send('Hi'),
+      (err: any) => {
+        assert.ok(err instanceof PushFailedError);
+        assert.equal(err.reason, undefined);
+        assert.equal(err.isRecoverableByReply, false);
+        return true;
+      }
+    );
+  });
+
   it('should throw generic BotTalkError for unknown codes', async () => {
     mockFetch({ code: 99999, message: 'unknown error' });
     const client = new BotTalk('testkey');

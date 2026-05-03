@@ -151,6 +151,12 @@ class BotTalk:
         result_data = data.get("data")
 
         if code != 0:
+            # 50001 carries reason + hint that tell the developer exactly what
+            # the receiver should do (most often: reply to ClawBot in WeChat).
+            if code == 50001:
+                reason = result_data.get("reason") if isinstance(result_data, dict) else None
+                hint = result_data.get("hint") if isinstance(result_data, dict) else None
+                raise PushFailedError(message, reason=reason, hint=hint)
             exc_cls = _CODE_TO_EXCEPTION.get(code, BotTalkError)
             raise exc_cls(message)
 

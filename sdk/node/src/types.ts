@@ -25,7 +25,10 @@ export interface ChannelResult {
   channelId: string;
   status: string;
   tokenInvalid: boolean;
+  /** Sub-classification of the failure (e.g. 'context_expired', 'channel_dead'). */
   reason?: string;
+  /** iLink raw ret code (e.g. -2 / -14) for failures with an iLink response. */
+  retCode?: number | null;
 }
 
 /** Raw API response shape. */
@@ -38,7 +41,12 @@ export interface ApiResponse {
       status?: string;
       token_invalid?: boolean;
       reason?: string;
+      ret_code?: number | null;
     }>;
+    /** Aggregated failure reason for 50001 responses. */
+    reason?: string;
+    /** Human-readable recovery hint for 50001 responses. */
+    hint?: string;
   } | null;
 }
 
@@ -60,6 +68,7 @@ export class PushResult {
           status: r.status ?? 'unknown',
           tokenInvalid: r.token_invalid ?? false,
           reason: r.reason,
+          retCode: r.ret_code ?? null,
         });
       }
     }

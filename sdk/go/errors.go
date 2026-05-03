@@ -6,10 +6,28 @@ import (
 	"fmt"
 )
 
+// FailureReason is the sub-classification returned by the server in
+// data.reason for code 50001. The most actionable value is "context_expired"
+// — ask the receiver to reply to ClawBot in WeChat and the server will
+// auto-redeliver the message via its retry queue within minutes.
+type FailureReason string
+
+const (
+	ReasonContextExpired    FailureReason = "context_expired"
+	ReasonChannelDead       FailureReason = "channel_dead"
+	ReasonAccountRestricted FailureReason = "account_restricted"
+	ReasonNoChannel         FailureReason = "no_channel"
+	ReasonTransient         FailureReason = "transient"
+)
+
 // BotTalkError is the base error type for all BotTalk SDK errors.
 type BotTalkError struct {
 	Code    int    // Server error code (0 = success, -1 = network/unknown)
 	Message string // Human-readable error message
+	// Reason is populated for 50001 responses; "" for other errors.
+	Reason FailureReason
+	// Hint is the human-readable recovery instruction, populated for 50001.
+	Hint string
 }
 
 func (e *BotTalkError) Error() string {
@@ -29,7 +47,18 @@ type EmptyMessageError struct{ BotTalkError }
 type RateLimitError struct{ BotTalkError }
 
 // PushFailedError indicates all push channels failed (50001).
+//
+// For 50001, the embedded BotTalkError has Reason and Hint populated
+// (when the server provides them). Use IsRecoverableByReply to check
+// whether asking the receiver to reply to ClawBot will fix this push;
+// per server data this covers ~94% of all 50001 recoveries.
 type PushFailedError struct{ BotTalkError }
+
+// IsRecoverableByReply reports whether the receiver replying to ClawBot
+// will fix this push. Equivalent to e.Reason == ReasonContextExpired.
+func (e *PushFailedError) IsRecoverableByReply() bool {
+	return e.Reason == ReasonContextExpired
+}
 
 // NetworkError indicates a network-level error (timeout, DNS, etc.).
 type NetworkError struct{ BotTalkError }
@@ -74,7 +103,13 @@ func IsNetwork(err error) bool {
 
 // newErrorFromCode creates the appropriate typed error for a server error code.
 func newErrorFromCode(code int, message string) error {
-	base := BotTalkError{Code: code, Message: message}
+	return newErrorFromResponse(code, message, "", "")
+}
+
+// newErrorFromResponse creates the typed error and threads through the
+// server's reason + hint (only meaningful for code 50001).
+func newErrorFromResponse(code int, message string, reason FailureReason, hint string) error {
+	base := BotTalkError{Code: code, Message: message, Reason: reason, Hint: hint}
 	switch code {
 	case 40001:
 		return &InvalidKeyError{base}

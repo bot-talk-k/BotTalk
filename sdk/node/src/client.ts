@@ -15,7 +15,10 @@ import {
 } from './errors.ts';
 import { PushResult, type BotTalkOptions, type SendOptions, type ApiResponse } from './types.ts';
 
-/** Map server error codes to SDK exception constructors. */
+/**
+ * Map server error codes to SDK exception constructors.
+ * 50001 is handled specially in _request to thread through reason + hint.
+ */
 const CODE_TO_ERROR: Record<number, new (message: string) => BotTalkError> = {
   40001: InvalidKeyError,
   40002: NoChannelError,
@@ -141,6 +144,18 @@ export class BotTalk {
     const resultData = data.data;
 
     if (code !== 0) {
+      // 50001 carries reason + hint that tell the developer exactly what
+      // the receiver should do (most often: reply to ClawBot in WeChat).
+      if (code === 50001) {
+        const reason = resultData?.reason as
+          | 'context_expired'
+          | 'channel_dead'
+          | 'account_restricted'
+          | 'no_channel'
+          | 'transient'
+          | undefined;
+        throw new PushFailedError(message, { reason, hint: resultData?.hint });
+      }
       const ErrorClass = CODE_TO_ERROR[code] ?? BotTalkError;
       throw new ErrorClass(message);
     }

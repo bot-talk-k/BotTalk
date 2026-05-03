@@ -126,8 +126,16 @@ curl -X POST "https://bot-talk.com/notify" \
   "message": "全部推送失败",
   "data": {
     "results": [
-      { "channel_id": 1, "status": "failed", "token_invalid": true }
-    ]
+      {
+        "channel_id": 1,
+        "status": "failed",
+        "token_invalid": false,
+        "reason": "context_expired",
+        "ret_code": -2
+      }
+    ],
+    "reason": "context_expired",
+    "hint": "通道因长期无互动暂时受限... 让收信人在微信里向 ClawBot 回复任意一条消息..."
   }
 }
 ```
@@ -141,19 +149,31 @@ curl -X POST "https://bot-talk.com/notify" \
 | 40002 | 没有可用的推送通道（未绑定或未激活） |
 | 40003 | title 和消息内容不能同时为空 |
 | 42901 | 发送频率超限（每 SendKey 每小时最多 100 条） |
-| 50001 | 全部推送失败 |
+| 50001 | 全部推送失败（详见 `data.reason`） |
 
-### 通道状态说明
+### 50001 失败原因（`data.reason`）
 
-单个通道的推送结果中：
+50001 是笼统失败码，**真正的"该让用户做什么"看 `data.reason` + `data.hint`**。
 
-| status | 说明 |
-|--------|------|
-| `success` | 推送成功 |
-| `failed` | 推送失败 |
-| `skipped` | 跳过（通道缺少 context_token） |
+| `data.reason` | 含义 | 解决方法 | 用户回复能解决吗 |
+|---|---|---|---|
+| `context_expired` | iLink ret:-2/-14 半死，context_token 老化（**最常见**） | **让收信人在微信里向 ClawBot 回复任意消息** | ✅ 能 |
+| `channel_dead` | token 真死（getUpdates 也失败 / HTTP 401/403） | 让收信人重新扫码绑定 | ❌ 不能 |
+| `account_restricted` | iLink 半死态：能收消息但不能被推送（账号疑似被风控） | 联系平台或换号 | ❌ 不能 |
+| `no_channel` | 指定的通道未绑定或 context_token 已彻底过期 | 检查 `channel` 参数，或重新扫码 | ❌ 不能 |
+| `transient` | 网络抖动 / 服务端排队满 | 系统自动重试，多数情况自动恢复 | — |
 
-当 `token_invalid: true` 时，该通道已被自动标记为 `inactive`（iLink session 过期或 token 失效），需重新扫码绑定。
+**自动补发**：当 `reason` 是 `context_expired` 或 `transient` 时，系统已自动入队重试（+2/+7/+22/+82 分钟 4 次退避）。生产数据显示 `context_expired` 通过用户回复触发的恢复占所有恢复成功 case 的 94%——**这是开发者最该向终端用户传达的恢复路径**。
+
+### 单通道结果（`data.results[i]`）
+
+| 字段 | 说明 |
+|---|---|
+| `channel_id` | 通道 ID |
+| `status` | `success` / `failed` / `skipped` |
+| `token_invalid` | （仅 failed）token 是否真死，true → 需重扫 |
+| `reason` | （仅 failed）细分原因，同上表枚举 |
+| `ret_code` | （仅 failed）iLink 原始 ret 码（如 `-2` / `-14`） |
 
 ---
 

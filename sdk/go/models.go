@@ -11,7 +11,10 @@ type ChannelResult struct {
 	ChannelID    int    `json:"channel_id"`
 	Status       string `json:"status"`
 	TokenInvalid bool   `json:"token_invalid"`
-	Reason       string `json:"reason,omitempty"`
+	// Reason sub-classifies the failure (e.g. "context_expired", "channel_dead").
+	Reason string `json:"reason,omitempty"`
+	// RetCode is the iLink raw ret code (-2/-14) for failures with an iLink response.
+	RetCode *int `json:"ret_code,omitempty"`
 }
 
 // IsSuccess returns true if this channel push succeeded.
@@ -40,6 +43,11 @@ type apiResponse struct {
 
 type apiResponseData struct {
 	Results []ChannelResult `json:"results,omitempty"`
+	// Reason aggregates per-channel reasons into a single failure category
+	// for code 50001. Empty for code 0.
+	Reason FailureReason `json:"reason,omitempty"`
+	// Hint is a human-readable recovery instruction for code 50001.
+	Hint string `json:"hint,omitempty"`
 }
 
 // ---------------------------------------------------------------------------

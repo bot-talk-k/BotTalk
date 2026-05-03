@@ -2,13 +2,31 @@
  * Exception classes for the BotTalk Node.js SDK.
  */
 
+/**
+ * Failure reason returned by the server in `data.reason` for code 50001.
+ * The most actionable one is `context_expired` — ask the receiver to reply
+ * to ClawBot in WeChat and the message auto-redelivers within minutes.
+ */
+export type FailureReason =
+  | 'context_expired'
+  | 'channel_dead'
+  | 'account_restricted'
+  | 'no_channel'
+  | 'transient';
+
 export class BotTalkError extends Error {
   public readonly code: number;
+  /** Sub-classification of the failure (only populated for code 50001). */
+  public readonly reason?: FailureReason;
+  /** Human-readable recovery hint (only populated for code 50001). */
+  public readonly hint?: string;
 
-  constructor(message: string, code: number = -1) {
+  constructor(message: string, code: number = -1, opts?: { reason?: FailureReason; hint?: string }) {
     super(message);
     this.name = 'BotTalkError';
     this.code = code;
+    this.reason = opts?.reason;
+    this.hint = opts?.hint;
   }
 }
 
@@ -41,9 +59,22 @@ export class RateLimitError extends BotTalkError {
 }
 
 export class PushFailedError extends BotTalkError {
-  constructor(message: string = 'All push channels failed') {
-    super(message, 50001);
+  constructor(
+    message: string = 'All push channels failed',
+    opts?: { reason?: FailureReason; hint?: string },
+  ) {
+    super(message, 50001, opts);
     this.name = 'PushFailedError';
+  }
+
+  /**
+   * True when the channel can be recovered just by having the receiver
+   * reply to ClawBot in WeChat (i.e. reason === 'context_expired'). The
+   * server will then auto-resend the message via its retry queue, no
+   * rebinding required. This is the most common 50001 case.
+   */
+  get isRecoverableByReply(): boolean {
+    return this.reason === 'context_expired';
   }
 }
 

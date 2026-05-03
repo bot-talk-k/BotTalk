@@ -127,7 +127,16 @@ GET/POST  /notify?key=YOUR_SENDKEY&title=标题&msg=内容
 | 40002 | 没有可用的推送通道 |
 | 40003 | 消息内容为空 |
 | 42901 | 超过频率限制 |
-| 50001 | 推送失败 |
+| 50001 | 推送失败（详见 `data.reason` + `data.hint`） |
+
+**遇到 50001 不要慌**：响应 `data.reason` 会告诉你**该让终端用户做什么**：
+
+- `context_expired`（最常见）→ **让收信人在微信里向 ClawBot 回复任意一条消息**，1-2 分钟内系统会自动补发本条消息，无需重扫码
+- `channel_dead` → 让收信人重新扫码绑定
+- `account_restricted` → 账号被风控，需联系平台
+- `no_channel` → 检查 `channel` 参数
+
+详见 [API 参考文档](docs/api-reference.md#50001-失败原因-datareason)。
 
 </details>
 

@@ -76,6 +76,19 @@ components:
               type: array
               items:
                 $ref: '#/components/schemas/ChannelResult'
+            reason:
+              type: string
+              enum: [context_expired, channel_dead, account_restricted, no_channel, transient]
+              description: |
+                （仅 50001 出现）汇总失败原因，开发者可据此精准提示终端用户：
+                - context_expired: context_token 老化，让用户在微信里回复 ClawBot 一句即可解锁（最常见）
+                - channel_dead: token 真死，必须重新扫码
+                - account_restricted: 账号被 iLink 风控，回复无效
+                - no_channel: 通道未绑定/已硬过期
+                - transient: 网络抖动/排队满，系统自动重试
+            hint:
+              type: string
+              description: （仅 50001 出现）人类可读的恢复指引，可直接显示给终端用户
 
     ChannelResult:
       type: object
@@ -85,12 +98,18 @@ components:
         status:
           type: string
           enum: [success, failed, skipped]
-        reason:
-          type: string
-          description: 仅 status=skipped 时出现
         token_invalid:
           type: boolean
           description: 仅 status=failed 时可能出现，为 true 表示通道已被标记为 inactive
+        reason:
+          type: string
+          enum: [no_context_token, channel_dead, account_restricted, context_expired, queue_full, network, ilink_other]
+          description: |
+            单通道失败/跳过细分原因。skipped 时仅 no_context_token；failed 时为其余枚举之一。
+        ret_code:
+          type: integer
+          nullable: true
+          description: 仅 status=failed 时出现，iLink 原始 ret 码（如 -2 / -14）。null 表示网络/其他无 iLink 响应的错误。
 
     # ── 管理 API 通用响应 ──
     SuccessResponse:

@@ -199,6 +199,52 @@ class TestSendErrors(unittest.TestCase):
             self.client.send("test")
 
     @patch("bottalk.client.urllib.request.urlopen")
+    def test_push_failed_with_reason_and_hint(self, mock_urlopen):
+        mock_urlopen.return_value = _mock_response({
+            "code": 50001,
+            "message": "全部推送失败",
+            "data": {
+                "results": [
+                    {"channel_id": 1, "status": "failed", "token_invalid": False,
+                     "reason": "context_expired", "ret_code": -2}
+                ],
+                "reason": "context_expired",
+                "hint": "让收信人在微信里向 ClawBot 回复任意一条消息",
+            },
+        })
+        with self.assertRaises(PushFailedError) as ctx:
+            self.client.send("test")
+        self.assertEqual(ctx.exception.reason, "context_expired")
+        self.assertIn("回复", ctx.exception.hint)
+        self.assertTrue(ctx.exception.is_recoverable_by_reply)
+
+    @patch("bottalk.client.urllib.request.urlopen")
+    def test_push_failed_channel_dead_not_recoverable(self, mock_urlopen):
+        mock_urlopen.return_value = _mock_response({
+            "code": 50001,
+            "message": "全部推送失败",
+            "data": {
+                "results": [{"channel_id": 1, "status": "failed", "token_invalid": True, "reason": "channel_dead"}],
+                "reason": "channel_dead",
+                "hint": "必须由收信人重新扫码绑定 ClawBot",
+            },
+        })
+        with self.assertRaises(PushFailedError) as ctx:
+            self.client.send("test")
+        self.assertEqual(ctx.exception.reason, "channel_dead")
+        self.assertFalse(ctx.exception.is_recoverable_by_reply)
+
+    @patch("bottalk.client.urllib.request.urlopen")
+    def test_push_failed_back_compat_no_reason(self, mock_urlopen):
+        # 50001 without reason/hint must still raise PushFailedError
+        mock_urlopen.return_value = _mock_response({"code": 50001, "message": "failed", "data": {"results": []}})
+        with self.assertRaises(PushFailedError) as ctx:
+            self.client.send("test")
+        self.assertIsNone(ctx.exception.reason)
+        self.assertIsNone(ctx.exception.hint)
+        self.assertFalse(ctx.exception.is_recoverable_by_reply)
+
+    @patch("bottalk.client.urllib.request.urlopen")
     def test_unknown_error_code(self, mock_urlopen):
         mock_urlopen.return_value = _mock_response({"code": 99999, "message": "Unknown", "data": None})
         with self.assertRaises(BotTalkError):
