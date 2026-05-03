@@ -8,10 +8,11 @@ const lastAckAt = {};       // channelId -> timestamp（回执去重）
 const pollerEpoch = {};     // botToken -> integer（每次 startMessagePoller 递增，旧 loop 发现 epoch 不匹配就退出）
 
 // 回执文案池（轮换避免机械感）
+// 文案口径:教育用户"多回复 = 通道畅通",对应 iLink 限流阈值约 9-10 条/周期的事实
 const ACK_MESSAGES = [
-  '✅ 收到，通道状态已刷新，谢谢配合',
-  '✅ 已收到你的回复，通道保持活跃中',
-  '✅ 收到，谢谢——你的回复有助于通道稳定',
+  '✅ 收到！假装在聊天，通道才畅通',
+  '✅ 收到！收到消息多回复，保障通道畅通',
+  '✅ 收到！微信通道靠双向对话维持，多互动几次就不会断',
 ];
 const ACK_DEDUP_MS = 30 * 1000;
 
