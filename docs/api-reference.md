@@ -175,6 +175,78 @@ curl -X POST "https://bot-talk.com/notify" \
 | `reason` | （仅 failed）细分原因，同上表枚举 |
 | `ret_code` | （仅 failed）iLink 原始 ret 码（如 `-2` / `-14`） |
 
+### 50001 自救手册：开发者侧最小代码
+
+终端用户**不会**看到管理员告警，他们只能依赖你 app 里基于响应做的提示。把响应里的 `data.hint` 接到你 app 的 toast / 邮件兜底 / 业务日志，就能让收信人 1-2 分钟内自助解锁。
+
+**curl + jq**
+
+```bash
+resp=$(curl -sk "https://bot-talk.com/${KEY}.send?title=订单异常&desp=...")
+code=$(echo "$resp" | jq -r '.code')
+if [ "$code" = "50001" ]; then
+  reason=$(echo "$resp" | jq -r '.data.reason')
+  hint=$(echo "$resp" | jq -r '.data.hint')
+  if [ "$reason" = "context_expired" ]; then
+    echo "提示收信人: $hint"   # 走你自己的邮件/SMS/IM 兜底
+  elif [ "$reason" = "channel_dead" ]; then
+    echo "需重新扫码: $hint"
+  fi
+fi
+```
+
+**Node**
+
+```js
+import { BotTalk, PushFailedError } from '@bot-talk/sdk';
+const client = new BotTalk(process.env.BOTTALK_KEY);
+try {
+  await client.send('订单 #123 异常');
+} catch (e) {
+  if (e instanceof PushFailedError) {
+    if (e.isRecoverableByReply) {
+      // ✅ 最常见路径：让收信人回复 ClawBot 即可
+      myApp.toast(`收信人暂时收不到。${e.hint}`);
+      myApp.sendBackupEmail(recipient, e.hint);
+    } else if (e.reason === 'channel_dead') {
+      myApp.alert(`通道已死，需要 ${recipient} 重新扫码`);
+    }
+  }
+}
+```
+
+**Python**
+
+```python
+from bottalk import BotTalk, PushFailedError
+client = BotTalk(os.environ['BOTTALK_KEY'])
+try:
+    client.send('订单 #123 异常')
+except PushFailedError as e:
+    if e.is_recoverable_by_reply:
+        my_app.notify_sender(f'收信人暂时收不到。{e.hint}')
+        my_app.send_backup_email(recipient, e.hint)
+    elif e.reason == 'channel_dead':
+        my_app.alert_ops(f'通道已死，{recipient} 需重扫')
+```
+
+**Go**
+
+```go
+import "errors"
+import bottalk "github.com/bot-talk-k/BotTalk/sdk/go"
+
+err := client.Send("订单 #123 异常")
+var pe *bottalk.PushFailedError
+if errors.As(err, &pe) {
+    if pe.IsRecoverableByReply() {
+        myApp.NotifySender("收信人暂时收不到。" + pe.Hint)
+    } else if pe.Reason == bottalk.ReasonChannelDead {
+        myApp.AlertOps(fmt.Sprintf("通道已死，%s 需重扫", recipient))
+    }
+}
+```
+
 ---
 
 ## 认证 API

@@ -599,7 +599,16 @@ curl -X POST https://bot-talk.com/<span class="string">&lt;SENDKEY&gt;</span>.se
   40002  <span class="comment">— 没有可用的推送通道</span>
   40003  <span class="comment">— 消息内容为空</span>
   42901  <span class="comment">— 超过频率限制</span>
-  50001  <span class="comment">— 推送失败</span>
+  50001  <span class="comment">— 推送失败（响应自带 data.reason + data.hint，可直接显示给终端用户）</span>
+
+<span class="comment">// 50001 自救（最常见 ret:-2 场景）：</span>
+{
+  <span class="string">"code"</span>: 50001,
+  <span class="string">"data"</span>: {
+    <span class="string">"reason"</span>: <span class="string">"context_expired"</span>,
+    <span class="string">"hint"</span>: <span class="string">"让收信人在微信里向 ClawBot 回复任意一条消息，1-2 分钟内自动补发"</span>
+  }
+}
     </div>
   </div>
 </section>

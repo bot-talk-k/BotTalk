@@ -451,7 +451,27 @@ router.get('/retry-queue', (req, res) => {
       ORDER BY cnt DESC
     `).all();
 
-    res.json({ success: true, data: { stats, recent, analytics } });
+    // 时间序列：近 30 天每天按 recovered_by 分桶（用 UTC date，前端 +8h）
+    // 验证"用户回复 vs 自动重试"哪条路径在贡献价值，肉眼看趋势
+    const trendDaily = db.prepare(`
+      SELECT date(recovered_at) AS day, recovered_by, COUNT(*) AS cnt
+      FROM push_retry_queue
+      WHERE status = 'success'
+        AND recovered_at >= datetime('now', '-30 days')
+        AND recovered_by IS NOT NULL
+      GROUP BY day, recovered_by
+      ORDER BY day ASC
+    `).all();
+
+    // 首错码 × 状态矩阵（验证 ret:-2 是否真的"无自愈"，ret:-14 是否一律 channel_dead）
+    const errMatrix = db.prepare(`
+      SELECT first_error_code, status, COUNT(*) AS cnt
+      FROM push_retry_queue
+      GROUP BY first_error_code, status
+      ORDER BY cnt DESC
+    `).all();
+
+    res.json({ success: true, data: { stats, recent, analytics, trendDaily, errMatrix } });
   } catch (err) {
     console.error('Admin retry-queue error:', err.message);
     res.status(500).json({ success: false, error: 'Internal error' });

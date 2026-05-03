@@ -623,6 +623,31 @@
             <div class="stat-card"><div class="stat-value" id="rq-abandoned" style="color:#8e8e93;">-</div><div class="stat-label">通道失效</div></div>
           </div>
 
+          <!-- 恢复归因趋势（近 30 天 user_reply vs retry vs rescan） -->
+          <div class="card" style="padding:16px 20px;margin-bottom:16px;">
+            <div style="font-weight:600;font-size:14px;color:#6e6e73;margin-bottom:4px;">恢复归因趋势（近 30 天）</div>
+            <div style="font-size:12px;color:#8e8e93;margin-bottom:12px;" id="rq-trend-summary">加载中...</div>
+            <div id="rq-trend-chart" style="min-height:160px;"></div>
+            <div style="font-size:12px;color:#8e8e93;margin-top:8px;display:flex;gap:16px;flex-wrap:wrap;">
+              <span><span style="display:inline-block;width:10px;height:10px;background:#34c759;border-radius:2px;vertical-align:middle;margin-right:4px;"></span>用户回复 user_reply</span>
+              <span><span style="display:inline-block;width:10px;height:10px;background:#0071e3;border-radius:2px;vertical-align:middle;margin-right:4px;"></span>自动重试 retry</span>
+              <span><span style="display:inline-block;width:10px;height:10px;background:#ff9500;border-radius:2px;vertical-align:middle;margin-right:4px;"></span>重扫绑定 rescan</span>
+            </div>
+          </div>
+
+          <!-- 首错码 × 状态矩阵 -->
+          <div class="card" style="padding:0;overflow:hidden;margin-bottom:16px;">
+            <div style="padding:16px 20px 8px;font-weight:600;font-size:14px;color:#6e6e73;">首错码 × 最终状态（验证 ret:-2 自愈率）</div>
+            <div class="table-scroll">
+              <table class="data-table">
+                <thead><tr><th>首错码</th><th>状态</th><th>数量</th></tr></thead>
+                <tbody id="rq-errmatrix-tbody">
+                  <tr><td colspan="3" style="text-align:center;color:#8e8e93;padding:20px;">加载中...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
           <!-- 分析（按恢复路径 × 重试次数） -->
           <div class="card" style="padding:0;overflow:hidden;margin-bottom:16px;">
             <div style="padding:16px 20px 8px;font-weight:600;font-size:14px;color:#6e6e73;">分析：成功路径 × 最终重试次数</div>
@@ -1005,9 +1030,25 @@
           aTbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:#8e8e93;padding:20px;">暂无数据</td></tr>';
         } else {
           aTbody.innerHTML = data.analytics.map(function(a) {
-            var pathMap = { retry: '重试成功', rescan: '重扫恢复', channel_dead: '通道失效', no_context_token: '无 context_token' };
+            var pathMap = { user_reply: '用户回复', retry: '自动重试', rescan: '重扫恢复', channel_dead: '通道失效', no_context_token: '无 context_token' };
             var label = pathMap[a.recovered_by] || a.recovered_by || '未尽（exhausted）';
             return '<tr><td>' + label + '</td><td>' + (a.final_attempt_count == null ? '-' : a.final_attempt_count) + '</td><td>' + a.cnt + '</td></tr>';
+          }).join('');
+        }
+
+        // 恢复归因趋势图（近 30 天 user_reply vs retry vs rescan 三条线）
+        renderRecoveryTrend(data.trendDaily || []);
+
+        // 首错码 × 状态矩阵
+        var emTbody = document.getElementById('rq-errmatrix-tbody');
+        if (!data.errMatrix || data.errMatrix.length === 0) {
+          emTbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:#8e8e93;padding:20px;">暂无数据</td></tr>';
+        } else {
+          var statusMap = { success: '已恢复', exhausted: '已用尽', abandoned: '已放弃', pending: '待重试' };
+          emTbody.innerHTML = data.errMatrix.map(function(m) {
+            var ret = m.first_error_code == null ? '(网络/未知)' : 'ret:' + m.first_error_code;
+            var st = statusMap[m.status] || m.status;
+            return '<tr><td>' + ret + '</td><td>' + st + '</td><td>' + m.cnt + '</td></tr>';
           }).join('');
         }
 
@@ -1038,6 +1079,99 @@
       } catch (e) {
         console.error('loadRetryQueue error:', e);
       }
+    }
+
+    // 恢复归因趋势图：近 30 天每天 user_reply / retry / rescan 三条线叠加
+    // 帮助直观看到"用户回复才是真正的恢复路径"这个事实
+    function renderRecoveryTrend(rows) {
+      var container = document.getElementById('rq-trend-chart');
+      var summary = document.getElementById('rq-trend-summary');
+      if (!rows || rows.length === 0) {
+        container.innerHTML = '<div style="text-align:center;color:#8e8e93;padding:40px;">暂无恢复数据</div>';
+        summary.textContent = '近 30 天没有 retry-queue 任务恢复成功的记录';
+        return;
+      }
+
+      // 按 day 聚合三种归因
+      var byDay = {};
+      rows.forEach(function(r) {
+        if (!byDay[r.day]) byDay[r.day] = { day: r.day, user_reply: 0, retry: 0, rescan: 0 };
+        if (r.recovered_by === 'user_reply') byDay[r.day].user_reply = r.cnt;
+        else if (r.recovered_by === 'retry') byDay[r.day].retry = r.cnt;
+        else if (r.recovered_by === 'rescan') byDay[r.day].rescan = r.cnt;
+      });
+      var days = Object.keys(byDay).sort();
+
+      // 补齐近 30 天空白日期
+      var endDate = new Date();
+      var filled = [];
+      for (var i = 29; i >= 0; i--) {
+        var d = new Date(endDate.getTime() - i * 86400000);
+        var key = d.toISOString().slice(0, 10);
+        filled.push(byDay[key] || { day: key, user_reply: 0, retry: 0, rescan: 0 });
+      }
+
+      // 总量做成 summary 文案
+      var sumReply = 0, sumRetry = 0, sumRescan = 0;
+      filled.forEach(function(d) { sumReply += d.user_reply; sumRetry += d.retry; sumRescan += d.rescan; });
+      var total = sumReply + sumRetry + sumRescan;
+      var pctReply = total > 0 ? Math.round(sumReply * 100 / total) : 0;
+      summary.textContent = '30 天合计 ' + total + ' 条恢复成功：用户回复 ' + sumReply + ' (' + pctReply + '%) · 自动重试 ' + sumRetry + ' · 重扫 ' + sumRescan;
+
+      var W = 700, H = 200, padL = 36, padR = 16, padT = 16, padB = 32;
+      var chartW = W - padL - padR;
+      var chartH = H - padT - padB;
+      var n = filled.length;
+      var maxVal = 0;
+      filled.forEach(function(d) {
+        if (d.user_reply > maxVal) maxVal = d.user_reply;
+        if (d.retry > maxVal) maxVal = d.retry;
+        if (d.rescan > maxVal) maxVal = d.rescan;
+      });
+      if (maxVal === 0) maxVal = 1;
+
+      function pointsFor(key) {
+        return filled.map(function(d, i) {
+          var x = padL + (n > 1 ? (i / (n - 1)) * chartW : chartW / 2);
+          var y = padT + chartH - (d[key] / maxVal) * chartH;
+          return { x: x, y: y, val: d[key] };
+        });
+      }
+      function polyline(pts) { return pts.map(function(p) { return p.x + ',' + p.y; }).join(' '); }
+
+      var pReply = pointsFor('user_reply');
+      var pRetry = pointsFor('retry');
+      var pRescan = pointsFor('rescan');
+
+      // Y-axis grid
+      var yLabels = '';
+      for (var i = 0; i <= 4; i++) {
+        var val = Math.round(maxVal * i / 4);
+        var yy = padT + chartH - (i / 4) * chartH;
+        yLabels += '<text x="' + (padL - 6) + '" y="' + (yy + 4) + '" text-anchor="end" fill="#8e8e93" font-size="11">' + val + '</text>';
+        yLabels += '<line x1="' + padL + '" y1="' + yy + '" x2="' + (W - padR) + '" y2="' + yy + '" stroke="#f0f0f0" stroke-width="1"/>';
+      }
+
+      // X-axis labels (5 个)
+      var xLabels = '';
+      var step = Math.max(1, Math.floor(n / 5));
+      for (var j = 0; j < n; j += step) {
+        var label = filled[j].day.substring(5); // MM-DD
+        xLabels += '<text x="' + pReply[j].x + '" y="' + (H - 8) + '" text-anchor="middle" fill="#8e8e93" font-size="11">' + label + '</text>';
+      }
+
+      // 三条折线（user_reply 绿色,retry 蓝色,rescan 橙色）
+      var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;max-width:' + W + 'px;height:auto;">' +
+        yLabels + xLabels +
+        '<polyline points="' + polyline(pReply) + '" fill="none" stroke="#34c759" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>' +
+        '<polyline points="' + polyline(pRetry) + '" fill="none" stroke="#0071e3" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>' +
+        '<polyline points="' + polyline(pRescan) + '" fill="none" stroke="#ff9500" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>' +
+        pReply.map(function(p) { return p.val > 0 ? '<circle cx="' + p.x + '" cy="' + p.y + '" r="3" fill="#34c759"/>' : ''; }).join('') +
+        pRetry.map(function(p) { return p.val > 0 ? '<circle cx="' + p.x + '" cy="' + p.y + '" r="3" fill="#0071e3"/>' : ''; }).join('') +
+        pRescan.map(function(p) { return p.val > 0 ? '<circle cx="' + p.x + '" cy="' + p.y + '" r="3" fill="#ff9500"/>' : ''; }).join('') +
+        '</svg>';
+
+      container.innerHTML = svg;
     }
 
     function showRetryHistory(historyJson) {
