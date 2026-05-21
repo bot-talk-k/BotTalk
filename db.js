@@ -492,6 +492,29 @@ if (!hasRun(23)) {
   markRun(23);
 }
 
+// Migration 24: 一次性清理 retry-queue 所有 pending 残留
+// 背景:2026-05-21 发现 processRetries 存在 TOCTOU race condition,导致同一条
+// pending record 在 push-queue 限流期间被并发处理多次,用户收到重复补发。
+// race fix(retry-queue.js processingLock + inFlight Set)已在前序 commit 部署。
+// 本 migration 把 fix 之前累积的所有 pending(包括 paused=0/1)统一标 abandoned,
+// 让 scheduler 干净起步,不再追溯历史失败任务。
+//
+// 影响:用户不会再收到累积的延迟补发("因微信官方通道临时不稳定...")。
+// 历史失败消息仍可在网页"推送历史"查询。
+if (!hasRun(24)) {
+  try {
+    const r = db.prepare(
+      "UPDATE push_retry_queue SET status='abandoned', recovered_by='race_fix_cleanup_2026-05-21', recovered_at=CURRENT_TIMESTAMP WHERE status='pending'"
+    ).run();
+    if (r.changes > 0) {
+      console.log(`📋 migration 24: 已清理 ${r.changes} 条 pending retry 为 abandoned (race fix 现场止血)`);
+    }
+  } catch (e) {
+    console.error('migration 24 error:', e.message);
+  }
+  markRun(24);
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────
 
 function generateSendKey() {
