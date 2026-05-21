@@ -217,7 +217,7 @@ async function processOne(item) {
       elapsed_ms: Date.now() - startedAt,
     });
 
-    // X3 设计(2026-05-21): 用户触发的 1 次补发尝试失败 → 直接 abandoned,不再循环
+    // X4 设计(2026-05-21): 用户触发的 1 次补发尝试失败 → 直接 abandoned + channel 进入失联
     // 不再 paused=1 等下次回复,避免"道歉式延迟通知再次失败"骚扰
     db.prepare(`
       UPDATE push_retry_queue
@@ -225,7 +225,23 @@ async function processOne(item) {
           attempts = ?, last_try_at = CURRENT_TIMESTAMP, final_attempt_count = ?
       WHERE id = ?
     `).run(attemptNo, attemptNo, item.id);
-    console.log(`❌ retry-queue id=${item.id} 用户回复后补发仍失败(code=${code}),直接 abandoned`);
+
+    // X4 失联状态机: 标记该 channel 进入失联,后续 handlePush 直接 fail-fast
+    // 同时把该 channel 其他 paused=1 record 一并 abandoned(它们也救不了)
+    try {
+      db.prepare(`UPDATE channels SET disconnected_at = CURRENT_TIMESTAMP WHERE id = ? AND disconnected_at IS NULL`).run(item.channel_id);
+      const cleanup = db.prepare(`
+        UPDATE push_retry_queue
+        SET status = 'abandoned', recovered_by = 'channel_disconnected_cleanup', last_try_at = CURRENT_TIMESTAMP
+        WHERE channel_id = ? AND status = 'pending' AND paused = 1 AND id != ?
+      `).run(item.channel_id, item.id);
+      if (cleanup.changes > 0) {
+        console.log(`🧹 channel ${item.channel_id} 进入失联,顺手清理 ${cleanup.changes} 条同通道残留 paused`);
+      }
+      console.log(`❌ retry-queue id=${item.id} 用户回复后补发仍失败(code=${code}),channel ${item.channel_id} 标 disconnected`);
+    } catch (e) {
+      console.error('标记 channel disconnected 失败:', e.message);
+    }
   }
 }
 

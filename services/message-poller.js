@@ -80,10 +80,10 @@ async function startMessagePoller(botToken, userId, onFirstMessage) {
             contextTokenCache[userId] = msg.context_token;
 
             // 持久化到 channels 表：刷新 context_token + 复位所有衰退标记
-            // 用户回复证明通道活着，ret:-2 老化状态自动清零
+            // 用户回复证明通道活着，ret:-2 老化状态自动清零, 失联状态也解除(X4)
             db.prepare(`UPDATE channels
               SET context_token = ?, status = 'active', last_inbound_at = CURRENT_TIMESTAMP,
-                  consecutive_neg2_count = 0
+                  consecutive_neg2_count = 0, disconnected_at = NULL
               WHERE bot_token = ? AND wechat_openid = ?`)
               .run(msg.context_token, botToken, userId);
 

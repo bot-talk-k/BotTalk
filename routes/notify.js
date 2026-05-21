@@ -132,6 +132,18 @@ async function handlePush(sendKey, title, content, clientIp, channelParam, req) 
       continue;
     }
 
+    // X4 失联状态机: 通道处于 disconnected 状态(上次补发也失败) → fail-fast 不尝试
+    // 用户必须在微信回复 ClawBot 或重扫绑定才能解除
+    if (channel.disconnected_at) {
+      results.push({
+        channel_id: channel.id,
+        status: 'skipped',
+        reason: 'channel_disconnected',
+        disconnected_since: channel.disconnected_at,
+      });
+      continue;
+    }
+
     // 业务推送追加保活尾巴（根据通道当前健康度选择短/长版）
     const message = appendTip(baseMessage, channel);
 
@@ -255,12 +267,14 @@ async function handlePush(sendKey, title, content, clientIp, channelParam, req) 
   // 决策树（优先级从严到松，"严"= 用户回复也救不了）：
   //   1) 任一 channel_dead       → 必须重扫
   //   2) 任一 account_restricted → 账号被风控，回复无效
-  //   3) 全部 skipped(无 token)  → 通道未绑定/已硬过期
-  //   4) 任一 context_expired    → 让用户回复 ClawBot 即可解锁（最常见、最可恢复）
-  //   5) 网络/queue/其它          → 通用兜底
+  //   3) 任一 channel_disconnected → 失联状态(补发也失败过),等用户互动
+  //   4) 全部 skipped(无 token)  → 通道未绑定/已硬过期
+  //   5) 任一 context_expired    → 让用户回复 ClawBot 即可解锁
+  //   6) 网络/queue/其它          → 通用兜底
   const failedResults = results.filter(r => r.status !== 'success');
   const anyDead = failedResults.some(r => r.reason === 'channel_dead');
   const anyRestricted = failedResults.some(r => r.reason === 'account_restricted');
+  const anyDisconnected = failedResults.some(r => r.reason === 'channel_disconnected');
   const allSkipped = failedResults.every(r => r.status === 'skipped');
   const anyContextExpired = failedResults.some(r => r.reason === 'context_expired');
 
@@ -271,18 +285,22 @@ async function handlePush(sendKey, title, content, clientIp, channelParam, req) 
   } else if (anyRestricted) {
     reason = 'account_restricted';
     hint = '收信人微信账号疑似被 iLink 风控（能收消息但不能被推送）。建议联系平台或换号绑定，回复无法解决。';
+  } else if (anyDisconnected) {
+    reason = 'channel_disconnected';
+    hint =
+      '通道已处于失联状态(上次补发尝试也失败)。本次推送未实际发送以避免无效轰炸。' +
+      '请让收信人在微信里向 ClawBot 回复任意一条消息(或重新扫码绑定),通道恢复后立即可用,SendKey 和历史不变。';
   } else if (allSkipped) {
     reason = 'no_channel';
     hint = '指定的通道未绑定或 context_token 已彻底过期。请检查 channel 参数，或让收信人重新扫码绑定。';
   } else if (anyContextExpired) {
     reason = 'context_expired';
     hint =
-      '通道因长期无互动暂时受限（iLink ret:-2 / context_token 老化）。最常见解法：让收信人在微信里向 ClawBot 回复任意一条消息。' +
-      '系统会在 +2/+7/+22/+82 分钟 4 次自动退避重试，回复触发的瞬间命中下一次重试即丝滑补发，无需重扫码。' +
-      '若超过 1.5 小时仍未恢复，可能已升级为 channel_dead，需重扫。';
+      '通道因长期无互动暂时受限（iLink ret:-2 / context_token 老化）。请让收信人在微信里向 ClawBot 回复任意一条消息,' +
+      '系统会立即触发补发本条消息(只补 1 次)。若 24 小时内未回复将自动放弃,通道也将进入失联状态。';
   } else {
     reason = 'transient';
-    hint = '推送暂时失败（网络抖动或服务端排队）。系统已自动入队重试（2/5/15/60 分钟退避），通常会自动恢复；长期未恢复请联系管理员。';
+    hint = '推送暂时失败（网络抖动或服务端排队）。已入队等待用户互动后补发(只补 1 次)。';
   }
 
   return {

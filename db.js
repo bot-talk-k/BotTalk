@@ -538,6 +538,23 @@ if (!hasRun(25)) {
   markRun(25);
 }
 
+// Migration 26: channels 加 disconnected_at —— X4 设计的失联状态机
+// 语义: NULL = 通道正常; 非空 = 通道处于失联状态从该时间起
+//   - retry-queue 补发失败时设置 disconnected_at = NOW
+//   - handlePush 看到非空 → 直接拒绝 push,不入队不尝试(fail-fast)
+//   - 用户在微信回复 / 重扫 → 清零 disconnected_at,通道恢复
+if (!hasRun(26)) {
+  try {
+    db.exec('ALTER TABLE channels ADD COLUMN disconnected_at DATETIME');
+    console.log('📋 migration 26: channels.disconnected_at 已添加(X4 失联状态机)');
+  } catch (e) {
+    if (!/duplicate column/i.test(e.message)) {
+      console.error('migration 26 error:', e.message);
+    }
+  }
+  markRun(26);
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────
 
 function generateSendKey() {

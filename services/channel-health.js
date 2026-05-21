@@ -15,7 +15,8 @@ function markSendSuccess(channelId) {
           consecutive_neg2_count = 0,
           send_disabled = 0,
           send_disabled_reason = NULL,
-          send_disabled_at = NULL
+          send_disabled_at = NULL,
+          disconnected_at = NULL
       WHERE id = ?
     `).run(channelId);
   } catch (e) {
@@ -121,13 +122,17 @@ function reviveChannel(channelId) {
           consecutive_neg2_count = 0,
           send_disabled = 0,
           send_disabled_reason = NULL,
-          send_disabled_at = NULL
+          send_disabled_at = NULL,
+          disconnected_at = NULL
       WHERE id = ?
     `).run(channelId);
   } catch (e) {
     console.error('reviveChannel 错误:', e.message);
   }
 }
+
+// 同 markSendSuccess: 业务推送成功也清 disconnected_at
+// (即使是手动 setContextToken / 别的路径成功的 push,都意味着 channel 现在可用)
 
 // 计算通道健康状态（三色）
 // 返回 { health: 'green'|'yellow'|'red', reason: string, details: {...} }
