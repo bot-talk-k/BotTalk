@@ -70,18 +70,46 @@ function appendHistory(id, entry) {
 }
 
 // 处理所有到期的 pending
-async function processRetries() {
-  const due = db.prepare(`
-    SELECT r.*, c.bot_token, c.wechat_openid, c.context_token, c.send_disabled, c.status AS channel_status
-    FROM push_retry_queue r
-    JOIN channels c ON c.id = r.channel_id
-    WHERE r.status = 'pending' AND r.next_try_at <= CURRENT_TIMESTAMP AND r.paused = 0
-    ORDER BY r.next_try_at ASC
-    LIMIT 20
-  `).all();
+//
+// 并发安全:
+//   1. processingLock — 全局 reentrant guard: 如果上一次 processRetries 还在跑
+//      (一个 batch 串行处理 20 条,push-queue 同通道 10s 间隔 → 单 batch 最长
+//      可能 200s+),scheduler 30s 又 fire 时直接跳过本次,避免拿到相同 pending
+//      records 导致同一条被多次处理。
+//   2. inFlight Set — 双重保险: 即使因任何原因 processRetries 重入,同一条
+//      retry_queue.id 在处理完成前不会被新一轮捡走。
+//
+// 故障证据: 2026-05-21 retry-queue #7089 的 failure_history 显示同一条记录
+// 在 4 分钟内被处理 6 次 retry-success,push_logs 多写 5 条重复 retry-1。
+const inFlight = new Set();
+let processingLock = false;
 
-  for (const item of due) {
-    await processOne(item);
+async function processRetries() {
+  if (processingLock) {
+    return; // 上一轮还在跑,跳过本次 tick
+  }
+  processingLock = true;
+  try {
+    const due = db.prepare(`
+      SELECT r.*, c.bot_token, c.wechat_openid, c.context_token, c.send_disabled, c.status AS channel_status
+      FROM push_retry_queue r
+      JOIN channels c ON c.id = r.channel_id
+      WHERE r.status = 'pending' AND r.next_try_at <= CURRENT_TIMESTAMP AND r.paused = 0
+      ORDER BY r.next_try_at ASC
+      LIMIT 20
+    `).all();
+
+    for (const item of due) {
+      if (inFlight.has(item.id)) continue; // 已在处理(理论上 processingLock 已挡住,这是冗余保险)
+      inFlight.add(item.id);
+      try {
+        await processOne(item);
+      } finally {
+        inFlight.delete(item.id);
+      }
+    }
+  } finally {
+    processingLock = false;
   }
 }
 
