@@ -36,6 +36,9 @@ async function checkReminders() {
   const allReminders = [...normalReminders, ...every2minReminders];
 
   for (const r of allReminders) {
+    // 提到 try 外面,catch 块也要用它做"达 max 就删"判定
+    const sendCount = (r.send_count || 0) + 1;
+    const maxCount = r.max_count || 0; // 0 = 无限制
     try {
       const contextToken = r.channel_context_token || getContextToken(r.wechat_openid);
 
@@ -44,8 +47,10 @@ async function checkReminders() {
         continue;
       }
 
-      const sendCount = (r.send_count || 0) + 1;
-      const maxCount = r.max_count || 0; // 0 = 无限制
+      // 立即递增 send_count(无论后续成功/失败都算用掉一次配额)
+      // 历史教训(2026-05-21): 旧逻辑只在 success 才递增,导致 every2min reminder
+      // 通道 ret:-2 时永远 send_count=0 < max_count,12 天无限轰炸用户
+      db.prepare('UPDATE reminders SET send_count = ? WHERE id = ?').run(sendCount, r.id);
 
       // 构造消息
       let message = r.title;
@@ -84,9 +89,7 @@ async function checkReminders() {
         }
       }
 
-      // 更新发送次数
-      db.prepare('UPDATE reminders SET send_count = ? WHERE id = ?').run(sendCount, r.id);
-
+      // send_count 已在 try 块前递增,这里不再重复
       db.prepare(`
         INSERT INTO logs (user_id, reminder_id, status)
         VALUES (?, ?, 'sent')
@@ -148,6 +151,18 @@ async function checkReminders() {
         });
       } catch (e) {
         console.error('alert admin 失败:', e.message);
+      }
+
+      // 体验提醒(every2min)失败也算尝试次数;达到 max_count 也要删除
+      // 防止 ret:-2 状态下无限重试轰炸用户
+      if (maxCount > 0 && sendCount >= maxCount) {
+        try {
+          db.prepare('DELETE FROM logs WHERE reminder_id = ?').run(r.id);
+          db.prepare('DELETE FROM reminders WHERE id = ?').run(r.id);
+          console.log(`🗑️ 体验提醒 ${r.id} 失败次数已达上限 ${maxCount},自动删除`);
+        } catch (e) {
+          console.error('清理失败提醒错误:', e.message);
+        }
       }
     }
   }

@@ -515,6 +515,29 @@ if (!hasRun(24)) {
   markRun(24);
 }
 
+// Migration 25: 一次性禁用所有 stuck every2min reminders
+// 背景:2026-05-21 发现 scheduler.checkReminders 的 send_count 递增逻辑只在
+// success 路径生效,导致 ret:-2 失败时 every2min reminder 永远 send_count=0,
+// 无限轰炸用户(user 45 喝水提醒 12 天每 2 分钟一发)。代码已修(递增提前),
+// 本 migration 清理存量。
+//
+// 安全规则: 只清"明显 stuck"的—— every2min 类型本设计是分钟级测试(max=5,
+// 10 分钟跑完),创建超过 1 天还 enabled 的肯定是失败堆积导致的死循环。
+if (!hasRun(25)) {
+  try {
+    const r = db.prepare(`
+      UPDATE reminders SET enabled = 0
+      WHERE type = 'every2min' AND enabled = 1 AND created_at < datetime('now', '-1 day')
+    `).run();
+    if (r.changes > 0) {
+      console.log(`📋 migration 25: 禁用 ${r.changes} 条 stuck every2min reminders (失败堆积止血)`);
+    }
+  } catch (e) {
+    console.error('migration 25 error:', e.message);
+  }
+  markRun(25);
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────
 
 function generateSendKey() {

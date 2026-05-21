@@ -25,12 +25,20 @@ const { markSendResult } = require('./channel-health');
 // 退避计划：只保留 +2min 一次自动重试,后续等用户回复触发(2026-05-21 数据驱动决策)
 const BACKOFF_MINUTES = [2];
 
-function minutesFromNow(minutes) {
-  return new Date(Date.now() + minutes * 60000).toISOString().replace('T', ' ').slice(0, 19);
-}
+// minutesFromNow 已删除(X3 设计下 enqueueRetry 用即时时间戳,补发失败直接 abandon)
 
 // 入队
 // firstError: { ret, errcode, message } 便于后期分析
+//
+// X3 设计(2026-05-21):
+//   - 直接 paused=1 入队,不走 +2min 自动重试
+//   - 由 message-poller 的 flushOldestPausedRetry 在用户回复时触发 1 次补发
+//   - 补发失败 → status='abandoned',不再 paused 等下次回复(只补一次定论)
+//   - 用户始终不回复 → cleanupStalePaused 24h 后自动 abandon
+// 这样 status 字段语义最清晰:
+//   success = 用户回复了 + 补发成功
+//   abandoned by user_no_reply_24h = 用户沉默(关键流失信号)
+//   abandoned by retry_once_failed = 用户回复了但补发又失败(罕见)
 function enqueueRetry({ userId, channelId, title, content, source, originalPushLogId, firstError }) {
   try {
     const errCode = firstError?.ret ?? firstError?.errcode ?? null;
@@ -41,19 +49,20 @@ function enqueueRetry({ userId, channelId, title, content, source, originalPushL
       code: errCode,
       msg: firstError?.errmsg || firstError?.message || null,
     };
-    const nextAt = minutesFromNow(BACKOFF_MINUTES[0]);
+    // next_try_at 设为现在 — 用户回复后 flushOldestPausedRetry unpause 即可,scheduler 30s 内拾起
+    const nextAt = new Date().toISOString().replace('T', ' ').slice(0, 19);
     const info = db.prepare(`
       INSERT INTO push_retry_queue
         (user_id, channel_id, title, content, source, original_push_log_id,
          first_failed_at, first_error_code, attempts, max_attempts,
          next_try_at, failure_history, status, paused)
-      VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, 0, ?, ?, ?, 'pending', 0)
+      VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, 0, ?, ?, ?, 'pending', 1)
     `).run(
       userId, channelId, title, content, source || 'api', originalPushLogId || null,
-      errCode, BACKOFF_MINUTES.length,
+      errCode, 1, // max_attempts=1, 只补一次
       nextAt, JSON.stringify([historyEntry])
     );
-    console.log(`📥 retry-queue 入队 id=${info.lastInsertRowid} channel=${channelId} first_err=${errCode} next=+${BACKOFF_MINUTES[0]}min`);
+    console.log(`📥 retry-queue 入队 id=${info.lastInsertRowid} channel=${channelId} first_err=${errCode} paused=1,等用户回复触发`);
     return info.lastInsertRowid;
   } catch (e) {
     console.error('enqueueRetry 错误:', e.message);
@@ -208,16 +217,15 @@ async function processOne(item) {
       elapsed_ms: Date.now() - startedAt,
     });
 
-    // 新逻辑(2026-05-21): 任何失败都 paused=1 等用户回复触发,不再 +5/+15/+60 退避
-    // (数据证明那些退避只救 4% 且全是 user_reply 命中而非真自愈)
-    // paused=1 record 由 message-poller 的 maybeFlushOldestPausedRetry 在用户回复时触发,
-    // 或 24h 后由 cleanup 自动 abandon
+    // X3 设计(2026-05-21): 用户触发的 1 次补发尝试失败 → 直接 abandoned,不再循环
+    // 不再 paused=1 等下次回复,避免"道歉式延迟通知再次失败"骚扰
     db.prepare(`
       UPDATE push_retry_queue
-      SET attempts = ?, last_try_at = CURRENT_TIMESTAMP, paused = 1
+      SET status = 'abandoned', recovered_by = 'retry_once_failed',
+          attempts = ?, last_try_at = CURRENT_TIMESTAMP, final_attempt_count = ?
       WHERE id = ?
-    `).run(attemptNo, item.id);
-    console.log(`⏳ retry-queue id=${item.id} 第 ${attemptNo} 次失败(code=${code}),paused=1 等用户回复触发`);
+    `).run(attemptNo, attemptNo, item.id);
+    console.log(`❌ retry-queue id=${item.id} 用户回复后补发仍失败(code=${code}),直接 abandoned`);
   }
 }
 
