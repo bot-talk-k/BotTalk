@@ -389,6 +389,7 @@
           <a href="#sec-push-logs" style="padding:4px 12px;border-radius:980px;font-size:13px;color:#0071e3;text-decoration:none;background:rgba(0,113,227,0.06);">推送日志</a>
           <a href="#sec-page-views" style="padding:4px 12px;border-radius:980px;font-size:13px;color:#0071e3;text-decoration:none;background:rgba(0,113,227,0.06);">访问统计</a>
           <a href="#sec-retry-queue" style="padding:4px 12px;border-radius:980px;font-size:13px;color:#0071e3;text-decoration:none;background:rgba(0,113,227,0.06);">重试队列</a>
+          <a href="#sec-user-activity" style="padding:4px 12px;border-radius:980px;font-size:13px;color:#0071e3;text-decoration:none;background:rgba(0,113,227,0.06);">用户活跃度</a>
           <a href="#sec-neg2-probe" style="padding:4px 12px;border-radius:980px;font-size:13px;color:#0071e3;text-decoration:none;background:rgba(0,113,227,0.06);">恢复探测</a>
         </div>
       </div>
@@ -681,6 +682,54 @@
         </div>
       </div>
 
+      <!-- User activity dashboard -->
+      <div id="sec-user-activity" class="section-gray section">
+        <div class="container">
+          <div class="section-header">
+            <h2>用户活跃度</h2>
+            <button class="btn btn-sm btn-secondary" onclick="loadUserActivity()">刷新</button>
+          </div>
+          <p style="color:#8e8e93;font-size:13px;margin:0 0 16px;">
+            X4 失联状态机驱动的健康度看板。<strong>失联</strong> = 补发尝试也失败的通道(必须用户互动解除);
+            <strong>沉默 7d/30d</strong> = 用户最近无回复但通道仍 active;<strong>活跃</strong> = 健康使用中。
+          </p>
+
+          <!-- 健康度桶 -->
+          <div class="stats-grid" style="grid-template-columns: repeat(6, 1fr);" id="ua-buckets">
+            <div class="stat-card"><div class="stat-value" id="ua-active" style="color:#34c759;">-</div><div class="stat-label">活跃</div></div>
+            <div class="stat-card"><div class="stat-value" id="ua-no-push" style="color:#5856d6;">-</div><div class="stat-label">7天无推送</div></div>
+            <div class="stat-card"><div class="stat-value" id="ua-silent7" style="color:#ff9500;">-</div><div class="stat-label">沉默7d+</div></div>
+            <div class="stat-card"><div class="stat-value" id="ua-silent30" style="color:#ff9500;">-</div><div class="stat-label">沉默30d+</div></div>
+            <div class="stat-card"><div class="stat-value" id="ua-never" style="color:#8e8e93;">-</div><div class="stat-label">从未回复</div></div>
+            <div class="stat-card"><div class="stat-value" id="ua-disconnected" style="color:#ff3b30;">-</div><div class="stat-label">失联</div></div>
+          </div>
+
+          <!-- 推送量趋势(近 30 天) -->
+          <div class="card" style="padding:16px 20px;margin-bottom:16px;">
+            <div style="font-weight:600;font-size:14px;color:#6e6e73;margin-bottom:4px;">推送量趋势(近 30 天 · 排除 ack/alert)</div>
+            <div style="font-size:12px;color:#8e8e93;margin-bottom:12px;" id="ua-volume-summary">加载中...</div>
+            <div id="ua-volume-chart" style="min-height:160px;"></div>
+            <div style="font-size:12px;color:#8e8e93;margin-top:8px;display:flex;gap:16px;flex-wrap:wrap;">
+              <span><span style="display:inline-block;width:10px;height:10px;background:#34c759;border-radius:2px;vertical-align:middle;margin-right:4px;"></span>成功 success</span>
+              <span><span style="display:inline-block;width:10px;height:10px;background:#ff3b30;border-radius:2px;vertical-align:middle;margin-right:4px;"></span>失败 failed</span>
+            </div>
+          </div>
+
+          <!-- 失联通道明细 -->
+          <div class="card" style="padding:0;overflow:hidden;">
+            <div style="padding:16px 20px 8px;font-weight:600;font-size:14px;color:#6e6e73;">失联通道(需联系用户)</div>
+            <div class="table-scroll">
+              <table class="data-table">
+                <thead><tr><th>通道</th><th>用户</th><th>失联时间</th><th>上次成功推送</th><th>上次回复</th></tr></thead>
+                <tbody id="ua-disconnected-tbody">
+                  <tr><td colspan="5" style="text-align:center;color:#8e8e93;padding:20px;">加载中...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- neg2 recovery probe -->
       <div id="sec-neg2-probe" class="section-gray section">
         <div class="container">
@@ -816,7 +865,7 @@
     // ═══════════════════════════════════════════════════════════════════
     var channelsHealthData = [];
     async function loadData() {
-      await Promise.all([loadStats(), loadUsers(), loadPushLogs(), loadPageViews('today'), loadChannelsHealth(), loadRetryQueue(), loadNeg2Probe()]);
+      await Promise.all([loadStats(), loadUsers(), loadPushLogs(), loadPageViews('today'), loadChannelsHealth(), loadRetryQueue(), loadUserActivity(), loadNeg2Probe()]);
     }
 
     var TEST_SEND_DEFAULT_MSG = '🧪 通道连通性测试，请回复"1"';
@@ -922,6 +971,120 @@
       } catch (e) {
         body.innerHTML = '<p style="color:#ff3b30;">加载失败：' + e.message + '</p>';
       }
+    }
+
+    // ───────────────────────────────────────────────────────────
+    //  User activity 看板 (X4 失联状态机驱动)
+    // ───────────────────────────────────────────────────────────
+
+    async function loadUserActivity() {
+      try {
+        var res = await apiFetch('/api/admin/user-activity');
+        var json = await res.json();
+        if (!json.success) throw new Error(json.error || 'error');
+        var d = json.data;
+
+        // 健康度桶
+        var byHealth = {};
+        (d.healthSummary || []).forEach(function(r) { byHealth[r.health] = r.cnt; });
+        document.getElementById('ua-active').textContent = byHealth.active || 0;
+        document.getElementById('ua-no-push').textContent = byHealth.no_push_7d || 0;
+        document.getElementById('ua-silent7').textContent = byHealth.silent_7d || 0;
+        document.getElementById('ua-silent30').textContent = byHealth.silent_30d || 0;
+        document.getElementById('ua-never').textContent = byHealth.never_replied || 0;
+        document.getElementById('ua-disconnected').textContent = byHealth.disconnected || 0;
+
+        // 推送量趋势
+        renderPushVolumeChart(d.pushVolume || []);
+
+        // 失联通道明细
+        var dcTbody = document.getElementById('ua-disconnected-tbody');
+        if (!d.disconnectedChannels || d.disconnectedChannels.length === 0) {
+          dcTbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#8e8e93;padding:20px;">暂无失联通道 🎉</td></tr>';
+        } else {
+          dcTbody.innerHTML = d.disconnectedChannels.map(function(c) {
+            return '<tr>' +
+              '<td>#' + c.id + '</td>' +
+              '<td>' + (c.nickname || 'User#' + c.user_id) + '</td>' +
+              '<td>' + rqFmtTime(c.disconnected_at) + '</td>' +
+              '<td>' + (c.last_send_success_at ? rqFmtTime(c.last_send_success_at) : '-') + '</td>' +
+              '<td>' + (c.last_inbound_at ? rqFmtTime(c.last_inbound_at) : '从未') + '</td>' +
+            '</tr>';
+          }).join('');
+        }
+      } catch (e) {
+        console.error('loadUserActivity error:', e);
+      }
+    }
+
+    // 推送量趋势图: 30 天 success + failed 双线
+    function renderPushVolumeChart(rows) {
+      var container = document.getElementById('ua-volume-chart');
+      var summary = document.getElementById('ua-volume-summary');
+      if (!rows || rows.length === 0) {
+        container.innerHTML = '<div style="text-align:center;color:#8e8e93;padding:40px;">暂无推送数据</div>';
+        summary.textContent = '近 30 天没有有效推送(已排除 ack/alert)';
+        return;
+      }
+
+      // 补齐 30 天空白
+      var byDay = {};
+      rows.forEach(function(r) { byDay[r.day] = r; });
+      var endDate = new Date();
+      var filled = [];
+      for (var i = 29; i >= 0; i--) {
+        var d = new Date(endDate.getTime() - i * 86400000);
+        var key = d.toISOString().slice(0, 10);
+        filled.push(byDay[key] || { day: key, success_cnt: 0, failed_cnt: 0 });
+      }
+
+      var sumS = 0, sumF = 0;
+      filled.forEach(function(d) { sumS += d.success_cnt; sumF += d.failed_cnt; });
+      var total = sumS + sumF;
+      var failRate = total > 0 ? Math.round(sumF * 100 / total) : 0;
+      summary.textContent = '30 天合计 ' + total + ' 条推送 · 成功 ' + sumS + ' · 失败 ' + sumF + ' (失败率 ' + failRate + '%)';
+
+      var W = 700, H = 200, padL = 40, padR = 16, padT = 16, padB = 32;
+      var chartW = W - padL - padR;
+      var chartH = H - padT - padB;
+      var n = filled.length;
+      var maxVal = 1;
+      filled.forEach(function(d) {
+        if (d.success_cnt > maxVal) maxVal = d.success_cnt;
+        if (d.failed_cnt > maxVal) maxVal = d.failed_cnt;
+      });
+
+      function pts(key) {
+        return filled.map(function(d, i) {
+          var x = padL + (n > 1 ? (i / (n - 1)) * chartW : chartW / 2);
+          var y = padT + chartH - (d[key] / maxVal) * chartH;
+          return { x: x, y: y, val: d[key] };
+        });
+      }
+      function polyline(p) { return p.map(function(x) { return x.x + ',' + x.y; }).join(' '); }
+
+      var pS = pts('success_cnt');
+      var pF = pts('failed_cnt');
+
+      var yLabels = '';
+      for (var i2 = 0; i2 <= 4; i2++) {
+        var val = Math.round(maxVal * i2 / 4);
+        var yy = padT + chartH - (i2 / 4) * chartH;
+        yLabels += '<text x="' + (padL - 6) + '" y="' + (yy + 4) + '" text-anchor="end" fill="#8e8e93" font-size="11">' + val + '</text>';
+        yLabels += '<line x1="' + padL + '" y1="' + yy + '" x2="' + (W - padR) + '" y2="' + yy + '" stroke="#f0f0f0" stroke-width="1"/>';
+      }
+      var xLabels = '';
+      var step = Math.max(1, Math.floor(n / 5));
+      for (var j = 0; j < n; j += step) {
+        xLabels += '<text x="' + pS[j].x + '" y="' + (H - 8) + '" text-anchor="middle" fill="#8e8e93" font-size="11">' + filled[j].day.substring(5) + '</text>';
+      }
+
+      var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;max-width:' + W + 'px;height:auto;">' +
+        yLabels + xLabels +
+        '<polyline points="' + polyline(pS) + '" fill="none" stroke="#34c759" stroke-width="2" stroke-linejoin="round"/>' +
+        '<polyline points="' + polyline(pF) + '" fill="none" stroke="#ff3b30" stroke-width="2" stroke-linejoin="round"/>' +
+        '</svg>';
+      container.innerHTML = svg;
     }
 
     async function loadNeg2Probe() {

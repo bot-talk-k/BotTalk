@@ -479,6 +479,73 @@ router.get('/retry-queue', (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════
+//  GET /api/admin/user-activity — X4 用户活跃度看板
+//  (失联/沉默/活跃分布,辅助"项目是否继续提供服务"的战略决策)
+// ═══════════════════════════════════════════════════════════════════
+
+router.get('/user-activity', (req, res) => {
+  try {
+    // 健康度桶 — 基于 channels.is_default 主通道判定
+    const healthSummary = db.prepare(`
+      SELECT
+        CASE
+          WHEN c.disconnected_at IS NOT NULL THEN 'disconnected'
+          WHEN c.last_inbound_at IS NULL THEN 'never_replied'
+          WHEN c.last_inbound_at < datetime('now', '-30 days') THEN 'silent_30d'
+          WHEN c.last_inbound_at < datetime('now', '-7 days') THEN 'silent_7d'
+          WHEN c.last_send_success_at IS NULL OR c.last_send_success_at < datetime('now', '-7 days') THEN 'no_push_7d'
+          ELSE 'active'
+        END AS health,
+        COUNT(*) AS cnt
+      FROM channels c
+      WHERE c.is_default = 1
+      GROUP BY health
+      ORDER BY cnt DESC
+    `).all();
+
+    // 失联通道明细 — 让运营知道哪些用户需要联系
+    const disconnectedChannels = db.prepare(`
+      SELECT c.id, c.user_id, u.nickname, c.last_send_success_at, c.last_inbound_at, c.disconnected_at
+      FROM channels c
+      LEFT JOIN users u ON u.id = c.user_id
+      WHERE c.disconnected_at IS NOT NULL AND c.is_default = 1
+      ORDER BY c.disconnected_at DESC LIMIT 50
+    `).all();
+
+    // 近 30 天 push 成败 + 用户响应率
+    const pushVolume = db.prepare(`
+      SELECT
+        date(created_at) AS day,
+        SUM(CASE WHEN status='success' THEN 1 ELSE 0 END) AS success_cnt,
+        SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END) AS failed_cnt
+      FROM push_logs
+      WHERE created_at >= datetime('now', '-30 days') AND ip NOT IN ('inbound-ack', 'alert')
+      GROUP BY day ORDER BY day ASC
+    `).all();
+
+    // 用户 retention: 7 天内是否有过 inbound (粗略活跃度信号)
+    const retention = db.prepare(`
+      SELECT
+        CASE
+          WHEN c.last_inbound_at >= datetime('now', '-1 day') THEN '1d'
+          WHEN c.last_inbound_at >= datetime('now', '-7 days') THEN '7d'
+          WHEN c.last_inbound_at >= datetime('now', '-30 days') THEN '30d'
+          WHEN c.last_inbound_at IS NULL THEN 'never'
+          ELSE 'older'
+        END AS bucket,
+        COUNT(*) AS cnt
+      FROM channels c WHERE c.is_default = 1
+      GROUP BY bucket
+    `).all();
+
+    res.json({ success: true, data: { healthSummary, disconnectedChannels, pushVolume, retention } });
+  } catch (err) {
+    console.error('Admin user-activity error:', err.message);
+    res.status(500).json({ success: false, error: 'Internal error' });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════
 //  GET /api/admin/neg2-probe — ret:-2 长期探测状态
 // ═══════════════════════════════════════════════════════════════════
 
