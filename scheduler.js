@@ -269,13 +269,17 @@ async function checkKeepaliveReminders() {
 setInterval(checkKeepaliveReminders, 30 * 60 * 1000);
 
 // 延时重试队列：每 30 秒扫描到期任务
-const { processRetries } = require('./services/retry-queue');
+const { processRetries, cleanupStalePaused } = require('./services/retry-queue');
 setInterval(() => {
   processRetries().catch(e => console.error('processRetries 错误:', e.message));
 }, 30000);
 setTimeout(() => {
   processRetries().catch(e => console.error('processRetries 错误:', e.message));
 }, 45000);
+
+// 每 6 小时清理一次 24h+ 未触发的 paused record(用户始终没回复 = abandoned)
+setInterval(cleanupStalePaused, 6 * 60 * 60 * 1000);
+setTimeout(cleanupStalePaused, 60 * 1000); // 启动 60s 后跑一次,避免每次重启都立刻清
 
 // Poller 监控：每 2 分钟扫描心跳，挂掉自动重启
 const { superviseOnce } = require('./services/poller-supervisor');

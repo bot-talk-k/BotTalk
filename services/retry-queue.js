@@ -1,17 +1,19 @@
 // 延时重试队列（持久化）
 //
-// 触发场景：notify handlePush 首次失败 + 5s 快速重试仍失败（通常是 ret:-2 或 ret:-14 半死态）
-// 重试节奏（attempt 编号从 1 开始，指"即将执行第几次重试"）：
-//   attempt 1 → 首失败后 2 分钟
-//   attempt 2 → +5 分钟（累计 7 分钟）
-//   attempt 3 → +15 分钟（累计 22 分钟）
-//   attempt 4 → +60 分钟（累计 82 分钟）
-//   之后 → 放弃，status = 'exhausted'
+// 2026-05-21 重构: 数据证明退避后 3 次几乎不救人(96% 成功在第 1 次重试),
+// 改为单次 +2min 重试 + 用户回复立即触发"最近 1 条" paused 补发链路。
+// 详细数据见记忆: architecture_retry_queue_data.md
 //
-// 恢复路径：
-//   - 重试成功 → recovered_by = 'retry', final_status = 'success'
-//   - 用户回复刷新 context_token 后重试成功 → 同上（无法严格区分，但 failure_history 里能看到先-2后ok）
-//   - scanner 跑下一次之前用户扫码重绑 → 由 channels.js 标记 recovered_by='rescan'（可选, 后续实现）
+// 触发场景: notify handlePush 首次失败 + 5s 快速重试仍失败(ret:-2/-14)
+// 节奏:
+//   attempt 1 → 首失败后 2 分钟自动重试一次
+//   若仍失败 → paused=1,等待 message-poller 的 user_reply 链路触发再试 1 次
+//   超过 24h 仍未触发 → 由 cleanup 自动 abandon
+//
+// 恢复路径(2026-05-21 prod 数据):
+//   - +2min 第一次重试就成 → 占 96%,绝大多数是用户已在 2 分钟内回复刷新了 context_token
+//   - 用户后续回复触发 unpause 再补发 → 占余下 4%
+//   - 用户扫码重绑 → 由 channels.js 标记 recovered_by='rescan'
 //
 // 所有重试走 push-queue 保留 10s 间隔限流
 
@@ -20,8 +22,8 @@ const ilink = require('../ilink');
 const { enqueueSend } = require('./push-queue');
 const { markSendResult } = require('./channel-health');
 
-// 退避计划：分钟
-const BACKOFF_MINUTES = [2, 5, 15, 60];
+// 退避计划：只保留 +2min 一次自动重试,后续等用户回复触发(2026-05-21 数据驱动决策)
+const BACKOFF_MINUTES = [2];
 
 function minutesFromNow(minutes) {
   return new Date(Date.now() + minutes * 60000).toISOString().replace('T', ' ').slice(0, 19);
@@ -206,32 +208,33 @@ async function processOne(item) {
       elapsed_ms: Date.now() - startedAt,
     });
 
-    if (attemptNo >= item.max_attempts) {
-      // 用尽
-      db.prepare(`
-        UPDATE push_retry_queue
-        SET status = 'exhausted', attempts = ?, last_try_at = CURRENT_TIMESTAMP,
-            final_attempt_count = ?
-        WHERE id = ?
-      `).run(attemptNo, attemptNo, item.id);
-      console.log(`❌ retry-queue id=${item.id} 用尽 ${attemptNo} 次重试，放弃`);
+    // 新逻辑(2026-05-21): 任何失败都 paused=1 等用户回复触发,不再 +5/+15/+60 退避
+    // (数据证明那些退避只救 4% 且全是 user_reply 命中而非真自愈)
+    // paused=1 record 由 message-poller 的 maybeFlushOldestPausedRetry 在用户回复时触发,
+    // 或 24h 后由 cleanup 自动 abandon
+    db.prepare(`
+      UPDATE push_retry_queue
+      SET attempts = ?, last_try_at = CURRENT_TIMESTAMP, paused = 1
+      WHERE id = ?
+    `).run(attemptNo, item.id);
+    console.log(`⏳ retry-queue id=${item.id} 第 ${attemptNo} 次失败(code=${code}),paused=1 等用户回复触发`);
+  }
+}
 
-      // 首错为 ret:-2 → 转入 neg2-probe 持续低频探测
-      if (item.first_error_code === -2) {
-        try {
-          require('./neg2-probe').enqueueProbe(item.channel_id, item.id);
-        } catch (e) { console.error('转入 neg2-probe 失败:', e.message); }
-      }
-    } else {
-      const nextBackoff = BACKOFF_MINUTES[attemptNo] ?? BACKOFF_MINUTES[BACKOFF_MINUTES.length - 1];
-      // 用户触发的重试失败后重新暂停；非用户触发的也重新暂停（避免自动 burst）
-      db.prepare(`
-        UPDATE push_retry_queue
-        SET attempts = ?, last_try_at = CURRENT_TIMESTAMP, next_try_at = ?, paused = 1
-        WHERE id = ?
-      `).run(attemptNo, minutesFromNow(nextBackoff), item.id);
-      console.log(`⏳ retry-queue id=${item.id} 第 ${attemptNo} 次失败（code=${code}），下次 +${nextBackoff}min（已暂停，等用户回复触发）`);
+// 24 小时仍未触发(用户始终没回复)的 paused record 自动 abandon
+// 由 scheduler 定期调用,避免 paused 表无限累积
+function cleanupStalePaused() {
+  try {
+    const r = db.prepare(`
+      UPDATE push_retry_queue
+      SET status = 'abandoned', recovered_by = 'user_no_reply_24h'
+      WHERE status = 'pending' AND paused = 1 AND last_try_at < datetime('now', '-24 hours')
+    `).run();
+    if (r.changes > 0) {
+      console.log(`🧹 retry-queue cleanup: ${r.changes} 条 paused 超过 24h 未触发,标 abandoned`);
     }
+  } catch (e) {
+    console.error('cleanupStalePaused error:', e.message);
   }
 }
 
@@ -267,10 +270,45 @@ function getStats() {
   }
 }
 
+// 用户回复时由 message-poller 调用: 解锁该 channel 最近 1 条 paused retry 立即处理
+// 严格"只发最近 1 条"——遵循 commit 6684f51 的"防一股脑全发"原则
+const lastUnpauseAt = new Map(); // channelId -> epoch ms
+const UNPAUSE_COOLDOWN_MS = 30 * 1000;
+
+function flushOldestPausedRetry(channelId) {
+  if (!channelId) return;
+  const now = Date.now();
+  const last = lastUnpauseAt.get(channelId) || 0;
+  if (now - last < UNPAUSE_COOLDOWN_MS) return; // 30s 内只触发一次,防止用户连发多句触发多条补发
+
+  try {
+    const oldest = db.prepare(`
+      SELECT id FROM push_retry_queue
+      WHERE channel_id = ? AND status = 'pending' AND paused = 1
+      ORDER BY id DESC LIMIT 1
+    `).get(channelId);
+    if (!oldest) return;
+
+    const r = db.prepare(`
+      UPDATE push_retry_queue
+      SET paused = 0, next_try_at = CURRENT_TIMESTAMP
+      WHERE id = ? AND status = 'pending' AND paused = 1
+    `).run(oldest.id);
+    if (r.changes > 0) {
+      lastUnpauseAt.set(channelId, now);
+      console.log(`♻️ user_reply 触发 unpause: channel=${channelId} retry #${oldest.id} 解锁,scheduler 30s 内拾起`);
+    }
+  } catch (e) {
+    console.error('flushOldestPausedRetry error:', e.message);
+  }
+}
+
 module.exports = {
   enqueueRetry,
   processRetries,
   markRecoveredByRescan,
+  cleanupStalePaused,
+  flushOldestPausedRetry,
   getStats,
   BACKOFF_MINUTES,
 };

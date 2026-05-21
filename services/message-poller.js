@@ -148,6 +148,13 @@ async function startMessagePoller(botToken, userId, onFirstMessage) {
         // 整批消息处理完后，统一回一次 ack（不论 N 条都只回 1 条）
         // 但若本批触发了 onFirstMessage（首条消息 → welcome 已包含"测试通过"反馈），则跳过 ack 避免重复
         if (batchHasUserText && batchChannelId && batchContextToken && !batchFiredFirstMessage) {
+          // 用户回复 → 解锁该 channel 最近 1 条 paused retry 立即补发
+          // (严格"最近 1 条"遵循 commit 6684f51 的"防一股脑全发"原则;内置 30s cool-down)
+          try {
+            require('./retry-queue').flushOldestPausedRetry(batchChannelId);
+          } catch (e) {
+            console.error('flushOldestPausedRetry 调用失败:', e.message);
+          }
           maybeSendAck(batchChannelId, botToken, userId, batchContextToken);
         }
       }
