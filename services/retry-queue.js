@@ -49,6 +49,17 @@ function enqueueRetry({ userId, channelId, title, content, source, originalPushL
       code: errCode,
       msg: firstError?.errmsg || firstError?.message || null,
     };
+    // X4 去重(关键): 每 channel 最多 1 条 pending retry。入新前把该 channel 旧的
+    // pending 全部 abandon —— 用户最关心最近一条漏发,旧的留着只会堆积+一股脑全发。
+    // 历史教训(2026-05-21): 缺这步导致几十个用户堆出 2331 条 pending。
+    const superseded = db.prepare(`
+      UPDATE push_retry_queue
+      SET status = 'abandoned', recovered_by = 'superseded_by_newer', last_try_at = CURRENT_TIMESTAMP
+      WHERE channel_id = ? AND status = 'pending'
+    `).run(channelId);
+    if (superseded.changes > 0) {
+      console.log(`♻️ channel ${channelId} 入新 retry 前,abandon ${superseded.changes} 条旧 pending(每通道只留最新 1 条)`);
+    }
     // next_try_at 设为现在 — 用户回复后 flushOldestPausedRetry unpause 即可,scheduler 30s 内拾起
     const nextAt = new Date().toISOString().replace('T', ' ').slice(0, 19);
     const info = db.prepare(`
@@ -249,10 +260,13 @@ async function processOne(item) {
 // 由 scheduler 定期调用,避免 paused 表无限累积
 function cleanupStalePaused() {
   try {
+    // 用 COALESCE(last_try_at, first_failed_at): X4 入队的 paused record 从未被 process,
+    // last_try_at=NULL,旧逻辑 NULL < x 永远 false 清不掉(2026-05-21 积压 2331 条的 bug)
     const r = db.prepare(`
       UPDATE push_retry_queue
       SET status = 'abandoned', recovered_by = 'user_no_reply_24h'
-      WHERE status = 'pending' AND paused = 1 AND last_try_at < datetime('now', '-24 hours')
+      WHERE status = 'pending' AND paused = 1
+        AND COALESCE(last_try_at, first_failed_at) < datetime('now', '-24 hours')
     `).run();
     if (r.changes > 0) {
       console.log(`🧹 retry-queue cleanup: ${r.changes} 条 paused 超过 24h 未触发,标 abandoned`);
@@ -284,11 +298,16 @@ function getStats() {
     const byStatus = db.prepare(`
       SELECT status, COUNT(*) AS cnt FROM push_retry_queue GROUP BY status
     `).all();
+    // due_now 必须过滤 paused=0,否则把"等用户回复"的 paused=1 也算"即将执行",误导
     const pending = db.prepare(`
       SELECT COUNT(*) AS cnt FROM push_retry_queue
-      WHERE status = 'pending' AND next_try_at <= CURRENT_TIMESTAMP
+      WHERE status = 'pending' AND paused = 0 AND next_try_at <= CURRENT_TIMESTAMP
     `).get().cnt;
-    return { by_status: byStatus, due_now: pending };
+    // 额外给出"等用户回复"的 paused 计数,UI 可区分展示
+    const waitingReply = db.prepare(`
+      SELECT COUNT(*) AS cnt FROM push_retry_queue WHERE status = 'pending' AND paused = 1
+    `).get().cnt;
+    return { by_status: byStatus, due_now: pending, waiting_reply: waitingReply };
   } catch (e) {
     return { error: e.message };
   }

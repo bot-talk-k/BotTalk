@@ -555,6 +555,29 @@ if (!hasRun(26)) {
   markRun(26);
 }
 
+// Migration 27: 一次性清理 retry-queue pending 积压,每 channel 只留最新 1 条
+// 背景:2026-05-21 enqueueRetry 缺去重 + cleanupStalePaused 因 last_try_at=NULL
+// 失效,导致几十个用户堆出 2331 条 pending。代码已修(enqueueRetry 入新前 abandon
+// 旧 pending + cleanup 改 COALESCE)。本 migration 清存量:每 channel 留最新 1 条,
+// 其余 abandon。
+if (!hasRun(27)) {
+  try {
+    const r = db.prepare(`
+      UPDATE push_retry_queue
+      SET status = 'abandoned', recovered_by = 'dedup_cleanup_v27'
+      WHERE status = 'pending' AND id NOT IN (
+        SELECT MAX(id) FROM push_retry_queue WHERE status = 'pending' GROUP BY channel_id
+      )
+    `).run();
+    if (r.changes > 0) {
+      console.log(`📋 migration 27: 清理 ${r.changes} 条重复 pending,每通道只留最新 1 条`);
+    }
+  } catch (e) {
+    console.error('migration 27 error:', e.message);
+  }
+  markRun(27);
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────
 
 function generateSendKey() {

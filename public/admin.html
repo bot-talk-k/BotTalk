@@ -617,8 +617,8 @@
 
           <!-- 状态汇总 -->
           <div class="stats-grid" style="grid-template-columns: repeat(5, 1fr);" id="rq-summary">
-            <div class="stat-card"><div class="stat-value" id="rq-pending">-</div><div class="stat-label">待重试</div></div>
-            <div class="stat-card"><div class="stat-value" id="rq-due">-</div><div class="stat-label">即将执行</div></div>
+            <div class="stat-card"><div class="stat-value" id="rq-pending" style="color:#ff9500;">-</div><div class="stat-label">等用户回复</div></div>
+            <div class="stat-card"><div class="stat-value" id="rq-due">-</div><div class="stat-label">即将执行(paused=0)</div></div>
             <div class="stat-card"><div class="stat-value" id="rq-success" style="color:#34c759;">-</div><div class="stat-label">已恢复</div></div>
             <div class="stat-card"><div class="stat-value" id="rq-exhausted" style="color:#ff3b30;">-</div><div class="stat-label">已放弃</div></div>
             <div class="stat-card"><div class="stat-value" id="rq-abandoned" style="color:#8e8e93;">-</div><div class="stat-label">通道失效</div></div>
@@ -1181,7 +1181,7 @@
         // Summary
         var byStatus = {};
         (data.stats.by_status || []).forEach(function(r) { byStatus[r.status] = r.cnt; });
-        document.getElementById('rq-pending').textContent = byStatus.pending || 0;
+        document.getElementById('rq-pending').textContent = data.stats.waiting_reply != null ? data.stats.waiting_reply : (byStatus.pending || 0);
         document.getElementById('rq-due').textContent = data.stats.due_now || 0;
         document.getElementById('rq-success').textContent = byStatus.success || 0;
         document.getElementById('rq-exhausted').textContent = byStatus.exhausted || 0;
