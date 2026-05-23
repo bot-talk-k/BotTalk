@@ -248,6 +248,17 @@ async function handlePush(sendKey, title, content, clientIp, channelParam, req) 
       else if (retCode === -2) reason = 'context_expired';
       else if (retCode === -14) reason = 'context_expired'; // 既不 dead 也不 restricted 的 -14 兜底为 context 老化
       else reason = 'ilink_other';
+
+      // X5: context 老化(ret:-2/-14)第一次失败就立即标 channel 失联,后续 push fail-fast
+      // 不再傻乎乎地每条都真打 iLink(历史教训: channel 75 连续失败 462 次都在真推送)
+      // 网络/queue 类不标(可能瞬时);channel_dead 已由 status='inactive' 处理
+      if (reason === 'context_expired') {
+        try {
+          db.prepare("UPDATE channels SET disconnected_at = CURRENT_TIMESTAMP WHERE id = ? AND disconnected_at IS NULL").run(channel.id);
+        } catch (e) {
+          console.error('标记 channel disconnected 失败:', e.message);
+        }
+      }
       results.push({
         channel_id: channel.id,
         status: 'failed',
@@ -288,16 +299,16 @@ async function handlePush(sendKey, title, content, clientIp, channelParam, req) 
   } else if (anyDisconnected) {
     reason = 'channel_disconnected';
     hint =
-      '通道已处于失联状态(上次补发尝试也失败)。本次推送未实际发送以避免无效轰炸。' +
-      '请让收信人在微信里向 ClawBot 回复任意一条消息(或重新扫码绑定),通道恢复后立即可用,SendKey 和历史不变。';
+      '通道因长期无互动被微信限流,已进入失联状态,后续推送不会实际发送以避免无效轰炸。' +
+      '只需让收信人在微信里向 ClawBot 回复任意一条消息即可立即恢复(实测即使 10 天后回复也能恢复,无需重扫码),SendKey 和历史不变。';
   } else if (allSkipped) {
     reason = 'no_channel';
     hint = '指定的通道未绑定或 context_token 已彻底过期。请检查 channel 参数，或让收信人重新扫码绑定。';
   } else if (anyContextExpired) {
     reason = 'context_expired';
     hint =
-      '通道因长期无互动暂时受限（iLink ret:-2 / context_token 老化）。请让收信人在微信里向 ClawBot 回复任意一条消息,' +
-      '系统会立即触发补发本条消息(只补 1 次)。若 24 小时内未回复将自动放弃,通道也将进入失联状态。';
+      '通道因无互动被微信限流（iLink ret:-2）。请让收信人在微信里向 ClawBot 回复任意一条消息即可立即恢复,' +
+      '系统会自动补发本条消息(只补 1 次)。通道靠回复随时可恢复,无需重扫码。';
   } else {
     reason = 'transient';
     hint = '推送暂时失败（网络抖动或服务端排队）。已入队等待用户互动后补发(只补 1 次)。';

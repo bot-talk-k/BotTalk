@@ -578,6 +578,29 @@ if (!hasRun(27)) {
   markRun(27);
 }
 
+// Migration 28: 存量持续失败的 channel 立即标 disconnected(X5 fail-fast 止血)
+// 背景:X4 的 disconnected 只在"用户回复后补发也失败"时触发,但绝大多数失联用户
+// 从不回复 → 永远不进 disconnected → 每条推送都真打 iLink 白白失败(channel 75
+// consecutive_neg2_count 累积到 462)。X5 改为第一次 ret:-2 失败就 disconnect,
+// 本 migration 把存量"连续失败 >= 3 且仍 active"的 channel 一次性标失联。
+// (consecutive_neg2_count 在用户回复时清零,所以 count 高 = 确实当前持续失败中)
+if (!hasRun(28)) {
+  try {
+    const r = db.prepare(`
+      UPDATE channels SET disconnected_at = CURRENT_TIMESTAMP
+      WHERE disconnected_at IS NULL
+        AND status = 'active'
+        AND COALESCE(consecutive_neg2_count, 0) >= 3
+    `).run();
+    if (r.changes > 0) {
+      console.log(`📋 migration 28: ${r.changes} 个持续失败 channel 标 disconnected(X5 fail-fast)`);
+    }
+  } catch (e) {
+    console.error('migration 28 error:', e.message);
+  }
+  markRun(28);
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────
 
 function generateSendKey() {
