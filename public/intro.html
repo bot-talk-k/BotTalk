@@ -343,7 +343,7 @@
 
     <div class="tip-box" style="background:rgba(255,59,48,0.06);border-color:rgba(255,59,48,0.3);">
       <span class="icon">📋</span>
-      <span><strong>微信官方限制（非 BotTalk bug）：</strong>微信 ClawBot 是腾讯设计的智能体聊天通道。实测中：<strong>连续收 7-10 条消息不回必触发限流</strong>，回一字即可恢复；长时间（约 2 天）零互动会被微信主动解绑，需重扫。建议养成习惯——<strong>看到推送随手回一字</strong>。<a href="#clawbot-limitation" style="color:#0071e3;">查看详细说明 →</a></span>
+      <span><strong>微信官方限制（非 BotTalk bug）：</strong>微信 ClawBot 是腾讯设计的智能体聊天通道。实测中：<strong>连续收 7-10 条消息不回必触发限流</strong>，回一字即可恢复——哪怕隔 10 天再回复也照样恢复，无需重扫。建议养成习惯——<strong>看到推送随手回一字</strong>。<a href="#clawbot-limitation" style="color:#0071e3;">查看详细说明 →</a></span>
     </div>
 
     <div class="tip-box">
@@ -375,8 +375,8 @@
     <div style="background:#fff;border-radius:16px;padding:24px;margin-bottom:20px;box-shadow:0 2px 12px rgba(0,0,0,0.06);">
       <h3 style="font-size:17px;font-weight:600;margin-bottom:12px;">翻译成人话</h3>
       <p>简单说来，你通过 BotTalk 收消息时，底层用的是微信 ClawBot 通道，也许微信开放的这个通道是提供给你与 OpenClaw 对话的，所以如果你要保持它畅通、能稳定作为消息接收渠道，就要让它看起来像是聊天。</p>
-      <p>我们的测试表明：<strong>连续收到 10 条消息（最极端快速连续 6 条）如果都不回复，则再发送消息时会报"微信限流"</strong>，此时如果及时回复一下，立刻恢复；另一种情况，如果你扫码绑定以后长时间（官方说是 24 小时，实测可能 2 天都行）不发送也不接收消息，它又会主动跟你解绑，需重新扫码。</p>
-      <p>所以如果你要好好使用它做你的消息接收通道，<strong>安全稳定的做法就是收到消息别超过 7-8 条就随便在微信里面胡乱发一个字</strong>，我们平台必然立刻给你回复一条消息——这就表明通道又可以连发 7-8 条，又可以续 24 小时+。</p>
+      <p>我们的测试表明：<strong>连续收到 10 条消息（最极端快速连续 6 条）如果都不回复，则再发送消息时会被微信限流</strong>。此时只要在微信里回复一下立刻恢复——而且实测<strong>哪怕隔了 10 天再回复，通道照样恢复，无需重新扫码</strong>。也就是说本质上只有"限流"这一种状态，没有"时间到了就解绑"这回事；除非通道彻底失效（极少数情况，页面会有明确提示），否则永远不用重扫。</p>
+      <p>所以如果你要好好使用它做你的消息接收通道，<strong>安全稳定的做法就是收到消息别超过 7-8 条就随便在微信里面胡乱发一个字</strong>，我们平台必然立刻给你回复一条消息——这就表明通道又可以连发 7-8 条。</p>
       <p style="font-size:18px;font-weight:600;margin:12px 0;">只要你假装在和它对话，它就永远不会失联。</p>
       <p style="color:#6e6e73;font-size:14px;">我们自己通常是收到消息，有事没事就回一条，这样我们从未失联过。</p>
       <p>这不是 BotTalk 的 bug，是微信 ClawBot 协议的设计限制。</p>
@@ -385,10 +385,10 @@
     <div style="background:#fff;border-radius:16px;padding:24px;margin-bottom:20px;box-shadow:0 2px 12px rgba(0,0,0,0.06);">
       <h3 style="font-size:17px;font-weight:600;margin-bottom:12px;">BotTalk 为你做了什么</h3>
       <ul style="padding-left:1.2em;">
-        <li style="margin-bottom:6px;"><strong>第 22 小时自动提醒</strong> — 在你最后一次回复后的第 22 小时，系统主动发一条提醒</li>
-        <li style="margin-bottom:6px;"><strong>秒回确认</strong> — 你回复后立刻收到确认。没收到确认 = 通道已断</li>
-        <li style="margin-bottom:6px;"><strong>断了也能恢复</strong> — 访问 <a href="/app" style="color:#0071e3;">bot-talk.com/app</a> 重新扫码，SendKey 和历史不变</li>
-        <li style="margin-bottom:6px;"><strong>失败消息自动补发</strong> — 通道恢复后，失联期间的消息自动补发，标注原定推送时间</li>
+        <li style="margin-bottom:6px;"><strong>回复即恢复</strong> — 被限流后在微信回 Bot 一字立刻恢复，哪怕隔 10 天也行，几乎永远不用重扫</li>
+        <li style="margin-bottom:6px;"><strong>秒回确认</strong> — 你回复后立刻收到确认，证明通道已通</li>
+        <li style="margin-bottom:6px;"><strong>失败消息自动补发</strong> — 通道恢复后自动补发最近漏掉的一条，标注原定推送时间</li>
+        <li style="margin-bottom:6px;"><strong>极端情况才需重扫</strong> — 仅当通道彻底失效（罕见）才需访问 <a href="/app" style="color:#0071e3;">bot-talk.com/app</a> 重扫，SendKey 和历史不变</li>
       </ul>
     </div>
 
