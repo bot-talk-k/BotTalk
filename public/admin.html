@@ -1340,13 +1340,17 @@
     function showRetryHistory(historyJson) {
       var hist;
       try { hist = typeof historyJson === 'string' ? JSON.parse(historyJson) : historyJson; } catch (e) { hist = []; }
+      // phase 中文化 + 归因显示(X4 后已无自动重试,phase=retry-success 实际多为用户回复触发)
+      var phaseMap = { 'initial-fail': '首次失败', 'retry-fail': '补发失败', 'retry-success': '补发成功', 'skip': '跳过' };
+      var byMap = { user_reply: '用户回复触发', retry: '退避触发(归因窗口外的回复)', rescan: '重扫触发' };
       var lines = hist.map(function(h) {
         var t = new Date(h.at).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
-        var phase = h.phase || '?';
+        var phase = phaseMap[h.phase] || h.phase || '?';
         var code = h.code != null ? ' ret:' + h.code : '';
         var msg = h.msg ? ' — ' + h.msg : '';
         var elapsed = h.elapsed_ms != null ? ' (' + h.elapsed_ms + 'ms)' : '';
-        return '#' + h.attempt + ' ' + t + ' [' + phase + ']' + code + elapsed + msg;
+        var by = h.recovered_by ? ' ← ' + (byMap[h.recovered_by] || h.recovered_by) : '';
+        return '#' + h.attempt + ' ' + t + ' [' + phase + ']' + code + elapsed + by + msg;
       }).join('\n');
       alert(lines || '(无历史)');
     }
