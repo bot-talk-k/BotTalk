@@ -1,0 +1,144 @@
+- generic [active] [ref=e1]:
+  - banner [ref=e2]:
+    - generic [ref=e3]: BOTTALK
+    - heading "HTTP 一行调用 消息直达你的手机" [level=1] [ref=e4]:
+      - text: HTTP 一行调用
+      - text: 消息直达你的手机
+    - paragraph [ref=e5]:
+      - text: 免费开源的消息推送服务。对标 Server酱——完全免费，支持自部署，多语言 SDK，现支持
+      - strong [ref=e6]: 飞书
+      - text: 与
+      - strong [ref=e7]: 微信
+      - text: 两种通道。
+    - generic [ref=e8]:
+      - link "🪶 飞书通道（推荐）" [ref=e9] [cursor=pointer]:
+        - /url: https://feishu.bot-talk.com/app
+      - link "💬 微信通道" [ref=e10] [cursor=pointer]:
+        - /url: /app
+      - link "GitHub 开源" [ref=e11] [cursor=pointer]:
+        - /url: https://github.com/bot-talk-k/BotTalk
+  - generic [ref=e12]:
+    - generic [ref=e13]:
+      - generic [ref=e14]: ✦ 完全免费
+      - generic [ref=e15]: ✦ MIT 开源，支持自部署
+      - generic [ref=e16]: ✦ Python / Node.js / Go SDK
+      - generic [ref=e17]: ✦ Admin 面板
+      - generic [ref=e18]: ✦ 比 Server酱 无 5 条/天上限
+    - generic [ref=e19]:
+      - generic [ref=e20]: 三步开始推送
+      - generic [ref=e21]: 扫码绑定，获取 SendKey，一行 HTTP 发消息。
+      - generic [ref=e22]:
+        - generic [ref=e23]:
+          - generic [ref=e24]: "1"
+          - heading "选通道，扫码绑定" [level=3] [ref=e25]
+          - paragraph [ref=e26]: 用飞书或微信扫码，30 秒完成注册，自动生成专属 SendKey。
+        - generic [ref=e27]:
+          - generic [ref=e28]: "2"
+          - heading "获取 SendKey" [level=3] [ref=e29]
+          - paragraph [ref=e30]: 登录后控制台首页即可看到，复制即用，无需任何配置。
+        - generic [ref=e31]:
+          - generic [ref=e32]: "3"
+          - heading "一行 HTTP 发消息" [level=3] [ref=e33]
+          - paragraph [ref=e34]: 用任意语言 GET 或 POST，消息秒达。兼容 Server酱 API 格式。
+    - generic [ref=e35]:
+      - generic [ref=e36]: 就这么简单
+      - generic [ref=e37]: 兼容 Server酱风格接口，切换零成本。
+      - generic [ref=e38]:
+        - generic [ref=e39]:
+          - button "cURL" [ref=e40] [cursor=pointer]
+          - button "Python" [ref=e41] [cursor=pointer]
+          - button "Node.js" [ref=e42] [cursor=pointer]
+        - generic [ref=e43]: "# GET 风格 (Server酱兼容) curl \"https://feishu.bot-talk.com/<SendKey>.send?title=部署完成&desp=服务已上线\" # POST 风格 curl -X POST \"https://feishu.bot-talk.com/<SendKey>.send\" \\ -d \"title=部署完成&desp=服务已上线&channel=all\""
+    - generic [ref=e44]:
+      - generic [ref=e45]: 选择你的推送通道
+      - generic [ref=e46]: 两个通道，同一套 API。飞书无平台限制，推荐新用户首选；微信通道已稳定运行，老用户可继续沿用。
+      - generic [ref=e47]:
+        - generic [ref=e48]:
+          - generic [ref=e49]: 推荐 · 新通道
+          - heading "🪶 飞书通道" [level=2] [ref=e50]
+          - generic [ref=e51]: 个人扫码即用，真正的「消息传送通道」
+          - list [ref=e52]:
+            - listitem [ref=e53]:
+              - text: ✓ 飞书 App 扫码即创建，
+              - strong [ref=e54]: 无需任何后台配置
+            - listitem [ref=e55]:
+              - text: ✓ 一个飞书账户可挂
+              - strong [ref=e56]: 任意多个
+              - text: 通道，多端同时用
+            - listitem [ref=e57]:
+              - text: ✓
+              - strong [ref=e58]: 无接收条数限制
+              - text: ，连发不限流
+            - listitem [ref=e59]:
+              - text: ✓
+              - strong [ref=e60]: 无需回复
+              - text: ，不用假装跟机器人聊天
+          - link "用飞书通道开始 →" [ref=e61] [cursor=pointer]:
+            - /url: https://feishu.bot-talk.com/app
+        - generic [ref=e62]:
+          - generic [ref=e63]: 稳定通道
+          - heading "💬 微信通道" [level=2] [ref=e64]
+          - generic [ref=e65]: 微信 ClawBot，消息直达微信私聊
+          - list [ref=e66]:
+            - listitem [ref=e67]: ✓ 已有数百用户在用，稳定运行
+            - listitem [ref=e68]: ✓ 消息直达微信，无需安装额外 App
+            - listitem [ref=e69]: ✕ 微信平台限制：连发约 10 条不回复即停收，回复解锁
+            - listitem [ref=e70]:
+              - text: ✕ ClawBot
+              - strong [ref=e71]: 只能绑一端
+              - text: ，与其它工具互斥
+          - link "前往微信通道 →" [ref=e72] [cursor=pointer]:
+            - /url: /app
+    - generic [ref=e73]:
+      - generic [ref=e74]: 飞书 vs 微信，一眼看懂
+      - generic [ref=e75]: 同一套 SendKey API，两个通道都能用。不同之处在于微信有平台侧的使用约束。
+      - table [ref=e77]:
+        - rowgroup [ref=e78]:
+          - row "能力 微信 ClawBot 飞书（推荐）" [ref=e79]:
+            - columnheader "能力" [ref=e80]
+            - columnheader "微信 ClawBot" [ref=e81]
+            - columnheader "飞书（推荐）" [ref=e82]
+          - row "接收条数限制 约 10 条后停收 无限制" [ref=e83]:
+            - cell "接收条数限制" [ref=e84]
+            - cell "约 10 条后停收" [ref=e85]
+            - cell "无限制" [ref=e86]
+          - row "同账户多端绑定 只能绑一端 任意多端同时用" [ref=e87]:
+            - cell "同账户多端绑定" [ref=e88]
+            - cell "只能绑一端" [ref=e89]
+            - cell "任意多端同时用" [ref=e90]
+          - row "一个账户挂多通道 一对一 任意多个" [ref=e91]:
+            - cell "一个账户挂多通道" [ref=e92]
+            - cell "一对一" [ref=e93]
+            - cell "任意多个" [ref=e94]
+          - row "需要回复「假装聊天」 是（不回复=断流） 否" [ref=e95]:
+            - cell "需要回复「假装聊天」" [ref=e96]
+            - cell "是（不回复=断流）" [ref=e97]
+            - cell "否" [ref=e98]
+          - row "断流恢复 回复一次即恢复 几乎不会断" [ref=e99]:
+            - cell "断流恢复" [ref=e100]
+            - cell "回复一次即恢复" [ref=e101]
+            - cell "几乎不会断" [ref=e102]
+    - generic [ref=e103]:
+      - generic [ref=e104]: 为什么选 BotTalk
+      - generic [ref=e105]: 对标 Server酱，全面免费，无使用上限。
+      - generic [ref=e106]:
+        - generic [ref=e107]:
+          - generic [ref=e108]: 🆓
+          - heading "完全免费" [level=4] [ref=e109]
+          - paragraph [ref=e110]: 无每日条数上限（Server酱 免费版限 5 条/天），托管服务永久免费。
+        - generic [ref=e111]:
+          - generic [ref=e112]: 📦
+          - heading "开源自部署" [level=4] [ref=e113]
+          - paragraph [ref=e114]: MIT 协议，Docker 一键部署，数据完全自控。
+        - generic [ref=e115]:
+          - generic [ref=e116]: 🔧
+          - heading "多语言 SDK" [level=4] [ref=e117]
+          - paragraph [ref=e118]: Python / Node.js / Go 官方 SDK，兼容 Server酱 API 格式，迁移零成本。
+        - generic [ref=e119]:
+          - generic [ref=e120]: 📊
+          - heading "Admin 面板" [level=4] [ref=e121]
+          - paragraph [ref=e122]: 推送历史、通道管理、多通道分发，内置完整后台。
+  - contentinfo [ref=e123]:
+    - text: BotTalk · 免费开源消息推送 · MIT 协议 ·
+    - link "GitHub" [ref=e124] [cursor=pointer]:
+      - /url: https://github.com/bot-talk-k/BotTalk

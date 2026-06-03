@@ -45,9 +45,20 @@ app.use(session({
   cookie: { maxAge: 30 * 24 * 60 * 60 * 1000, httpOnly: true },
 }));
 
-// 首页:多通道介绍页(始终可访问);/app 控制台(前端自行判断登录态)
-app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'intro.html')));
-app.get('/app', (req, res) => res.sendFile(path.join(__dirname, 'public', 'app.html')));
+// 页面访问日志(记到 activity_logs,供超管仪表盘统计)
+function logPageView(page) {
+  return (req, res, next) => {
+    try {
+      const ip = req.headers['x-real-ip'] || req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip;
+      db.prepare('INSERT INTO activity_logs (action, detail, ip, user_agent) VALUES (?,?,?,?)')
+        .run('page_view', page, ip || null, req.headers['user-agent'] || null);
+    } catch (e) { /* 不阻塞请求 */ }
+    next();
+  };
+}
+
+app.get('/', logPageView('intro'), (req, res) => res.sendFile(path.join(__dirname, 'public', 'intro.html')));
+app.get('/app', logPageView('app'), (req, res) => res.sendFile(path.join(__dirname, 'public', 'app.html')));
 app.use(express.static(path.join(__dirname, 'public'), { index: false }));
 
 // 路由

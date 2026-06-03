@@ -60,4 +60,37 @@ router.patch('/users/:id', (req, res) => {
   }
 });
 
+// GET /recent — 最近 50 条活动(注册/扫码/推送/页面访问)
+router.get('/recent', (req, res) => {
+  try {
+    const rows = db.prepare(`
+      SELECT a.id, a.user_id, u.nickname, a.action, a.detail, a.ip, a.created_at
+      FROM activity_logs a LEFT JOIN users u ON u.id = a.user_id
+      ORDER BY a.id DESC LIMIT 50
+    `).all();
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    console.error('admin recent error:', err.message);
+    res.status(500).json({ success: false, error: 'Internal error' });
+  }
+});
+
+// GET /pageviews — 近 7 天页面访问分 intro/app 汇总
+router.get('/pageviews', (req, res) => {
+  try {
+    const rows = db.prepare(`
+      SELECT detail AS page,
+             SUM(CASE WHEN created_at > datetime('now','-1 day') THEN 1 ELSE 0 END) AS today,
+             SUM(CASE WHEN created_at > datetime('now','-7 days') THEN 1 ELSE 0 END) AS week,
+             COUNT(*) AS total
+      FROM activity_logs WHERE action = 'page_view'
+      GROUP BY detail
+    `).all();
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    console.error('admin pageviews error:', err.message);
+    res.status(500).json({ success: false, error: 'Internal error' });
+  }
+});
+
 module.exports = router;
