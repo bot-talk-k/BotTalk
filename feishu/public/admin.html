@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BotTalk 飞书 · 超管</title>
+  <style>
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { font-family:-apple-system,BlinkMacSystemFont,"PingFang SC",Arial,sans-serif; color:#1d1d1f; background:#f5f5f7; }
+    .wrap { max-width:920px; margin:0 auto; padding:24px 18px 60px; }
+    h1 { font-size:20px; margin-bottom:16px; }
+    .card { background:#fff; border-radius:16px; padding:20px 22px; margin-bottom:16px; box-shadow:0 2px 12px rgba(0,0,0,0.04); }
+    .stat-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:12px; }
+    @media(max-width:680px){ .stat-grid{grid-template-columns:repeat(2,1fr);} }
+    .stat { background:#f5f5f7; border-radius:10px; padding:14px; text-align:center; }
+    .stat .v { font-size:24px; font-weight:700; }
+    .stat .l { font-size:12px; color:#86868b; margin-top:4px; }
+    table { width:100%; border-collapse:collapse; font-size:14px; }
+    th,td { text-align:left; padding:10px 8px; border-bottom:1px solid #f0f0f0; }
+    th { font-size:12px; color:#86868b; }
+    .muted { color:#86868b; font-size:13px; }
+    a { color:#0071e3; text-decoration:none; font-size:13px; }
+    button { padding:4px 10px; border-radius:8px; border:1px solid #d2d2d7; background:#fff; cursor:pointer; font-size:12px; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🛠 飞书站超管 <a href="/app" style="margin-left:12px;">← 控制台</a></h1>
+  <div class="card"><div class="stat-grid" id="stats"><p class="muted">加载中…</p></div></div>
+  <div class="card">
+    <h1 style="font-size:16px;">用户</h1>
+    <div id="users"><p class="muted">加载中…</p></div>
+  </div>
+</div>
+<script>
+function api(u,o){ return fetch(u,Object.assign({credentials:'same-origin',headers:{'Content-Type':'application/json'}},o||{})).then(r=>r.json()); }
+async function load(){
+  const s = await api('/api/admin/stats');
+  if(!s.success){ document.body.innerHTML='<div class="wrap"><div class="card"><p class="muted">需要超管权限。<a href="/app">返回</a></p></div></div>'; return; }
+  const d = s.data;
+  document.getElementById('stats').innerHTML =
+    stat(d.users,'用户')+stat(d.channels,'活跃通道')+stat(d.pushes,'累计推送')+stat(d.push_success,'成功')+stat(d.pushes_24h,'近24h');
+  const u = await api('/api/admin/users');
+  if(u.success){
+    let h = '<table><tr><th>ID</th><th>昵称</th><th>通道</th><th>推送</th><th>角色</th><th>状态</th><th></th></tr>';
+    u.data.forEach(x=>{
+      h += '<tr><td>'+x.id+'</td><td>'+(x.nickname||'')+'</td><td>'+x.channel_count+'</td><td>'+x.push_count+'</td><td>'+x.role+'</td><td>'+(x.is_disabled?'<span style="color:#ff3b30;">禁用</span>':'正常')+'</td>'+
+        '<td><button onclick="toggleDisable('+x.id+','+(x.is_disabled?0:1)+')">'+(x.is_disabled?'启用':'禁用')+'</button></td></tr>';
+    });
+    h += '</table>';
+    document.getElementById('users').innerHTML = h;
+  }
+}
+function stat(v,l){ return '<div class="stat"><div class="v">'+v+'</div><div class="l">'+l+'</div></div>'; }
+async function toggleDisable(id,val){ await api('/api/admin/users/'+id,{method:'PATCH',body:JSON.stringify({is_disabled:val})}); load(); }
+load();
+</script>
+</body>
+</html>

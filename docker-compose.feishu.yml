@@ -1,0 +1,28 @@
+# 飞书独立推送站 — 与微信站(docker-compose.yml 的 bottalk 容器)完全独立。
+# 独立容器 bottalk-feishu、独立端口 3001、独立 volume feishu-data。
+# 用法: docker compose -f docker-compose.feishu.yml up -d --build
+services:
+  feishu:
+    build: ./feishu
+    container_name: bottalk-feishu
+    ports:
+      - "127.0.0.1:3001:3000"   # 只监听本地,由 nginx 反代 feishu.bot-talk.com
+    environment:
+      - NODE_ENV=production
+      - TZ=Asia/Shanghai
+      - BASE_URL=https://feishu.bot-talk.com
+      - WECHAT_SITE_URL=https://bot-talk.com
+    volumes:
+      - ./feishu-data:/app/data   # 独立 DB,docker rebuild 不动
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/api/config', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

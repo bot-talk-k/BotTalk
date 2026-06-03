@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BotTalk 飞书 · 控制台</title>
+  <script src="qrcode.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin:0; padding:0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", Arial, sans-serif; color:#1d1d1f; background:#f5f5f7; line-height:1.5; }
+    .wrap { max-width: 820px; margin:0 auto; padding: 24px 18px 60px; }
+    .topbar { display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; }
+    .topbar .logo { font-weight:700; font-size:18px; }
+    .topbar a, .topbar button { font-size:13px; color:#0071e3; background:none; border:none; cursor:pointer; text-decoration:none; }
+    .card { background:#fff; border-radius:16px; padding:22px 24px; margin-bottom:16px; box-shadow:0 2px 12px rgba(0,0,0,0.04); }
+    .card h2 { font-size:16px; margin-bottom:14px; }
+    .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    button.btn { padding:9px 16px; border-radius:10px; border:none; background:#0071e3; color:#fff; font-size:14px; font-weight:600; cursor:pointer; }
+    button.btn.ghost { background:#f0f0f3; color:#1d1d1f; }
+    button.btn.danger { background:#fff; color:#ff3b30; border:1px solid #ffd0cd; }
+    button.btn:disabled { opacity:.5; cursor:not-allowed; }
+    input[type=text] { padding:9px 12px; border:1px solid #d2d2d7; border-radius:10px; font-size:14px; font-family:inherit; }
+    .muted { color:#86868b; font-size:13px; }
+    .qr-box { width:220px; height:220px; background:#fff; border:1px solid #e5e5ea; border-radius:12px; display:flex; align-items:center; justify-content:center; }
+    .key-box { font-family:"SF Mono",Menlo,monospace; background:#f5f5f7; padding:8px 12px; border-radius:8px; font-size:13px; word-break:break-all; }
+    table { width:100%; border-collapse:collapse; font-size:14px; }
+    th,td { text-align:left; padding:10px 8px; border-bottom:1px solid #f0f0f0; }
+    th { font-size:12px; color:#86868b; font-weight:600; }
+    .badge { display:inline-block; padding:2px 8px; border-radius:6px; font-size:12px; }
+    .badge.ok { background:rgba(52,199,89,0.12); color:#1a7e3f; }
+    .badge.dead { background:rgba(255,59,48,0.12); color:#c41a1a; }
+    .badge.def { background:rgba(0,113,227,0.12); color:#0071e3; }
+    pre { background:#1d1d1f; color:#d1d1d6; padding:14px; border-radius:10px; font-size:12.5px; overflow-x:auto; }
+    .hidden { display:none; }
+    .toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:#1d1d1f; color:#fff; padding:10px 18px; border-radius:10px; font-size:14px; opacity:0; transition:opacity .2s; z-index:99; }
+    .toast.show { opacity:1; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <a class="logo" href="/" style="color:#1d1d1f;text-decoration:none;">🪶 BotTalk 飞书</a>
+    <div class="row">
+      <span class="muted" id="who"></span>
+      <button id="btn-logout" class="hidden" onclick="logout()">退出</button>
+    </div>
+  </div>
+
+  <!-- 未登录:登录区 -->
+  <div id="login-card" class="card hidden">
+    <h2>登录</h2>
+    <p class="muted" style="margin-bottom:12px;">已有 SendKey?直接登录。第一次用?下面扫码即自动注册。</p>
+    <div class="row">
+      <input type="text" id="login-key" placeholder="粘贴你的 SendKey (fs_…)" style="flex:1;min-width:220px;">
+      <button class="btn" onclick="login()">登录</button>
+    </div>
+    <div id="login-err" class="muted" style="color:#ff3b30;margin-top:8px;"></div>
+  </div>
+
+  <!-- SendKey + API(登录后) -->
+  <div id="key-card" class="card hidden">
+    <h2>你的 SendKey</h2>
+    <div class="row" style="margin-bottom:10px;">
+      <span class="key-box" id="sendkey">—</span>
+      <button class="btn ghost" onclick="copyKey()">复制</button>
+    </div>
+    <p class="muted">用它调用推送 API。妥善保管,泄露等于别人能用你的通道发消息。</p>
+    <h2 style="margin-top:18px;">推送示例</h2>
+    <pre id="api-example">…</pre>
+    <p class="muted">channel 参数可选:<code>default</code>(默认通道)/ <code>all</code>(全部)/ 逗号分隔的通道 id。</p>
+  </div>
+
+  <!-- 通道管理 -->
+  <div class="card">
+    <h2>飞书通道</h2>
+    <p class="muted" style="margin-bottom:12px;">扫码 = 在飞书里一键创建一个机器人应用。一个账户可绑多个,互不影响。</p>
+    <div class="row" style="margin-bottom:14px;">
+      <button class="btn" id="btn-add" onclick="startBind()">+ 扫码添加飞书通道</button>
+      <label class="muted"><input type="radio" name="domain" value="feishu" checked> 飞书(国内)</label>
+      <label class="muted"><input type="radio" name="domain" value="lark"> Lark(海外)</label>
+    </div>
+    <div id="bind-area" class="hidden" style="margin-bottom:16px;">
+      <div class="row" style="align-items:flex-start;">
+        <div class="qr-box" id="qr-box"><span class="muted">生成中…</span></div>
+        <div style="flex:1;min-width:220px;">
+          <div id="bind-status" class="muted"></div>
+        </div>
+      </div>
+    </div>
+    <div id="channels-list"><p class="muted">尚未绑定任何通道。</p></div>
+  </div>
+
+  <!-- 推送历史 -->
+  <div id="history-card" class="card hidden">
+    <h2>推送历史</h2>
+    <div id="history-list"><p class="muted">加载中…</p></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+let me_ = null, pollTimer = null;
+function api(url, opts){ return fetch(url, Object.assign({ credentials:'same-origin', headers:{'Content-Type':'application/json'} }, opts||{})).then(r=>r.json()); }
+function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),1800); }
+function show(id,on){ document.getElementById(id).classList.toggle('hidden', !on); }
+
+async function loadMe(){
+  const r = await api('/api/auth/me');
+  if (r.success){
+    me_ = r.data;
+    document.getElementById('who').textContent = (me_.nickname||('用户#'+me_.id)) + (me_.role==='admin'?' · 超管':'');
+    document.getElementById('sendkey').textContent = me_.send_key;
+    renderApiExample(me_.send_key);
+    show('login-card', false); show('key-card', true); show('history-card', true); show('btn-logout', true);
+    loadChannels(); loadHistory();
+  } else {
+    me_ = null;
+    show('login-card', true); show('key-card', false); show('history-card', false); show('btn-logout', false);
+    document.getElementById('who').textContent = '未登录';
+    loadChannels(); // 仍可扫码(扫成功自动注册登录)
+  }
+}
+
+function renderApiExample(key){
+  const base = location.origin;
+  document.getElementById('api-example').textContent =
+    '# GET\n' +
+    'curl "' + base + '/' + key + '.send?title=部署完成&desp=服务已上线"\n\n' +
+    '# POST (Server酱风格)\n' +
+    'curl -X POST "' + base + '/' + key + '.send" \\\n' +
+    '  -d "title=部署完成&desp=服务已上线&channel=all"';
+}
+
+async function login(){
+  const key = document.getElementById('login-key').value.trim();
+  if(!key) return;
+  const r = await api('/api/auth/login', { method:'POST', body: JSON.stringify({ send_key:key }) });
+  if(r.success){ loadMe(); } else { document.getElementById('login-err').textContent = r.error||'登录失败'; }
+}
+async function logout(){ await api('/api/auth/logout',{method:'POST'}); location.reload(); }
+function copyKey(){ navigator.clipboard.writeText(me_.send_key).then(()=>toast('已复制 SendKey')); }
+
+async function loadChannels(){
+  const r = await api('/api/channels');
+  const el = document.getElementById('channels-list');
+  if(!r.success || !r.data || !r.data.length){ el.innerHTML = '<p class="muted">尚未绑定任何通道。</p>'; return; }
+  let html = '<table><tr><th>名称</th><th>域</th><th>状态</th><th>App</th><th></th></tr>';
+  r.data.forEach(c=>{
+    const st = c.status==='active' ? '<span class="badge ok">正常</span>' : '<span class="badge dead">失效·需重扫</span>';
+    const def = c.is_default ? ' <span class="badge def">默认</span>' : '';
+    html += '<tr>'+
+      '<td>'+escapeHtml(c.name||('通道'+c.id))+def+'</td>'+
+      '<td class="muted">'+c.domain+'</td>'+
+      '<td>'+st+'</td>'+
+      '<td class="muted">'+(c.app_id_masked||'')+'</td>'+
+      '<td><button class="btn ghost" style="padding:4px 10px;font-size:12px;" onclick="renameCh('+c.id+",'"+escapeAttr(c.name||'')+"'"+')">改名</button> '+
+      (c.is_default?'':'<button class="btn ghost" style="padding:4px 10px;font-size:12px;" onclick="setDefault('+c.id+')">设默认</button> ')+
+      '<button class="btn danger" style="padding:4px 10px;font-size:12px;" onclick="delCh('+c.id+')">删</button></td>'+
+      '</tr>';
+  });
+  html += '</table>';
+  el.innerHTML = html;
+}
+
+async function renameCh(id, cur){ const name = prompt('通道名称', cur); if(name===null) return; await api('/api/channels/'+id,{method:'PATCH',body:JSON.stringify({name})}); loadChannels(); }
+async function setDefault(id){ await api('/api/channels/'+id,{method:'PATCH',body:JSON.stringify({is_default:1})}); loadChannels(); toast('已设为默认通道'); }
+async function delCh(id){ if(!confirm('删除该通道?(可重新扫码再加)')) return; await api('/api/channels/'+id,{method:'DELETE'}); loadChannels(); }
+
+async function startBind(){
+  if(pollTimer){ clearInterval(pollTimer); pollTimer=null; }
+  const isLark = document.querySelector('input[name=domain]:checked').value==='lark';
+  show('bind-area', true);
+  document.getElementById('qr-box').innerHTML = '<span class="muted">生成中…</span>';
+  document.getElementById('bind-status').textContent = '请求中…';
+  const r = await api('/api/channels/feishu/start',{method:'POST',body:JSON.stringify({isLark})});
+  if(!r.success){ document.getElementById('bind-status').innerHTML = '<span style="color:#ff3b30;">'+(r.error||'失败')+'</span>'; return; }
+  const d = r.data;
+  document.getElementById('qr-box').innerHTML = '<canvas id="qr-canvas"></canvas>';
+  QRCode.toCanvas(document.getElementById('qr-canvas'), d.url, { width:200, margin:2 }, e=>{ if(e) console.error(e); });
+  document.getElementById('bind-status').innerHTML =
+    '请用<strong> '+(isLark?'Lark':'飞书')+'</strong> App 扫码,点「一键创建机器人」,确认即绑定。<br>'+
+    '<span class="muted">有效期 '+d.expireIn+'s · 每 '+d.interval+'s 自动检测</span><br><span id="poll-msg" class="muted">等待扫码…</span>';
+  const interval = (d.interval||5)*1000;
+  pollTimer = setInterval(async ()=>{
+    const p = await api('/api/channels/feishu/poll',{method:'POST',body:JSON.stringify({deviceCode:d.deviceCode})});
+    if(!p.success){ document.getElementById('poll-msg').innerHTML='<span style="color:#ff3b30;">'+(p.error||'轮询失败')+'</span>'; clearInterval(pollTimer); pollTimer=null; return; }
+    if(p.data.done){
+      clearInterval(pollTimer); pollTimer=null;
+      document.getElementById('poll-msg').innerHTML = '<span style="color:#34c759;font-weight:600;">绑定成功 ✓</span>';
+      show('bind-area', false);
+      toast(p.data.is_new_user ? '注册成功,已自动登录' : '通道已添加');
+      loadMe(); // 刷新(可能刚注册登录)
+    } else if(p.data.error && p.data.error!=='expired'){
+      document.getElementById('poll-msg').innerHTML='<span style="color:#ff3b30;">'+p.data.error+'</span>'; clearInterval(pollTimer); pollTimer=null;
+    } else if(p.data.error==='expired'){
+      document.getElementById('poll-msg').innerHTML='<span class="muted">二维码已过期,请重新生成</span>'; clearInterval(pollTimer); pollTimer=null;
+    }
+  }, interval);
+}
+
+async function loadHistory(){
+  const r = await api('/api/push-logs?limit=30');
+  const el = document.getElementById('history-list');
+  if(!r.success || !r.data.logs.length){ el.innerHTML='<p class="muted">还没有推送记录。</p>'; return; }
+  let html = '<table><tr><th>时间</th><th>标题</th><th>通道</th><th>状态</th></tr>';
+  r.data.logs.forEach(l=>{
+    const ok = l.status==='success';
+    html += '<tr><td class="muted">'+fmtTime(l.created_at)+'</td><td>'+escapeHtml(l.title||'(无标题)')+'</td><td class="muted">'+escapeHtml(l.channel_name||'')+'</td><td>'+(ok?'<span class="badge ok">成功</span>':'<span class="badge dead">失败</span>')+'</td></tr>';
+  });
+  html += '</table>';
+  el.innerHTML = html;
+}
+
+function fmtTime(s){ if(!s) return ''; return new Date(s.replace(' ','T')+'Z').toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}); }
+function escapeHtml(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function escapeAttr(s){ return String(s).replace(/'/g,"\\'").replace(/"/g,'&quot;'); }
+
+loadMe();
+</script>
+</body>
+</html>

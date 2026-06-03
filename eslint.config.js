@@ -10,9 +10,13 @@ module.exports = [
     ignores: [
       'node_modules/**',
       'data/**',
+      'feishu/node_modules/**',
+      'feishu/data/**',
+      'feishu/data-test/**',
       'public/i18n.js',
       'public/**/*.html',
       'public/**/*.min.js',
+      'feishu/public/**/*.min.js',
       'sdk/**',
       'tests/tmp.sqlite*',
       '.claude/**',
