@@ -60,6 +60,24 @@ router.patch('/users/:id', (req, res) => {
   }
 });
 
+// GET /push-logs — 全部用户最近 200 条推送记录
+router.get('/push-logs', (req, res) => {
+  try {
+    const rows = db.prepare(`
+      SELECT p.id, p.user_id, u.nickname, p.title, p.content, p.status,
+             p.channel_id, c.name AS channel_name, p.created_at
+      FROM push_logs p
+      LEFT JOIN users u ON u.id = p.user_id
+      LEFT JOIN channels c ON c.id = p.channel_id
+      ORDER BY p.id DESC LIMIT 200
+    `).all();
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    console.error('admin push-logs error:', err.message);
+    res.status(500).json({ success: false, error: 'Internal error' });
+  }
+});
+
 // GET /recent — 最近 50 条活动(注册/扫码/推送/页面访问)
 router.get('/recent', (req, res) => {
   try {

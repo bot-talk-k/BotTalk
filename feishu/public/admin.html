@@ -62,6 +62,23 @@
 
     .refresh-btn { font-size:13px; color:#0071e3; background:none; border:none; cursor:pointer; padding:0; }
     .empty { color:#86868b; font-size:14px; text-align:center; padding:20px 0; }
+
+    /* 推送日志 */
+    .log-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
+    .log-header h2 { font-size:20px; font-weight:700; }
+    .log-header .btns { display:flex; gap:8px; }
+    .log-sub { font-size:13px; color:#86868b; margin-bottom:16px; }
+    .outline-btn { padding:7px 16px; border-radius:20px; border:1.5px solid #0071e3; background:#fff; color:#0071e3; font-size:13px; font-weight:600; cursor:pointer; }
+    .log-table { width:100%; border-collapse:collapse; font-size:14px; }
+    .log-table th { text-align:left; padding:10px 12px; color:#86868b; font-size:13px; font-weight:500; border-bottom:1px solid #f0f0f0; }
+    .log-table td { padding:13px 12px; border-bottom:1px solid #f5f5f7; vertical-align:middle; }
+    .log-table tr:last-child td { border-bottom:none; }
+    .log-table tr:hover td { background:#fafafa; }
+    .log-id { color:#aeaeb2; font-size:13px; }
+    .log-title { color:#0071e3; font-weight:500; }
+    .log-status-ok  { display:inline-block; background:rgba(52,199,89,0.12); color:#1a7e3f; padding:3px 10px; border-radius:20px; font-size:13px; font-weight:500; }
+    .log-status-err { display:inline-block; background:rgba(255,59,48,0.10); color:#c41a1a; padding:3px 10px; border-radius:20px; font-size:13px; font-weight:500; }
+    .log-time { color:#86868b; font-size:13px; white-space:nowrap; }
   </style>
 </head>
 <body>
@@ -98,6 +115,23 @@
   <div class="card">
     <div class="card-title">最近活动</div>
     <ul class="timeline" id="timeline"><li><span class="muted">加载中…</span></li></ul>
+  </div>
+
+  <!-- 推送日志 -->
+  <div class="card">
+    <div class="log-header">
+      <h2>推送日志</h2>
+      <div class="btns">
+        <button class="outline-btn" onclick="loadPushLogs()">刷新</button>
+      </div>
+    </div>
+    <div class="log-sub">最近 200 条全部用户推送记录</div>
+    <div style="overflow-x:auto;">
+      <table class="log-table">
+        <thead><tr><th>ID</th><th>用户</th><th>标题</th><th>状态</th><th>时间</th></tr></thead>
+        <tbody id="push-logs-body"><tr><td colspan="5" class="empty">加载中…</td></tr></tbody>
+      </table>
+    </div>
   </div>
 
   <!-- 用户列表 -->
@@ -226,13 +260,39 @@ async function loadUsers(){
   el.innerHTML = h;
 }
 
+async function loadPushLogs(){
+  const r = await api('/api/admin/push-logs');
+  const el = document.getElementById('push-logs-body');
+  if(!r.success){ el.innerHTML='<tr><td colspan="5" class="empty">加载失败</td></tr>'; return; }
+  if(!r.data.length){ el.innerHTML='<tr><td colspan="5" class="empty">暂无推送记录</td></tr>'; return; }
+  el.innerHTML = r.data.map(p=>{
+    const status = p.status==='success'
+      ? '<span class="log-status-ok">成功</span>'
+      : '<span class="log-status-err">失败</span>';
+    const title = escHtml(p.title||'(无标题)');
+    const user = escHtml(p.nickname||('User#'+(p.user_id||'?')));
+    return `<tr>
+      <td class="log-id">${p.id}</td>
+      <td class="muted">${user}</td>
+      <td class="log-title">${title}</td>
+      <td>${status}</td>
+      <td class="log-time">${fmtAbsTime(p.created_at)}</td>
+    </tr>`;
+  }).join('');
+}
+
+function fmtAbsTime(s){
+  if(!s) return '';
+  return new Date(s.replace(' ','T')+'Z').toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false,year:'numeric',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
+}
+
 async function setAdmin(id){ await fetch('/api/admin/users/'+id,{method:'PATCH',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({role:'admin'})}); loadAll(); }
 async function toggleDisable(id,val){ await fetch('/api/admin/users/'+id,{method:'PATCH',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({is_disabled:val})}); loadAll(); }
 
 async function loadAll(){
   const ok = await loadStats();
   if(!ok){ document.getElementById('pageviews').innerHTML='<div class="pv-box"><div class="page muted">需要超管权限，请先登录</div></div>'; return; }
-  await Promise.all([loadPageviews(), loadTimeline(), loadUsers()]);
+  await Promise.all([loadPageviews(), loadTimeline(), loadPushLogs(), loadUsers()]);
 }
 
 loadAll();
