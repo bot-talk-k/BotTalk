@@ -1,0 +1,15 @@
+- generic [ref=e2]:
+  - link "🪶 BotTalk 飞书" [ref=e4] [cursor=pointer]:
+    - /url: /
+  - generic [ref=e5]:
+    - heading "飞书通道" [level=2] [ref=e6]
+    - paragraph [ref=e7]: 扫码 = 在飞书里一键创建一个机器人应用。一个账户可绑多个,互不影响。
+    - generic [ref=e8]:
+      - button "+ 扫码添加飞书通道" [ref=e9] [cursor=pointer]
+      - generic [ref=e10]:
+        - radio "飞书(国内)" [checked] [ref=e11]
+        - text: 飞书(国内)
+      - generic [ref=e12]:
+        - radio "Lark(海外)" [ref=e13]
+        - text: Lark(海外)
+    - paragraph [ref=e15]: 尚未绑定任何通道。

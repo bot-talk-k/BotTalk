@@ -200,7 +200,8 @@ requests.<span class="n">get</span>(<span class="s">"https://feishu.bot-talk.com
   <section>
     <div class="sec-title">飞书 vs 微信，一眼看懂</div>
     <div class="sec-sub">同一套 SendKey API，两个通道都能用。不同之处在于微信有平台侧的使用约束。</div>
-    <table>
+    <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
+    <table style="min-width:480px;">
       <tr><th>能力</th><th>微信 ClawBot</th><th class="hl">飞书（推荐）</th></tr>
       <tr><td>接收条数限制</td><td><span class="n">约 10 条后停收</span></td><td><span class="y">无限制</span></td></tr>
       <tr><td>同账户多端绑定</td><td><span class="n">只能绑一端</span></td><td><span class="y">任意多端同时用</span></td></tr>
@@ -208,6 +209,7 @@ requests.<span class="n">get</span>(<span class="s">"https://feishu.bot-talk.com
       <tr><td>需要回复「假装聊天」</td><td><span class="n">是（不回复=断流）</span></td><td><span class="y">否</span></td></tr>
       <tr><td>断流恢复</td><td class="dim">回复一次即恢复</td><td><span class="y">几乎不会断</span></td></tr>
     </table>
+    </div>
   </section>
 
   <!-- ══ 产品优势 ══════════════════════════════════════════════ -->

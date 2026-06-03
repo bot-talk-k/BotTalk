@@ -76,8 +76,10 @@
     <p class="muted" style="margin-bottom:12px;">扫码 = 在飞书里一键创建一个机器人应用。一个账户可绑多个,互不影响。</p>
     <div class="row" style="margin-bottom:14px;">
       <button class="btn" id="btn-add" onclick="startBind()">+ 扫码添加飞书通道</button>
-      <label class="muted"><input type="radio" name="domain" value="feishu" checked> 飞书(国内)</label>
-      <label class="muted"><input type="radio" name="domain" value="lark"> Lark(海外)</label>
+      <span style="display:flex;gap:12px;align-items:center;flex-shrink:0;">
+        <label class="muted"><input type="radio" name="domain" value="feishu" checked> 飞书(国内)</label>
+        <label class="muted"><input type="radio" name="domain" value="lark"> Lark(海外)</label>
+      </span>
     </div>
     <div id="bind-area" class="hidden" style="margin-bottom:16px;">
       <div class="row" style="align-items:flex-start;">
