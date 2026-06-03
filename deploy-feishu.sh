@@ -45,6 +45,8 @@ ssh $REMOTE_HOST "cd $REMOTE_PATH && \
   git reset --hard $SERVER_REMOTE/$BRANCH && \
   echo '─── 当前服务器 HEAD ───' && \
   git log --oneline -3 && \
+  echo '─── 确保 feishu-data 卷目录存在且容器用户(uid 999)可写 ───' && \
+  mkdir -p feishu-data && (chown 999:999 feishu-data 2>/dev/null || chmod 777 feishu-data) && \
   echo '─── 清理可能残留的 shadow 容器 ───' && \
   docker ps -a --filter 'name=_bottalk-feishu' --format '{{.ID}}' | xargs -r docker rm -f 2>/dev/null || true && \
   echo '─── 重建 feishu 容器 ───' && \
