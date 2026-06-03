@@ -456,7 +456,6 @@
                     <th>测试</th>
                     <th>角色</th>
                     <th>健康度</th>
-                    <th>Poller</th>
                     <th>最近成功</th>
                     <th>最近回复</th>
                     <th>连续 -2</th>
@@ -690,19 +689,22 @@
             <button class="btn btn-sm btn-secondary" onclick="loadUserActivity()">刷新</button>
           </div>
           <p style="color:#8e8e93;font-size:13px;margin:0 0 16px;">
-            X4 失联状态机驱动的健康度看板。<strong>失联</strong> = 补发尝试也失败的通道(必须用户互动解除);
-            <strong>沉默 7d/30d</strong> = 用户最近无回复但通道仍 active;<strong>活跃</strong> = 健康使用中。
+            <strong>粘性看板</strong>:按上次回复距今多久分桶,反映用户粘性。
+            <strong>失联</strong> = X5 fail-fast 状态(必须用户回复解除);
+            <strong>从未回复</strong> = 扫码但未试用(流失信号)。
           </p>
 
-          <!-- 健康度桶 -->
-          <div class="stats-grid" style="grid-template-columns: repeat(6, 1fr);" id="ua-buckets">
-            <div class="stat-card"><div class="stat-value" id="ua-active" style="color:#34c759;">-</div><div class="stat-label">活跃</div></div>
-            <div class="stat-card"><div class="stat-value" id="ua-no-push" style="color:#5856d6;">-</div><div class="stat-label">7天无推送</div></div>
-            <div class="stat-card"><div class="stat-value" id="ua-silent7" style="color:#ff9500;">-</div><div class="stat-label">沉默7d+</div></div>
-            <div class="stat-card"><div class="stat-value" id="ua-silent30" style="color:#ff9500;">-</div><div class="stat-label">沉默30d+</div></div>
-            <div class="stat-card"><div class="stat-value" id="ua-never" style="color:#8e8e93;">-</div><div class="stat-label">从未回复</div></div>
+          <!-- 粘性桶: 7 个 -->
+          <div class="stats-grid" style="grid-template-columns: repeat(7, 1fr);" id="ua-buckets">
+            <div class="stat-card"><div class="stat-value" id="ua-reply-1d" style="color:#34c759;">-</div><div class="stat-label">1日内回复</div></div>
+            <div class="stat-card"><div class="stat-value" id="ua-reply-7d" style="color:#34c759;">-</div><div class="stat-label">7日内</div></div>
+            <div class="stat-card"><div class="stat-value" id="ua-reply-14d" style="color:#5856d6;">-</div><div class="stat-label">14日内</div></div>
+            <div class="stat-card"><div class="stat-value" id="ua-reply-30d" style="color:#5856d6;">-</div><div class="stat-label">30日内</div></div>
+            <div class="stat-card"><div class="stat-value" id="ua-reply-60d" style="color:#ff9500;">-</div><div class="stat-label">60日内</div></div>
+            <div class="stat-card"><div class="stat-value" id="ua-reply-over60d" style="color:#8e8e93;">-</div><div class="stat-label">60日+</div></div>
             <div class="stat-card"><div class="stat-value" id="ua-disconnected" style="color:#ff3b30;">-</div><div class="stat-label">失联</div></div>
           </div>
+          <div style="font-size:12px;color:#8e8e93;margin:-8px 0 16px;text-align:right;" id="ua-never-line">从未回复(扫码但未试用): -</div>
 
           <!-- 推送量趋势(近 30 天) -->
           <div class="card" style="padding:16px 20px;margin-bottom:16px;">
@@ -984,15 +986,17 @@
         if (!json.success) throw new Error(json.error || 'error');
         var d = json.data;
 
-        // 健康度桶
+        // 粘性桶
         var byHealth = {};
         (d.healthSummary || []).forEach(function(r) { byHealth[r.health] = r.cnt; });
-        document.getElementById('ua-active').textContent = byHealth.active || 0;
-        document.getElementById('ua-no-push').textContent = byHealth.no_push_7d || 0;
-        document.getElementById('ua-silent7').textContent = byHealth.silent_7d || 0;
-        document.getElementById('ua-silent30').textContent = byHealth.silent_30d || 0;
-        document.getElementById('ua-never').textContent = byHealth.never_replied || 0;
+        document.getElementById('ua-reply-1d').textContent = byHealth.reply_1d || 0;
+        document.getElementById('ua-reply-7d').textContent = byHealth.reply_7d || 0;
+        document.getElementById('ua-reply-14d').textContent = byHealth.reply_14d || 0;
+        document.getElementById('ua-reply-30d').textContent = byHealth.reply_30d || 0;
+        document.getElementById('ua-reply-60d').textContent = byHealth.reply_60d || 0;
+        document.getElementById('ua-reply-over60d').textContent = byHealth.reply_over60d || 0;
         document.getElementById('ua-disconnected').textContent = byHealth.disconnected || 0;
+        document.getElementById('ua-never-line').textContent = '从未回复(扫码但未试用): ' + (byHealth.never_replied || 0);
 
         // 推送量趋势
         renderPushVolumeChart(d.pushVolume || []);
@@ -1402,18 +1406,17 @@
         var lastInboundStr = details.last_inbound_min !== null
           ? (details.last_inbound_min > 360 ? '<span style="color:#b06500;">' + fmtMins(details.last_inbound_min) + '</span>' : fmtMins(details.last_inbound_min))
           : '<span style="color:#8e8e93;">从未回复</span>';
-        var pollerStr = details.poller_alive ? '✅ 活' : ('❌ ' + (details.poller_reason || '挂'));
         var neg2Str = details.consecutive_neg2_count > 0
           ? '<span style="color:#b06500;">连续 ' + details.consecutive_neg2_count + ' 次</span>'
           : '0';
         var reasonText = ch.reason || '-';
+        // POLLER 列已删除(supervisor 30 天 0 次救活,信号无指导价值;后端 supervisor 保留作零成本兜底)
         html += '<tr title="' + escapeHtml(reasonText) + '">' +
           '<td>' + ch.id + '</td>' +
           '<td><a href="javascript:void(0)" onclick="showChannelInbounds(' + ch.id + ',\'' + escapeHtml(ch.nickname).replace(/'/g, "\\'") + '\')" style="color:#0071e3;text-decoration:none;">' + escapeHtml(ch.nickname) + '</a></td>' +
           '<td><button class="btn btn-sm btn-secondary" style="font-size:12px;padding:3px 10px;" onclick="testSendChannel(' + ch.id + ', this)">📤 测试一条</button></td>' +
           '<td>' + roleBadge + '</td>' +
           '<td>' + healthBadge + '</td>' +
-          '<td>' + pollerStr + '</td>' +
           '<td>' + lastSendOkStr + '</td>' +
           '<td>' + lastInboundStr + '</td>' +
           '<td>' + neg2Str + '</td>' +

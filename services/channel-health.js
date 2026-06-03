@@ -256,8 +256,27 @@ function clearSendDisabled(channelId) {
   }
 }
 
+// ═══════════════════════════════════════════════════════════════════
+//  isChannelDisconnected — fail-fast 失联信号判定(纯函数,易测试)
+//
+//  集中所有"通道现在推送一定失败"的信号,handlePush 和其他需要 fail-fast
+//  的入口统一调用。返回 null 表示通道正常,否则返回失败 reason(也是
+//  API 响应里 data.reason 的值)。
+//
+//  历史教训(2026-06-03): 之前 notify.js 只查 disconnected_at,漏 send_disabled
+//  + status=inactive,导致 channel 55 send_disabled=1 但持续被推 7889 次 ret:-14。
+//  抽出 helper 集中判定,下次任何新增失联信号只改一个地方。
+// ═══════════════════════════════════════════════════════════════════
+function isChannelDisconnected(channel) {
+  if (!channel) return null;
+  if (channel.disconnected_at) return 'channel_disconnected';
+  if (channel.send_disabled) return 'account_restricted';
+  if (channel.status === 'inactive') return 'channel_dead';
+  return null;
+}
+
 module.exports = {
   markSendSuccess, markNeg2, markSendFail, markSendResult, getChannelHealth,
   classifyRet14, classifyAndMarkRet14, markSendDisabled, clearSendDisabled,
-  reviveChannel,
+  reviveChannel, isChannelDisconnected,
 };

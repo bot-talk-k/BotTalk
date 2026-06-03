@@ -132,17 +132,10 @@ async function handlePush(sendKey, title, content, clientIp, channelParam, req) 
       continue;
     }
 
-    // X5 失联 fail-fast: 任一已知失联信号都直接 skip,不再真打 iLink
-    // 三种信号语义不同但都意味着"现在推送一定失败":
-    //   - disconnected_at: 补发也失败/首次 ret:-2 失败(X4/X5 标记)
-    //   - send_disabled=1: ret:-14 但 getUpdates 正常(账号风控半死态)
-    //   - status='inactive': ret:-14 + getUpdates 也失败(session 真死)
-    // 历史教训: channel 55 send_disabled=1 但 disconnected_at=null,持续被真推 7889 次
-    const failFastReason =
-      channel.disconnected_at ? 'channel_disconnected' :
-      channel.send_disabled    ? 'account_restricted' :
-      channel.status === 'inactive' ? 'channel_dead' :
-      null;
+    // X5 失联 fail-fast: 集中到 channel-health.isChannelDisconnected helper
+    // (3 个独立信号 disconnected_at / send_disabled / status=inactive 统一判定,
+    // 单元测试在 tests/channel-health.test.js)
+    const failFastReason = require('../services/channel-health').isChannelDisconnected(channel);
     if (failFastReason) {
       results.push({
         channel_id: channel.id,

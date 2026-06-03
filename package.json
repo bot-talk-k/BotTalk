@@ -7,8 +7,8 @@
     "start": "node app.js",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "test": "node --test tests/keepalive-tip.test.js tests/smoke.test.js tests/guard-bash.test.js",
-    "test:unit": "node --test tests/keepalive-tip.test.js tests/guard-bash.test.js",
+    "test": "node --test tests/keepalive-tip.test.js tests/smoke.test.js tests/guard-bash.test.js tests/channel-health.test.js",
+    "test:unit": "node --test tests/keepalive-tip.test.js tests/guard-bash.test.js tests/channel-health.test.js",
     "prepare": "simple-git-hooks || true"
   },
   "dependencies": {

@@ -485,16 +485,19 @@ router.get('/retry-queue', (req, res) => {
 
 router.get('/user-activity', (req, res) => {
   try {
-    // 健康度桶 — 基于 channels.is_default 主通道判定
+    // X6 粘性看板(2026-06-03 用户洞察): 按"上次回复距今多久"分桶,直接反映用户粘性。
+    // 失联单列。从未回复 = 扫码但未试用的"流失"信号。
     const healthSummary = db.prepare(`
       SELECT
         CASE
           WHEN c.disconnected_at IS NOT NULL THEN 'disconnected'
           WHEN c.last_inbound_at IS NULL THEN 'never_replied'
-          WHEN c.last_inbound_at < datetime('now', '-30 days') THEN 'silent_30d'
-          WHEN c.last_inbound_at < datetime('now', '-7 days') THEN 'silent_7d'
-          WHEN c.last_send_success_at IS NULL OR c.last_send_success_at < datetime('now', '-7 days') THEN 'no_push_7d'
-          ELSE 'active'
+          WHEN c.last_inbound_at >= datetime('now', '-1 day') THEN 'reply_1d'
+          WHEN c.last_inbound_at >= datetime('now', '-7 days') THEN 'reply_7d'
+          WHEN c.last_inbound_at >= datetime('now', '-14 days') THEN 'reply_14d'
+          WHEN c.last_inbound_at >= datetime('now', '-30 days') THEN 'reply_30d'
+          WHEN c.last_inbound_at >= datetime('now', '-60 days') THEN 'reply_60d'
+          ELSE 'reply_over60d'
         END AS health,
         COUNT(*) AS cnt
       FROM channels c
