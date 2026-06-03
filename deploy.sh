@@ -43,17 +43,30 @@ if [ "$LOCAL_HEAD" != "$REMOTE_HEAD" ]; then
 fi
 
 # 3. 服务器 pull + rebuild
+# 注:docker compose recreate 偶尔会留下 shadow 容器(名为 <random>_bottalk)阻塞
+# rename,造成 Conflict 错误,部署假装成功但容器跑老代码。2026-05-21 / 2026-06-03
+# 各踩一次。这里 build 前先清残留 + 用 --remove-orphans,build 失败时自动清理重试。
 echo "🚀 部署到服务器..."
 ssh $REMOTE_HOST "cd $REMOTE_PATH && \
   git fetch $SERVER_REMOTE && \
   git reset --hard $SERVER_REMOTE/$BRANCH && \
   echo '─── 当前服务器 HEAD ───' && \
   git log --oneline -3 && \
+  echo '─── 清理可能残留的 shadow 容器 ───' && \
+  docker ps -a --filter 'name=_bottalk' --format '{{.ID}}' | xargs -r docker rm -f 2>/dev/null || true && \
   echo '─── 重建容器 ───' && \
-  docker compose up -d --build 2>&1 | tail -8"
+  if ! docker compose up -d --build --remove-orphans 2>&1 | tail -10; then \
+    echo '⚠️  首次 up 失败,清理 bottalk 容器后重试...' && \
+    docker rm -f bottalk 2>/dev/null || true && \
+    docker compose up -d --build --remove-orphans 2>&1 | tail -10; \
+  fi"
 
-# 4. 验证
+# 4. 验证 — 必须确认 IMAGE 是 bottalk-app(不是 sha256 hash 表示老 image 残留)
 echo "🩺 验证容器..."
-ssh $REMOTE_HOST "docker ps --format '{{.Names}}: {{.Status}}' | grep bottalk"
+ssh $REMOTE_HOST "docker ps --format '{{.Names}} {{.Image}} {{.Status}}' | grep bottalk"
+ssh $REMOTE_HOST "docker ps --format '{{.Image}}' --filter name=bottalk | grep -q 'bottalk-app$'" || {
+  echo "❌ 容器跑的不是最新 image — 可能残留 shadow,请手动检查"
+  exit 1
+}
 
 echo "✅ 部署完成"
