@@ -327,6 +327,34 @@ function getClientIp(req) {
   return req.headers['x-real-ip'] || req.headers['x-forwarded-for']?.split(',')[0] || req.ip;
 }
 
+// 飞书 SendKey 以 fs_ 开头 → 透明代理到飞书容器(127.0.0.1:3001)
+// 调用方只需使用 bot-talk.com,无需关心通道类型。
+const axios = require('axios');
+const FEISHU_BASE = 'http://127.0.0.1:3001';
+
+async function proxyToFeishu(req, res, path) {
+  try {
+    const url = `${FEISHU_BASE}${path}`;
+    const r = await axios({
+      method: req.method,
+      url,
+      params: req.query,
+      data: req.body,
+      headers: {
+        'content-type': 'application/json',
+        'x-real-ip': getClientIp(req),
+        'x-forwarded-for': getClientIp(req),
+      },
+      timeout: 20000,
+      validateStatus: () => true,
+    });
+    res.status(r.status).json(r.data);
+  } catch (e) {
+    console.error('feishu proxy error:', e.message);
+    res.json({ code: 50001, message: '飞书通道暂时不可用', data: null });
+  }
+}
+
 // ===== 风格1：兼容现有 relay-api 格式 =====
 // GET /notify?key=KEY&msg=消息&title=标题
 // POST /notify (Authorization: Bearer KEY, body: {message, title})
@@ -342,6 +370,8 @@ router.all('/notify', async (req, res) => {
     return res.json({ code: 40001, message: '缺少 key 参数', data: null });
   }
 
+  if (sendKey.startsWith('fs_')) return proxyToFeishu(req, res, '/notify');
+
   const title = req.body?.title || req.query?.title || '';
   const content = req.body?.message || req.body?.desp || req.query?.msg || req.query?.desp || '';
   const channel = req.body?.channel || req.query?.channel || '';
@@ -354,6 +384,9 @@ router.all('/notify', async (req, res) => {
 // GET/POST /:key.send?title=标题&desp=内容
 router.all('/:key.send', async (req, res) => {
   const sendKey = req.params.key;
+
+  if (sendKey.startsWith('fs_')) return proxyToFeishu(req, res, `/${sendKey}.send`);
+
   const title = req.body?.title || req.query?.title || '';
   const content = req.body?.desp || req.body?.message || req.query?.desp || req.query?.msg || '';
   const channel = req.body?.channel || req.query?.channel || '';
