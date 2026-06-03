@@ -59,6 +59,7 @@ function logPageView(page) {
 
 app.get('/', logPageView('intro'), (req, res) => res.sendFile(path.join(__dirname, 'public', 'intro.html')));
 app.get('/app', logPageView('app'), (req, res) => res.sendFile(path.join(__dirname, 'public', 'app.html')));
+app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
 app.use(express.static(path.join(__dirname, 'public'), { index: false }));
 
 // 路由
