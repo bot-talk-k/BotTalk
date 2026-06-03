@@ -171,9 +171,11 @@ async function startBind() {
     return;
   }
   const d = body.data;
-  // 渲染 QR
-  document.getElementById('qr-box').innerHTML = '<div id="qr-canvas"></div>';
-  new QRCode(document.getElementById('qr-canvas'), { text: d.url, width: 200, height: 200 });
+  // 渲染 QR (与 index.html 同样用 QRCode.toCanvas 而非 new QRCode)
+  document.getElementById('qr-box').innerHTML = '<canvas id="qr-canvas"></canvas>';
+  QRCode.toCanvas(document.getElementById('qr-canvas'), d.url, {
+    width: 200, margin: 2, color: { dark: '#1d1d1f', light: '#ffffff' }
+  }, function(err) { if (err) console.error('QR render error:', err); });
   document.getElementById('bind-progress').innerHTML =
     '请用<strong> ' + (lastIsLark ? 'Lark' : '飞书') + '</strong> App 扫上面二维码,选「一键创建机器人」<br>' +
     '<span style="color:#8e8e93;font-size:12px;">deviceCode=' + d.deviceCode.slice(0, 12) + '… 有效期 ' + d.expireIn + 's, 每 ' + d.interval + 's 轮询一次</span><br>' +
