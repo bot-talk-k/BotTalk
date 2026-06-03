@@ -53,18 +53,19 @@ ssh $REMOTE_HOST "cd $REMOTE_PATH && \
   echo '─── 当前服务器 HEAD ───' && \
   git log --oneline -3 && \
   echo '─── 清理可能残留的 shadow 容器 ───' && \
-  docker ps -a --filter 'name=_bottalk' --format '{{.ID}}' | xargs -r docker rm -f 2>/dev/null || true && \
-  echo '─── 重建容器 ───' && \
-  if ! docker compose up -d --build --remove-orphans 2>&1 | tail -10; then \
+  docker ps -a --filter 'name=_bottalk' --format '{{.Names}} {{.ID}}' | grep -v bottalk-feishu | awk '{print $2}' | xargs -r docker rm -f 2>/dev/null || true && \
+  echo '─── 重建容器(不用--remove-orphans,避免误删 bottalk-feishu)───' && \
+  if ! docker compose up -d --build 2>&1 | tail -10; then \
     echo '⚠️  首次 up 失败,清理 bottalk 容器后重试...' && \
     docker rm -f bottalk 2>/dev/null || true && \
-    docker compose up -d --build --remove-orphans 2>&1 | tail -10; \
+    docker compose up -d --build 2>&1 | tail -10; \
   fi"
 
 # 4. 验证 — 必须确认 IMAGE 是 bottalk-app(不是 sha256 hash 表示老 image 残留)
 echo "🩺 验证容器..."
 ssh $REMOTE_HOST "docker ps --format '{{.Names}} {{.Image}} {{.Status}}' | grep bottalk"
-ssh $REMOTE_HOST "docker ps --format '{{.Image}}' --filter name=bottalk | grep -q 'bottalk-app$'" || {
+ssh $REMOTE_HOST "docker ps --format '{{.Image}}' --filter name='^/bottalk$' | grep -q 'bottalk-app$'" || \
+ssh $REMOTE_HOST "docker inspect bottalk --format '{{.Config.Image}}' | grep -q 'bottalk-app'" || {
   echo "❌ 容器跑的不是最新 image — 可能残留 shadow,请手动检查"
   exit 1
 }
