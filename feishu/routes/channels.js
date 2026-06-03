@@ -9,6 +9,7 @@ const { generateSendKey } = require('../db');
 const { requireLogin } = require('../middleware/auth');
 const { logActivity } = require('../services/logger');
 const feishuAuth = require('../services/feishu-auth');
+const feishuClient = require('../services/feishu-client');
 
 const MAX_CHANNELS = 20;
 
@@ -91,6 +92,19 @@ router.post('/feishu/poll', async (req, res) => {
     logActivity(userId, 'channel_add', { channel_id: chInfo.lastInsertRowid, domain: r.domain }, req);
 
     const user = db.prepare('SELECT send_key FROM users WHERE id = ?').get(userId);
+
+    // 把 SendKey 推进飞书 — fire-and-forget,不阻塞响应
+    if (r.openId) {
+      const baseUrl = process.env.BASE_URL || 'https://feishu.bot-talk.com';
+      const welcomeMsg = isNewUser
+        ? `🎉 绑定成功，欢迎使用 BotTalk！\n\n你的 SendKey：\n${user.send_key}\n\n请保存此消息，下次登录需要用到。\n\n推送示例：\ncurl "${baseUrl}/${user.send_key}.send?title=测试&desp=hello"`
+        : `✅ 新通道「${name}」绑定成功\n\nSendKey（如已保存可忽略）：\n${user.send_key}`;
+      feishuClient.sendText({
+        appId: r.appId, appSecret: r.appSecret, domain: r.domain,
+        receiveId: r.openId, receiveIdType: 'open_id', text: welcomeMsg,
+      }).catch(e => console.error('welcome push failed:', e.message));
+    }
+
     res.json({
       success: true,
       data: {
