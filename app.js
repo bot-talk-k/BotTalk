@@ -95,6 +95,16 @@ try { app.use('/api/push-logs', require('./routes/push-logs')); } catch (e) { /*
 try { app.use('/api/admin', require('./routes/admin')); } catch (e) { /* route not yet created */ }
 try { app.use('/api/track', require('./routes/track')); } catch (e) { /* route not yet created */ }
 
+// 飞书 MVP 原型(默认关闭,生产部署不挂载;ENABLE_FEISHU_PROTO=1 启用)
+if (process.env.ENABLE_FEISHU_PROTO === '1') {
+  try {
+    app.use('/api/feishu-proto', require('./experiments/feishu/routes'));
+    console.log('🧪 飞书 MVP 原型已挂载: /api/feishu-proto/* + /feishu-proto.html (admin only)');
+  } catch (e) {
+    console.error('🧪 飞书原型挂载失败:', e.message);
+  }
+}
+
 // Existing routes (login.js removed — replaced by routes/auth.js)
 app.use('/api/reminders', require('./routes/reminders'));
 app.use('/', require('./routes/notify'));

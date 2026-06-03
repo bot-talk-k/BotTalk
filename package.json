@@ -12,6 +12,7 @@
     "prepare": "simple-git-hooks || true"
   },
   "dependencies": {
+    "@larksuite/openclaw-lark-tools": "^1.0.46",
     "axios": "^1.6.7",
     "better-sqlite3": "^9.4.3",
     "better-sqlite3-session-store": "^0.1.0",

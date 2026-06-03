@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>飞书通道原型 — BotTalk</title>
+  <script src="qrcode.min.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "PingFang SC", Arial, sans-serif;
+      margin: 0; padding: 24px; color: #1d1d1f; background: #f5f5f7; line-height: 1.5;
+    }
+    .wrap { max-width: 900px; margin: 0 auto; }
+    h1 { font-size: 24px; margin: 0 0 8px; }
+    .subtitle { color: #6e6e73; font-size: 13px; margin: 0 0 24px; }
+    .card {
+      background: #fff; border-radius: 14px; padding: 20px 24px; margin-bottom: 16px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    }
+    .card h2 { font-size: 16px; margin: 0 0 12px; }
+    .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+    button {
+      padding: 8px 16px; border-radius: 8px; border: 1px solid #0071e3; background: #0071e3;
+      color: #fff; font-size: 14px; cursor: pointer; font-weight: 500;
+    }
+    button.secondary { background: #fff; color: #0071e3; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    label { font-size: 13px; color: #6e6e73; margin-right: 6px; }
+    input[type=text], textarea {
+      padding: 8px 10px; border: 1px solid #d2d2d7; border-radius: 8px; font-size: 14px;
+      font-family: inherit; min-width: 280px;
+    }
+    textarea { width: 100%; min-height: 60px; resize: vertical; }
+    .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 12px 0; }
+    .stat { background: #f5f5f7; border-radius: 10px; padding: 12px; text-align: center; }
+    .stat-value { font-size: 22px; font-weight: 600; color: #1d1d1f; }
+    .stat-value.green { color: #34c759; }
+    .stat-value.red { color: #ff3b30; }
+    .stat-label { font-size: 11px; color: #6e6e73; margin-top: 4px; }
+    .qr-area { display: flex; gap: 24px; align-items: flex-start; flex-wrap: wrap; }
+    .qr-box { width: 220px; height: 220px; background: #fff; display: flex; align-items: center; justify-content: center;
+              border: 1px solid #e5e5ea; border-radius: 10px; }
+    .log {
+      background: #1d1d1f; color: #d1d1d6; font-family: "SF Mono", Menlo, monospace; font-size: 12px;
+      padding: 12px; border-radius: 8px; max-height: 280px; overflow-y: auto; white-space: pre-wrap;
+    }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 12px; }
+    .badge-ok  { background: rgba(52,199,89,0.12); color: #1a7e3f; }
+    .badge-err { background: rgba(255,59,48,0.12); color: #c41a1a; }
+    .badge-info{ background: rgba(0,113,227,0.12); color: #0071e3; }
+    a.nav-link { color: #0071e3; text-decoration: none; font-size: 13px; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🧪 飞书通道 MVP 原型</h1>
+  <p class="subtitle">
+    验证假设: Device Flow 扫码绑定可行 + 飞书无 10 条限流 + bot-talk Node.js 环境兼容。
+    本页仅 admin 可访问,数据存 <code>data/feishu-proto.json</code>(非生产 channels 表)。
+    <a class="nav-link" href="admin.html">← 返回管理后台</a>
+  </p>
+
+  <!-- 当前状态 -->
+  <div class="card">
+    <h2>当前绑定</h2>
+    <div id="status-area">加载中…</div>
+  </div>
+
+  <!-- 扫码绑定 -->
+  <div class="card">
+    <h2>① 扫码绑定</h2>
+    <div class="row">
+      <label><input type="radio" name="domain" value="feishu" checked> 飞书(国内)</label>
+      <label><input type="radio" name="domain" value="lark"> Lark(海外)</label>
+      <button id="btn-start-bind" onclick="startBind()">开始绑定 / 重新生成 QR</button>
+      <button class="secondary" onclick="reset()">清除绑定(重测用)</button>
+    </div>
+    <div class="qr-area">
+      <div class="qr-box" id="qr-box"><span style="color:#8e8e93;font-size:13px;">点击「开始绑定」</span></div>
+      <div style="flex:1;min-width:260px;">
+        <div id="bind-progress" style="font-size:13px;color:#6e6e73;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 发送测试 -->
+  <div class="card">
+    <h2>② 发送测试</h2>
+    <textarea id="msg-text" placeholder="输入要发送的消息">📢 飞书 MVP 测试消息</textarea>
+    <div class="row" style="margin-top:8px;">
+      <button onclick="sendOnce()">单条发送</button>
+      <button onclick="sendBatch(20)">连发 20 条(限流压测)</button>
+      <button class="secondary" onclick="sendBatch(5)">连发 5 条</button>
+      <button class="secondary" onclick="resetCounters()">重置计数</button>
+    </div>
+    <div class="stat-grid">
+      <div class="stat"><div class="stat-value" id="cnt-total">0</div><div class="stat-label">总尝试</div></div>
+      <div class="stat"><div class="stat-value green" id="cnt-ok">0</div><div class="stat-label">成功</div></div>
+      <div class="stat"><div class="stat-value red" id="cnt-fail">0</div><div class="stat-label">失败</div></div>
+      <div class="stat"><div class="stat-value" id="cnt-rate">-</div><div class="stat-label">成功率</div></div>
+    </div>
+    <div class="log" id="log">尚未发送任何消息</div>
+  </div>
+
+  <!-- 诊断 -->
+  <div class="card">
+    <h2>③ 诊断工具</h2>
+    <div class="row">
+      <button class="secondary" onclick="verify()">验证当前凭证</button>
+      <button class="secondary" onclick="listChats()">列出 bot 所在 chat (拿 chat_id)</button>
+    </div>
+    <div class="log" id="diag-log" style="min-height:40px;">点上面按钮做诊断</div>
+  </div>
+</div>
+
+<script>
+let cntTotal = 0, cntOk = 0, cntFail = 0;
+let pollTimer = null;
+let lastIsLark = false;
+
+function api(url, opts) {
+  return fetch(url, Object.assign({ credentials: 'same-origin', headers: { 'Content-Type': 'application/json' } }, opts || {})).then(r => r.json().then(j => ({ status: r.status, body: j })));
+}
+
+function appendLog(line, target) {
+  const el = document.getElementById(target || 'log');
+  if (el.textContent === '尚未发送任何消息' || el.textContent === '点上面按钮做诊断') el.textContent = '';
+  el.textContent = (el.textContent ? el.textContent + '\n' : '') + line;
+  el.scrollTop = el.scrollHeight;
+}
+
+function refreshCounters() {
+  document.getElementById('cnt-total').textContent = cntTotal;
+  document.getElementById('cnt-ok').textContent = cntOk;
+  document.getElementById('cnt-fail').textContent = cntFail;
+  document.getElementById('cnt-rate').textContent = cntTotal ? Math.round(cntOk * 100 / cntTotal) + '%' : '-';
+}
+
+function resetCounters() {
+  cntTotal = 0; cntOk = 0; cntFail = 0; refreshCounters();
+  document.getElementById('log').textContent = '尚未发送任何消息';
+}
+
+async function loadStatus() {
+  const { body } = await api('/api/feishu-proto/status');
+  if (!body.success) { document.getElementById('status-area').innerHTML = '<span class="badge badge-err">查询失败</span>'; return; }
+  const d = body.data;
+  if (!d.bound) {
+    document.getElementById('status-area').innerHTML = '<span class="badge badge-info">尚未绑定</span>';
+  } else {
+    document.getElementById('status-area').innerHTML =
+      '<span class="badge badge-ok">已绑定</span>&nbsp;' +
+      ' domain=<code>' + d.domain + '</code>' +
+      ' appId=<code>' + d.appIdMasked + '</code>' +
+      ' openId=<code>' + (d.openIdMasked || '(无)') + '</code>' +
+      ' 绑定时间=<code>' + new Date(d.boundAt).toLocaleString('zh-CN') + '</code>' +
+      '<br><span style="color:#6e6e73;font-size:12px;">历史发送 ' + d.sendCount + ' 条</span>';
+  }
+}
+
+async function startBind() {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+  const domain = document.querySelector('input[name=domain]:checked').value;
+  lastIsLark = (domain === 'lark');
+  document.getElementById('qr-box').innerHTML = '<span style="color:#8e8e93;font-size:13px;">生成中…</span>';
+  document.getElementById('bind-progress').textContent = '请求中…';
+  const { body } = await api('/api/feishu-proto/qrcode/start', { method: 'POST', body: JSON.stringify({ isLark: lastIsLark }) });
+  if (!body.success) {
+    document.getElementById('bind-progress').textContent = '失败: ' + body.error;
+    return;
+  }
+  const d = body.data;
+  // 渲染 QR
+  document.getElementById('qr-box').innerHTML = '<div id="qr-canvas"></div>';
+  new QRCode(document.getElementById('qr-canvas'), { text: d.url, width: 200, height: 200 });
+  document.getElementById('bind-progress').innerHTML =
+    '请用<strong> ' + (lastIsLark ? 'Lark' : '飞书') + '</strong> App 扫上面二维码,选「一键创建机器人」<br>' +
+    '<span style="color:#8e8e93;font-size:12px;">deviceCode=' + d.deviceCode.slice(0, 12) + '… 有效期 ' + d.expireIn + 's, 每 ' + d.interval + 's 轮询一次</span><br>' +
+    '<span id="poll-status">等待扫码…</span>';
+  // 轮询
+  const interval = (d.interval || 5) * 1000;
+  pollTimer = setInterval(async () => {
+    const r = await api('/api/feishu-proto/qrcode/poll', { method: 'POST', body: JSON.stringify({ deviceCode: d.deviceCode, isLark: lastIsLark }) });
+    if (!r.body.success) {
+      document.getElementById('poll-status').innerHTML = '<span class="badge badge-err">轮询失败: ' + r.body.error + '</span>';
+      clearInterval(pollTimer); pollTimer = null;
+      return;
+    }
+    if (r.body.data.done) {
+      clearInterval(pollTimer); pollTimer = null;
+      document.getElementById('poll-status').innerHTML = '<span class="badge badge-ok">绑定成功 ✓</span>';
+      loadStatus();
+    } else if (r.body.data.error) {
+      document.getElementById('poll-status').innerHTML = '<span class="badge badge-err">' + r.body.data.error + '</span>';
+      clearInterval(pollTimer); pollTimer = null;
+    }
+  }, interval);
+}
+
+async function reset() {
+  if (!confirm('清除当前绑定?(下次绑定需重新扫码)')) return;
+  await api('/api/feishu-proto/reset', { method: 'POST' });
+  loadStatus();
+}
+
+async function sendOnce() {
+  const text = document.getElementById('msg-text').value;
+  if (!text) return alert('消息不能为空');
+  const { body } = await api('/api/feishu-proto/send', { method: 'POST', body: JSON.stringify({ text, count: 1 }) });
+  if (!body.success) { appendLog('[ERROR] ' + body.error); cntFail++; cntTotal++; refreshCounters(); return; }
+  body.data.results.forEach(r => {
+    cntTotal++;
+    if (r.success) { cntOk++; appendLog('[' + new Date(r.at).toLocaleTimeString() + '] ✓ #' + r.idx + ' "' + r.text + '"'); }
+    else { cntFail++; appendLog('[' + new Date(r.at).toLocaleTimeString() + '] ✗ #' + r.idx + ' code=' + r.code + ' msg=' + (r.msg || r.error)); }
+  });
+  refreshCounters();
+}
+
+async function sendBatch(n) {
+  const text = document.getElementById('msg-text').value;
+  if (!text) return alert('消息不能为空');
+  if (!confirm('确认连发 ' + n + ' 条到当前绑定的飞书账号?')) return;
+  appendLog('━━━ 开始连发 ' + n + ' 条 ━━━');
+  const t0 = Date.now();
+  const { body } = await api('/api/feishu-proto/send', { method: 'POST', body: JSON.stringify({ text, count: n }) });
+  const dt = ((Date.now() - t0) / 1000).toFixed(1);
+  if (!body.success) { appendLog('[ERROR] ' + body.error); return; }
+  body.data.results.forEach(r => {
+    cntTotal++;
+    if (r.success) { cntOk++; appendLog('[' + new Date(r.at).toLocaleTimeString() + '] ✓ #' + r.idx + '/' + n); }
+    else { cntFail++; appendLog('[' + new Date(r.at).toLocaleTimeString() + '] ✗ #' + r.idx + '/' + n + ' code=' + r.code + ' msg=' + (r.msg || r.error)); }
+  });
+  appendLog('━━━ 完成 (耗时 ' + dt + 's,成功 ' + body.data.succeeded + '/' + body.data.sent + ') ━━━');
+  refreshCounters();
+  loadStatus();
+}
+
+async function verify() {
+  document.getElementById('diag-log').textContent = '验证中…';
+  const { body } = await api('/api/feishu-proto/verify', { method: 'POST' });
+  if (!body.success) appendLog('[verify error] ' + body.error, 'diag-log');
+  else appendLog('凭证有效性: ' + (body.data.valid ? '✓ 有效' : '✗ 无效'), 'diag-log');
+}
+
+async function listChats() {
+  document.getElementById('diag-log').textContent = '列表中…';
+  const { body } = await api('/api/feishu-proto/list-chats', { method: 'POST' });
+  if (!body.success) appendLog('[listChats error] ' + body.error, 'diag-log');
+  else appendLog(JSON.stringify(body.data, null, 2), 'diag-log');
+}
+
+loadStatus();
+</script>
+</body>
+</html>
