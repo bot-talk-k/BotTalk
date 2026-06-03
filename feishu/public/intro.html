@@ -76,8 +76,8 @@
           <li class="good">飞书 App 扫码即创建,<strong>无需任何后台配置</strong></li>
           <li class="good">一个飞书账户可绑<strong>任意多个</strong>推送通道</li>
           <li class="good"><strong>无接收条数限制</strong>,连发不限流</li>
-          <li class="good"><strong>无时间衰减</strong>,放着不管也不会断</li>
-          <li class="good"><strong>无需互动</strong>,不用假装跟机器人聊天</li>
+          <li class="good"><strong>无需回复</strong>,不用假装跟机器人聊天</li>
+          <li class="good">一个飞书账号同时供<strong>多端绑定</strong>,互不影响</li>
         </ul>
         <a class="btn btn-primary" href="/app">用飞书通道开始 →</a>
       </div>
@@ -89,10 +89,9 @@
         <div class="tagline">微信 ClawBot,适合已在用微信的老用户</div>
         <ul>
           <li class="good">微信扫码绑定,消息直达微信</li>
-          <li class="bad">微信平台限流:连发约 10 条即被暂停</li>
-          <li class="bad">需每 24 小时互动一次保活</li>
-          <li class="bad">长期不互动会失联,需重新扫码</li>
-          <li class="bad">要靠回复「假装聊天」维持通道</li>
+          <li class="bad">连发约 10 条不回复就<strong>不再接收</strong>,必须回复解锁</li>
+          <li class="bad">ClawBot <strong>只能绑一端</strong>:绑了 BotTalk 就没法同时用 OpenClaw 等其它工具</li>
+          <li class="bad">要靠频繁回复「假装聊天」维持通道</li>
         </ul>
         <a class="btn btn-ghost" id="wechat-link" href="https://bot-talk.com">前往微信通道 →</a>
       </div>
@@ -104,17 +103,17 @@
       <table>
         <tr><th>能力</th><th>微信 ClawBot</th><th class="feishu-col">飞书</th></tr>
         <tr><td>注册门槛</td><td class="dim">扫码绑定</td><td>扫码即用,<span class="y">个人随便注册</span></td></tr>
-        <tr><td>一个账户挂多通道</td><td><span class="n">基本一对一</span></td><td><span class="y">任意多个</span></td></tr>
-        <tr><td>连发条数限制</td><td><span class="n">约 10 条限流</span></td><td><span class="y">无限制</span></td></tr>
-        <tr><td>时间衰减 / 保活</td><td><span class="n">需 24h 互动</span></td><td><span class="y">无,放着也不断</span></td></tr>
-        <tr><td>需要回复「假装聊天」</td><td><span class="n">是</span></td><td><span class="y">否</span></td></tr>
-        <tr><td>断线恢复</td><td class="dim">回复或重扫</td><td><span class="y">几乎不会断</span></td></tr>
+        <tr><td>同账户多端绑定</td><td><span class="n">只能绑一端</span></td><td><span class="y">任意多端同时用</span></td></tr>
+        <tr><td>一个账户挂多通道</td><td><span class="n">一对一</span></td><td><span class="y">任意多个</span></td></tr>
+        <tr><td>连发不回复的后果</td><td><span class="n">约 10 条后停止接收</span></td><td><span class="y">无限制,无需回复</span></td></tr>
+        <tr><td>需要回复「假装聊天」</td><td><span class="n">是(不回复=断流)</span></td><td><span class="y">否</span></td></tr>
+        <tr><td>断线恢复</td><td class="dim">回复一次即恢复</td><td><span class="y">几乎不会断</span></td></tr>
       </table>
     </section>
 
     <div class="why">
       <h3>为什么飞书这么省心?</h3>
-      <p>微信 ClawBot 的协议为「聊天」设计,把它当推送通道用,平台会因「无互动」「频繁单向发送」而限流、断连——我们为此写了大量补丁。飞书面向企业协作与 AI Agent,推送是一等公民:配额充足、无强制互动。所以飞书通道<strong>没有那些莫名其妙的限制</strong>,API 怎么调它就怎么到。</p>
+      <p>微信 ClawBot 的协议为「聊天」设计——连发约 10 条不回复就停止接收,必须回复才能解锁;而且 ClawBot 只能同时绑一端,绑了这边就占用了另一边。把它当推送通道用需要大量补丁维持。飞书面向企业协作与 AI Agent,推送是一等公民:无条数限制、无需互动、一个账号可供多端多通道同时使用。所以飞书通道<strong>没有那些莫名其妙的限制</strong>,API 怎么调它就怎么到。</p>
     </div>
   </div>
 
