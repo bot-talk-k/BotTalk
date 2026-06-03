@@ -3,724 +3,254 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>BotTalk - 开源免费的微信推送服务</title>
+  <title>BotTalk · 免费开源消息推送服务</title>
   <style>
-    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-    html { scroll-behavior: smooth; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      font-family: -apple-system, "SF Pro Display", "SF Pro Text", "PingFang SC", "Helvetica Neue", Helvetica, Arial, sans-serif;
-      background: #fff;
-      color: #1d1d1f;
-      line-height: 1.7;
-      -webkit-font-smoothing: antialiased;
+      font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "PingFang SC", Arial, sans-serif;
+      color: #1d1d1f; background: #fbfbfd; line-height: 1.6; -webkit-font-smoothing: antialiased;
     }
+    a { color: inherit; text-decoration: none; }
+    .wrap { max-width: 980px; margin: 0 auto; padding: 0 20px; }
 
-    /* ── Nav ─────────────────────────────────────────────────────── */
-    .navbar {
-      position: fixed; top: 36px; left: 0; right: 0; z-index: 1000;
-      height: 48px;
-      backdrop-filter: saturate(180%) blur(20px);
-      -webkit-backdrop-filter: saturate(180%) blur(20px);
-      background: rgba(255,255,255,0.8);
-      border-bottom: 0.5px solid rgba(0,0,0,0.1);
-      display: flex; align-items: center; justify-content: center;
-      padding: 0 20px;
-    }
-    .navbar-inner {
-      width: 100%; max-width: 980px;
-      display: flex; align-items: center;
-    }
-    .nav-logo {
-      font-size: 18px; font-weight: 700; color: #1d1d1f;
-      letter-spacing: -0.3px; text-decoration: none;
-    }
-    .nav-links { display: flex; gap: 4px; margin-left: 32px; }
-    .nav-links a {
-      padding: 6px 14px; text-decoration: none; color: #6e6e73;
-      font-size: 13px; font-weight: 500; border-radius: 980px;
-      transition: background 0.2s, color 0.2s;
-    }
-    .nav-links a:hover { background: rgba(0,0,0,0.04); color: #1d1d1f; }
-    .nav-links a.active { background: rgba(0,113,227,0.08); color: #0071e3; }
-    .nav-right { margin-left: auto; }
-    .btn-start {
-      padding: 6px 18px; border-radius: 980px; border: none;
-      background: #0071e3; color: #fff; font-size: 13px; font-weight: 500;
-      cursor: pointer; transition: all 0.2s; text-decoration: none;
-    }
-    .btn-start:hover { background: #0077ed; }
+    /* ── Header ── */
+    header { text-align: center; padding: 72px 20px 56px; }
+    .logo-row { font-size: 13px; letter-spacing: 1.5px; color: #86868b; font-weight: 600; margin-bottom: 20px; }
+    header h1 { font-size: 44px; line-height: 1.13; font-weight: 700; margin-bottom: 14px; }
+    header h1 .gr { background: linear-gradient(95deg, #0071e3 20%, #00b4d8); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    header .sub { font-size: 19px; color: #6e6e73; max-width: 600px; margin: 0 auto 32px; }
+    .cta-row { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+    .btn { display: inline-block; padding: 13px 26px; border-radius: 12px; font-size: 15px; font-weight: 600; cursor: pointer; border: none; transition: opacity .12s; }
+    .btn:hover { opacity: .88; }
+    .btn-primary { background: #0071e3; color: #fff; }
+    .btn-secondary { background: #f0f0f5; color: #1d1d1f; }
 
-    /* ── Container ──────────────────────────────────────────────── */
-    .main { padding-top: 84px; }
-    .container { max-width: 780px; margin: 0 auto; padding: 0 24px; }
+    /* ── 三色优势 ── */
+    .pills { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin: 0 auto 64px; padding: 0 20px; }
+    .pill { background: #fff; border: 1px solid #e5e5ea; border-radius: 100px; padding: 7px 16px; font-size: 14px; color: #444; }
 
-    /* ── Hero ───────────────────────────────────────────────────── */
-    .hero {
-      text-align: center; padding: 80px 0 60px;
-      background: linear-gradient(180deg, #f5f5f7 0%, #fff 100%);
-    }
-    .hero h1 {
-      font-size: 42px; font-weight: 700; letter-spacing: -0.5px;
-      line-height: 1.2; margin-bottom: 16px;
-    }
-    .hero h1 span { color: #0071e3; }
-    .hero p {
-      font-size: 18px; color: #6e6e73; max-width: 560px;
-      margin: 0 auto 32px;
-    }
-    .hero-actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
-    .hero-actions a {
-      padding: 12px 28px; border-radius: 980px; font-size: 15px;
-      font-weight: 500; text-decoration: none; transition: all 0.2s;
-    }
-    .hero-actions .primary { background: #0071e3; color: #fff; }
-    .hero-actions .primary:hover { background: #0077ed; }
-    .hero-actions .secondary {
-      background: transparent; color: #0071e3; border: 1.5px solid #0071e3;
-    }
-    .hero-actions .secondary:hover { background: rgba(0,113,227,0.06); }
+    /* ── 三步流程 ── */
+    section { margin-bottom: 72px; }
+    .sec-title { text-align: center; font-size: 28px; font-weight: 700; margin-bottom: 8px; }
+    .sec-sub { text-align: center; color: #6e6e73; font-size: 16px; margin-bottom: 36px; }
+    .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+    @media(max-width: 680px){ .steps { grid-template-columns: 1fr; } }
+    .step { background: #fff; border-radius: 18px; padding: 26px; border: 1px solid #ececec; text-align: center; }
+    .step .num { width: 36px; height: 36px; border-radius: 50%; background: #0071e3; color: #fff; font-weight: 700; font-size: 16px; display: flex; align-items: center; justify-content: center; margin: 0 auto 14px; }
+    .step h3 { font-size: 17px; margin-bottom: 8px; }
+    .step p { font-size: 14px; color: #6e6e73; }
 
-    /* ── Section ────────────────────────────────────────────────── */
-    .section { padding: 60px 0; }
-    .section + .section { border-top: 0.5px solid rgba(0,0,0,0.06); }
-    .section h2 {
-      font-size: 28px; font-weight: 600; margin-bottom: 24px;
-      letter-spacing: -0.2px;
-    }
-    .section p { color: #424245; margin-bottom: 16px; }
-    .section p.muted { color: #6e6e73; font-size: 14px; }
+    /* ── 代码示例 ── */
+    .code-wrap { background: #fff; border-radius: 18px; padding: 28px; border: 1px solid #ececec; }
+    .code-tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+    .ctab { padding: 5px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; background: #f0f0f5; color: #444; }
+    .ctab.active { background: #0071e3; color: #fff; }
+    pre { background: #1a1a2e; color: #e0e0ff; padding: 18px; border-radius: 12px; font-size: 13.5px; font-family: "SF Mono", Menlo, monospace; overflow-x: auto; line-height: 1.65; }
+    pre .k { color: #79b8ff; } pre .s { color: #9ecbff; } pre .c { color: #6a737d; } pre .n { color: #b392f0; }
 
-    /* ── Steps ──────────────────────────────────────────────────── */
-    .steps {
-      display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px;
-      margin: 32px 0;
-    }
-    .step {
-      background: #f5f5f7; border-radius: 16px; padding: 28px 24px;
-      text-align: center; transition: transform 0.2s;
-    }
-    .step:hover { transform: translateY(-4px); }
-    .step-num {
-      display: inline-flex; align-items: center; justify-content: center;
-      width: 36px; height: 36px; border-radius: 50%;
-      background: #0071e3; color: #fff; font-size: 16px; font-weight: 700;
-      margin-bottom: 12px;
-    }
-    .step h3 { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
-    .step p { font-size: 14px; color: #6e6e73; margin: 0; }
+    /* ── 通道选择 ── */
+    .channels { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    @media(max-width: 760px){ .channels { grid-template-columns: 1fr; } header h1 { font-size: 34px; } }
+    .ch { background: #fff; border-radius: 18px; padding: 28px; border: 1px solid #ececec; display: flex; flex-direction: column; }
+    .ch.rec { border: 2px solid #0071e3; box-shadow: 0 8px 30px rgba(0,113,227,0.10); }
+    .ch .tag { display: inline-block; font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 20px; margin-bottom: 14px; width: fit-content; }
+    .tag-rec  { background: rgba(0,113,227,0.1); color: #0071e3; }
+    .tag-old  { background: #f0f0f0; color: #86868b; }
+    .ch h2 { font-size: 22px; margin-bottom: 4px; }
+    .ch .tagline { color: #6e6e73; font-size: 14px; margin-bottom: 16px; }
+    .ch ul { list-style: none; flex: 1; margin-bottom: 20px; }
+    .ch li { font-size: 14.5px; padding: 5px 0 5px 24px; position: relative; }
+    .ch li::before { position: absolute; left: 0; top: 5px; font-size: 14px; font-weight: 700; }
+    .li-ok::before  { content: "✓"; color: #34c759; }
+    .li-bad::before { content: "✕"; color: #ff3b30; }
+    .ch a.btn { display: block; text-align: center; }
 
-    /* ── Code Block ─────────────────────────────────────────────── */
-    .code-block {
-      background: #1d1d1f; color: #f5f5f7; border-radius: 12px;
-      padding: 20px 24px; margin: 16px 0; overflow-x: auto;
-      font-family: "SF Mono", "Fira Code", "Menlo", monospace;
-      font-size: 13px; line-height: 1.6; position: relative;
-    }
-    .code-block .lang-tag {
-      position: absolute; top: 10px; right: 14px;
-      font-size: 11px; color: #86868b; font-weight: 600;
-      text-transform: uppercase;
-    }
-    .code-block .comment { color: #86868b; }
-    .code-block .string { color: #ff9f0a; }
-    .code-block .keyword { color: #64d2ff; }
-    .code-block .func { color: #bf5af2; }
+    /* ── 对比表 ── */
+    table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 16px; overflow: hidden; box-shadow: 0 2px 14px rgba(0,0,0,0.04); font-size: 14.5px; }
+    th, td { padding: 13px 18px; text-align: left; border-bottom: 1px solid #f0f0f0; }
+    th { background: #fafafa; font-weight: 600; font-size: 13px; color: #6e6e73; }
+    th.hl { color: #0071e3; }
+    td.dim { color: #86868b; }
+    .y { color: #1a7e3f; font-weight: 600; }
+    .n { color: #c41a1a; font-weight: 600; }
+    tr:last-child td { border-bottom: none; }
 
-    /* ── URL Box ────────────────────────────────────────────────── */
-    .url-box {
-      background: #f5f5f7; border-radius: 12px; padding: 16px 20px;
-      font-family: "SF Mono", "Fira Code", monospace; font-size: 13px;
-      word-break: break-all; color: #1d1d1f; margin: 12px 0;
-      border: 1px solid rgba(0,0,0,0.06);
-    }
-    .url-box .key-highlight { color: #0071e3; font-weight: 600; }
-    .url-box .param { color: #bf5af2; }
+    /* ── 优势卡片行 ── */
+    .feat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+    @media(max-width: 760px){ .feat-grid { grid-template-columns: repeat(2, 1fr); } }
+    .feat { background: #fff; border-radius: 14px; padding: 20px; border: 1px solid #ececec; }
+    .feat .icon { font-size: 24px; margin-bottom: 10px; }
+    .feat h4 { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
+    .feat p { font-size: 13px; color: #6e6e73; }
 
-    /* ── Method Badge ───────────────────────────────────────────── */
-    .method-badge {
-      display: inline-block; padding: 2px 8px; border-radius: 4px;
-      font-size: 11px; font-weight: 700; font-family: "SF Mono", monospace;
-      margin-right: 6px; vertical-align: middle;
-    }
-    .method-get { background: #34c75920; color: #248a3d; }
-    .method-post { background: #0071e320; color: #0071e3; }
-
-    /* ── Diagram ────────────────────────────────────────────────── */
-    .diagram {
-      background: #f5f5f7; border-radius: 16px; padding: 32px;
-      margin: 32px 0; overflow-x: auto;
-    }
-    .diagram svg { display: block; margin: 0 auto; }
-
-    /* ── Compare Table ──────────────────────────────────────────── */
-    .compare-table {
-      width: 100%; border-collapse: collapse; margin: 24px 0;
-      font-size: 14px;
-    }
-    .compare-table th {
-      background: #f5f5f7; padding: 12px 16px; text-align: left;
-      font-weight: 600; border-bottom: 1px solid rgba(0,0,0,0.08);
-    }
-    .compare-table td {
-      padding: 12px 16px; border-bottom: 1px solid rgba(0,0,0,0.04);
-    }
-    .compare-table tr:hover td { background: rgba(0,113,227,0.02); }
-    .tag-open {
-      display: inline-block; padding: 2px 8px; border-radius: 4px;
-      background: #34c75920; color: #248a3d; font-size: 12px; font-weight: 600;
-    }
-    .tag-closed {
-      display: inline-block; padding: 2px 8px; border-radius: 4px;
-      background: #ff3b3020; color: #ff3b30; font-size: 12px; font-weight: 600;
-    }
-
-    /* ── Tip Box ────────────────────────────────────────────────── */
-    .tip-box {
-      background: #fff3cd; border-radius: 12px; padding: 16px 20px;
-      font-size: 14px; margin: 16px 0; display: flex; gap: 10px;
-      align-items: flex-start;
-    }
-    .tip-box .icon { font-size: 18px; flex-shrink: 0; }
-
-    /* ── SDK Grid ───────────────────────────────────────────────── */
-    .sdk-grid {
-      display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 16px; margin: 24px 0;
-    }
-    .sdk-card {
-      background: #f5f5f7; border-radius: 12px; padding: 20px;
-      transition: transform 0.2s, box-shadow 0.2s;
-    }
-    .sdk-card:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 4px 16px rgba(0,0,0,0.08);
-    }
-    .sdk-card h4 { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
-    .sdk-card p { font-size: 13px; color: #6e6e73; margin: 0; }
-    .sdk-card code {
-      display: block; margin-top: 8px; font-size: 12px;
-      color: #86868b; font-family: "SF Mono", monospace;
-    }
-
-    /* ── Footer ─────────────────────────────────────────────────── */
-    .footer {
-      text-align: center; padding: 40px 0;
-      border-top: 0.5px solid rgba(0,0,0,0.06);
-      font-size: 13px; color: #86868b;
-    }
-    .footer a { color: #0071e3; text-decoration: none; }
-    .footer a:hover { text-decoration: underline; }
-
-    /* ── Responsive ─────────────────────────────────────────────── */
-    @media (max-width: 640px) {
-      .hero h1 { font-size: 28px; }
-      .hero p { font-size: 16px; }
-      .steps { grid-template-columns: 1fr; }
-      .section h2 { font-size: 22px; }
-      .nav-links { display: none; }
-    }
+    footer { text-align: center; color: #86868b; font-size: 13px; padding: 40px 20px 60px; }
   </style>
 </head>
 <body>
 
-<!-- ═══ 公告跑马灯 ═══ -->
-<div class="announcement-bar">
-  <div class="announcement-track">
-    <span class="announcement-item">📢 <strong>通告：</strong>新用户扫码绑定即注册，老用户随时扫码自动续用可查询历史消息</span>
-    <span class="announcement-sep">•</span>
-    <span class="announcement-item">⏱️ <strong>通告：</strong>经过项目团队的实践，微信 ClawBot 通道需要双向聊天模式才能一直接收到消息。如果只收消息、不回复，可能连续快速接收几条消息以后就被腾讯后台显示 50001 错并显示通道异常；此时微信端随意回复一个字即自动续期能继续接收，平台也会为用户自动补发漏掉的最近一条消息，否则后续消息将完全无法接收。如果过了一两天你还没有回复一次，就只能重新扫码才能再次激活并重用通道。这是使用微信作为接收消息的现状，即使连的是 OpenClaw 也完全一样——只收不发，结局都是很快断联，使用过的用户都知道。未来如果腾讯有所改进，我们会及时跟进。<a href="intro#clawbot-limitation" style="color:#b06500;">详见说明 →</a></span>
-    <span class="announcement-sep">•</span>
-    <!-- 重复一遍保证循环平滑 -->
-    <span class="announcement-item">📢 <strong>通告：</strong>新用户扫码绑定即注册，老用户随时扫码自动续用可查询历史消息</span>
-    <span class="announcement-sep">•</span>
-    <span class="announcement-item">⏱️ <strong>通告：</strong>经过项目团队的实践，微信 ClawBot 通道需要双向聊天模式才能一直接收到消息。如果只收消息、不回复，可能连续快速接收几条消息以后就被腾讯后台显示 50001 错并显示通道异常；此时微信端随意回复一个字即自动续期能继续接收，平台也会为用户自动补发漏掉的最近一条消息，否则后续消息将完全无法接收。如果过了一两天你还没有回复一次，就只能重新扫码才能再次激活并重用通道。这是使用微信作为接收消息的现状，即使连的是 OpenClaw 也完全一样——只收不发，结局都是很快断联，使用过的用户都知道。未来如果腾讯有所改进，我们会及时跟进。<a href="intro#clawbot-limitation" style="color:#b06500;">详见说明 →</a></span>
-    <span class="announcement-sep">•</span>
+<!-- ══ HERO ══════════════════════════════════════════════════════════ -->
+<header>
+  <div class="logo-row">BOTTALK</div>
+  <h1>HTTP 一行调用<br><span class="gr">消息直达你的手机</span></h1>
+  <p class="sub">免费开源的消息推送服务。对标 Server酱——完全免费，支持自部署，多语言 SDK，现支持<strong>飞书</strong>与<strong>微信</strong>两种通道。</p>
+  <div class="cta-row">
+    <a class="btn btn-primary" href="https://feishu.bot-talk.com/app">免费开始使用 →</a>
+    <a class="btn btn-secondary" href="https://github.com/bot-talk-k/BotTalk" target="_blank">GitHub 开源</a>
   </div>
-</div>
-<style>
-  .announcement-bar {
-    position: fixed; top: 0; left: 0; right: 0;
-    z-index: 1001;
-    background: linear-gradient(90deg, #fff8e1 0%, #fff3c4 100%);
-    border-bottom: 1px solid rgba(255,149,0,0.25);
-    overflow: hidden;
-    height: 36px;
-    box-sizing: border-box;
-  }
-  .announcement-track {
-    display: inline-block;
-    white-space: nowrap;
-    padding-left: 100%;
-    line-height: 36px;
-    font-size: 13px;
-    color: #7a5a00;
-    animation: announcement-scroll 45s linear infinite;
-    will-change: transform;
-  }
-  .announcement-track:hover { animation-play-state: paused; }
-  .announcement-item { padding: 0 8px; }
-  .announcement-item strong { color: #b06500; }
-  .announcement-sep { color: rgba(122,90,0,0.4); padding: 0 4px; }
-  @keyframes announcement-scroll {
-    0% { transform: translateX(0); }
-    100% { transform: translateX(-100%); }
-  }
-  @media (max-width: 640px) {
-    .announcement-bar { height: 32px; }
-    .announcement-track { animation-duration: 50s; font-size: 12px; line-height: 32px; }
-  }
-</style>
+</header>
 
-<!-- ── Navbar ──────────────────────────────────────────────────── -->
-<nav class="navbar">
-  <div class="navbar-inner">
-    <a href="app?from=intro" class="nav-logo">BotTalk</a>
-    <div class="nav-links">
-      <a href="#what" class="active">介绍</a>
-      <a href="#quick-start">快速开始</a>
-      <a href="#api">API 调用</a>
-      <a href="#sdk">SDK</a>
-      <a href="#compare">对比</a>
-    </div>
-    <div class="nav-right">
-      <a href="app?from=intro" class="btn-start">开始使用</a>
-    </div>
+<div class="wrap">
+
+  <div class="pills">
+    <span class="pill">✦ 完全免费</span>
+    <span class="pill">✦ MIT 开源，支持自部署</span>
+    <span class="pill">✦ Python / Node.js / Go SDK</span>
+    <span class="pill">✦ Admin 面板</span>
+    <span class="pill">✦ 比 Server酱 无 5 条/天上限</span>
   </div>
-</nav>
 
-<div class="main">
-
-<!-- ── Hero ─────────────────────────────────────────────────────── -->
-<section class="hero">
-  <div class="container">
-    <h1>基于个人微信的<span>消息推送</span>服务</h1>
-    <p>BotTalk 通过微信ClawBot 机器人通道推送消息，无需企业微信、无需公众号。扫码即绑定，3 行代码推送到微信。</p>
-    <div class="hero-actions">
-      <a href="app?from=intro" class="primary">免费开始使用</a>
-      <a href="https://github.com/bot-talk-k/BotTalk" class="secondary">GitHub</a>
-    </div>
-  </div>
-</section>
-
-<!-- ── What is bottalk ───────────────────────────────────────── -->
-<section class="section" id="what">
-  <div class="container">
-    <h2>BotTalk 是什么</h2>
-    <p>「BotTalk」是一款基于<strong>微信ClawBot 机器人通道</strong>的消息推送服务。它让你的服务器、脚本、IoT 设备可以直接把消息推送到你的<strong>个人微信</strong>。</p>
-    <p>简单说来，就是从服务器、路由器等设备上推消息到手机的工具。不需要企业微信，不需要关注公众号，<strong>扫一次码就永久绑定</strong>。</p>
-    <p>和 Server酱 不同的是，BotTalk 走的是<strong>微信机器人通道</strong>——消息直接由 微信ClawBot 发送到你的微信私聊，体验就像一个朋友给你发消息。而且 BotTalk 完全<strong>开源</strong>（MIT 协议），你可以自己部署，也可以直接用我们提供的<strong>免费托管服务</strong>。</p>
-
-    <p style="margin-top: 24px; font-weight: 600;">开通并使用上它，只需要一分钟：</p>
-
+  <!-- ══ 三步上手 ══════════════════════════════════════════════════ -->
+  <section>
+    <div class="sec-title">三步开始推送</div>
+    <div class="sec-sub">扫码绑定，获取 SendKey，一行 HTTP 发消息。</div>
     <div class="steps">
       <div class="step">
-        <div class="step-num">1</div>
-        <h3>微信扫码登入</h3>
-        <p>扫码即注册，无需填写任何信息</p>
+        <div class="num">1</div>
+        <h3>选通道，扫码绑定</h3>
+        <p>用飞书或微信扫码，30 秒完成注册，自动生成专属 SendKey。</p>
       </div>
       <div class="step">
-        <div class="step-num">2</div>
+        <div class="num">2</div>
         <h3>获取 SendKey</h3>
-        <p>登录后自动生成，复制即可使用</p>
+        <p>登录后控制台首页即可看到，复制即用，无需任何配置。</p>
       </div>
       <div class="step">
-        <div class="step-num">3</div>
-        <h3>发消息</h3>
-        <p>一个 HTTP 请求即可推送到微信</p>
+        <div class="num">3</div>
+        <h3>一行 HTTP 发消息</h3>
+        <p>用任意语言 GET 或 POST，消息秒达。兼容 Server酱 API 格式。</p>
       </div>
     </div>
+  </section>
 
-    <p>发消息有两种方式：</p>
-    <ol style="margin: 12px 0 12px 20px; color: #424245;">
-      <li>在支持 Server酱 的软件界面或配置文件中，将 API 地址替换为 BotTalk 的地址即可使用</li>
-      <li>你也可以直接访问推送 URL 发送请求，就可以收到消息啦</li>
-    </ol>
-
-    <div class="tip-box">
-      <span class="icon">💡</span>
-      <span>由于微信 ClawBot 当前策略是同一微信号只保持一个活跃通道，绑定新应用会自动失效之前的连接。如果发现消息未收到，只需重新扫码即可恢复，秒级完成。</span>
-    </div>
-
-    <div class="tip-box" style="background:rgba(255,59,48,0.06);border-color:rgba(255,59,48,0.3);">
-      <span class="icon">📋</span>
-      <span><strong>微信官方限制（非 BotTalk bug）：</strong>微信 ClawBot 是腾讯设计的智能体聊天通道。实测中：<strong>连续收 7-10 条消息不回必触发限流</strong>，回一字即可恢复——哪怕隔 10 天再回复也照样恢复，无需重扫。建议养成习惯——<strong>看到推送随手回一字</strong>。<a href="#clawbot-limitation" style="color:#0071e3;">查看详细说明 →</a></span>
-    </div>
-
-    <div class="tip-box">
-      <span class="icon">⚠️</span>
-      <span>将下方 <code>&lt;SENDKEY&gt;</code> 替换为你在 <a href="./#keyPage" style="color:#0071e3;">Key&API 页面</a> 获取的 SendKey，粘贴到浏览器地址栏就可以测试推送消息：</span>
-    </div>
-
-    <div class="url-box">
-      https://bot-talk.com/<span class="key-highlight">&lt;SENDKEY&gt;</span>.send?<span class="param">title</span>=你好&<span class="param">desp</span>=这是消息内容
-    </div>
-  </div>
-</section>
-
-<!-- ── ClawBot 24h 官方限制说明 ──────────────────────────────── -->
-<section class="section" id="clawbot-limitation" style="background:#f5f5f7;">
-  <div class="container" style="max-width:680px;">
-    <h2>微信 ClawBot 24 小时互动限制</h2>
-    <p style="color:#6e6e73;margin-bottom:24px;">官方文档说明 + BotTalk 的应对方案</p>
-
-    <div style="background:#fff;border-radius:16px;padding:24px;margin-bottom:20px;box-shadow:0 2px 12px rgba(0,0,0,0.06);">
-      <h3 style="font-size:17px;font-weight:600;margin-bottom:12px;">微信官方怎么说的</h3>
-      <div style="background:rgba(255,59,48,0.05);border-left:4px solid #ff3b30;padding:16px 20px;border-radius:0 12px 12px 0;font-size:16px;font-weight:500;margin-bottom:16px;">
-        「当你发消息后，微信 ClawBot 仅接收 OpenClaw 24 小时内的回复。」
+  <!-- ══ 代码示例 ══════════════════════════════════════════════════ -->
+  <section>
+    <div class="sec-title">就这么简单</div>
+    <div class="sec-sub">兼容 Server酱风格接口，切换零成本。</div>
+    <div class="code-wrap">
+      <div class="code-tabs">
+        <button class="ctab active" onclick="showTab('curl')">cURL</button>
+        <button class="ctab" onclick="showTab('python')">Python</button>
+        <button class="ctab" onclick="showTab('node')">Node.js</button>
       </div>
-      <p style="color:#6e6e73;font-size:14px;margin-bottom:12px;">以下为微信 ClawBot 功能介绍页面的截图：</p>
-      <img src="img/clawbot-24h-doc.png" alt="微信 ClawBot 功能介绍截图" style="width:100%;border-radius:12px;border:1px solid #e5e5ea;">
+      <pre id="tab-curl"><span class="c"># GET 风格 (Server酱兼容)</span>
+<span class="k">curl</span> <span class="s">"https://feishu.bot-talk.com/&lt;SendKey&gt;.send?title=部署完成&amp;desp=服务已上线"</span>
+
+<span class="c"># POST 风格</span>
+<span class="k">curl</span> -X POST <span class="s">"https://feishu.bot-talk.com/&lt;SendKey&gt;.send"</span> \
+  -d <span class="s">"title=部署完成&amp;desp=服务已上线&amp;channel=all"</span></pre>
+      <pre id="tab-python" style="display:none"><span class="k">import</span> requests
+
+requests.<span class="n">get</span>(<span class="s">"https://feishu.bot-talk.com/&lt;SendKey&gt;.send"</span>, params={
+    <span class="s">"title"</span>: <span class="s">"部署完成"</span>,
+    <span class="s">"desp"</span>:  <span class="s">"服务已上线"</span>,
+})</pre>
+      <pre id="tab-node" style="display:none"><span class="c">// Node.js (fetch)</span>
+<span class="k">await</span> fetch(<span class="s">`https://feishu.bot-talk.com/${sendKey}.send?title=部署完成&amp;desp=服务已上线`</span>)</pre>
     </div>
+  </section>
 
-    <div style="background:#fff;border-radius:16px;padding:24px;margin-bottom:20px;box-shadow:0 2px 12px rgba(0,0,0,0.06);">
-      <h3 style="font-size:17px;font-weight:600;margin-bottom:12px;">翻译成人话</h3>
-      <p>简单说来，你通过 BotTalk 收消息时，底层用的是微信 ClawBot 通道，也许微信开放的这个通道是提供给你与 OpenClaw 对话的，所以如果你要保持它畅通、能稳定作为消息接收渠道，就要让它看起来像是聊天。</p>
-      <p>我们的测试表明：<strong>连续收到 10 条消息（最极端快速连续 6 条）如果都不回复，则再发送消息时会被微信限流</strong>。此时只要在微信里回复一下立刻恢复——而且实测<strong>哪怕隔了 10 天再回复，通道照样恢复，无需重新扫码</strong>。也就是说本质上只有"限流"这一种状态，没有"时间到了就解绑"这回事；除非通道彻底失效（极少数情况，页面会有明确提示），否则永远不用重扫。</p>
-      <p>所以如果你要好好使用它做你的消息接收通道，<strong>安全稳定的做法就是收到消息别超过 7-8 条就随便在微信里面胡乱发一个字</strong>，我们平台必然立刻给你回复一条消息——这就表明通道又可以连发 7-8 条。</p>
-      <p style="font-size:18px;font-weight:600;margin:12px 0;">只要你假装在和它对话，它就永远不会失联。</p>
-      <p style="color:#6e6e73;font-size:14px;">我们自己通常是收到消息，有事没事就回一条，这样我们从未失联过。</p>
-      <p>这不是 BotTalk 的 bug，是微信 ClawBot 协议的设计限制。</p>
+  <!-- ══ 选通道 ══════════════════════════════════════════════════ -->
+  <section>
+    <div class="sec-title">选择你的推送通道</div>
+    <div class="sec-sub">两个通道，同一套 API。飞书无平台限制，推荐新用户首选；微信通道已稳定运行，老用户可继续沿用。</div>
+    <div class="channels">
+
+      <!-- 飞书(推荐) -->
+      <div class="ch rec">
+        <span class="tag tag-rec">推荐 · 新通道</span>
+        <h2>🪶 飞书通道</h2>
+        <div class="tagline">个人扫码即用，真正的「消息传送通道」</div>
+        <ul>
+          <li class="li-ok">飞书 App 扫码即创建，<strong>无需任何后台配置</strong></li>
+          <li class="li-ok">一个飞书账户可挂<strong>任意多个</strong>通道，多端同时用</li>
+          <li class="li-ok"><strong>无接收条数限制</strong>，连发不限流</li>
+          <li class="li-ok"><strong>无需回复</strong>，不用假装跟机器人聊天</li>
+        </ul>
+        <a class="btn btn-primary" href="https://feishu.bot-talk.com/app">用飞书通道开始 →</a>
+      </div>
+
+      <!-- 微信(稳定运行) -->
+      <div class="ch">
+        <span class="tag tag-old">稳定通道</span>
+        <h2>💬 微信通道</h2>
+        <div class="tagline">微信 ClawBot，消息直达微信私聊</div>
+        <ul>
+          <li class="li-ok">已有数百用户在用，稳定运行</li>
+          <li class="li-ok">消息直达微信，无需安装额外 App</li>
+          <li class="li-bad">微信平台限制：连发约 10 条不回复即停收，回复解锁</li>
+          <li class="li-bad">ClawBot <strong>只能绑一端</strong>，与其它工具互斥</li>
+        </ul>
+        <a class="btn btn-secondary" href="/app">前往微信通道 →</a>
+      </div>
+
     </div>
+  </section>
 
-    <div style="background:#fff;border-radius:16px;padding:24px;margin-bottom:20px;box-shadow:0 2px 12px rgba(0,0,0,0.06);">
-      <h3 style="font-size:17px;font-weight:600;margin-bottom:12px;">BotTalk 为你做了什么</h3>
-      <ul style="padding-left:1.2em;">
-        <li style="margin-bottom:6px;"><strong>回复即恢复</strong> — 被限流后在微信回 Bot 一字立刻恢复，哪怕隔 10 天也行，几乎永远不用重扫</li>
-        <li style="margin-bottom:6px;"><strong>秒回确认</strong> — 你回复后立刻收到确认，证明通道已通</li>
-        <li style="margin-bottom:6px;"><strong>失败消息自动补发</strong> — 通道恢复后自动补发最近漏掉的一条，标注原定推送时间</li>
-        <li style="margin-bottom:6px;"><strong>极端情况才需重扫</strong> — 仅当通道彻底失效（罕见）才需访问 <a href="/app" style="color:#0071e3;">bot-talk.com/app</a> 重扫，SendKey 和历史不变</li>
-      </ul>
-    </div>
-
-    <div style="background:rgba(52,199,89,0.08);border-radius:16px;padding:24px;box-shadow:0 2px 12px rgba(0,0,0,0.06);">
-      <h3 style="font-size:17px;font-weight:600;margin-bottom:8px;">建议养成的习惯</h3>
-      <p style="font-size:16px;"><strong>每次看到推送，顺手回"1"</strong><br>
-      就像微信群里回"收到"一样，一秒钟的事。<br>
-      最稳妥的做法是收到 4-5 条就回一字，避免被腾讯限流。</p>
-    </div>
-  </div>
-</section>
-
-<!-- ── Compare ─────────────────────────────────────────────────── -->
-<section class="section" id="compare">
-  <div class="container">
-    <h2>BotTalk vs Server酱</h2>
-
-    <table class="compare-table">
-      <thead>
-        <tr>
-          <th></th>
-          <th>BotTalk</th>
-          <th>Server酱</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td>开源</td>
-          <td><span class="tag-open">MIT 开源</span></td>
-          <td><span class="tag-closed">闭源</span></td>
-        </tr>
-        <tr>
-          <td>价格</td>
-          <td>完全免费</td>
-          <td>免费版每天 5 条限制</td>
-        </tr>
-        <tr>
-          <td>自部署</td>
-          <td>✅ Docker 一键部署</td>
-          <td>❌ 不支持</td>
-        </tr>
-        <tr>
-          <td>API 兼容</td>
-          <td>兼容 Server酱格式</td>
-          <td>—</td>
-        </tr>
-        <tr>
-          <td>推送通道</td>
-          <td>微信机器人（微信ClawBot 私聊直达）</td>
-          <td>企业微信 / 测试号等（需额外配置）</td>
-        </tr>
-        <tr>
-          <td>绑定方式</td>
-          <td>扫码即绑定，无需关注公众号</td>
-          <td>需要关注公众号或加入企业</td>
-        </tr>
-        <tr>
-          <td>多语言 SDK</td>
-          <td>Python / Node.js / Go</td>
-          <td>官方仅提供 API</td>
-        </tr>
-        <tr>
-          <td>管理后台</td>
-          <td>✅ 内置 Admin 面板</td>
-          <td>✅ Web 控制台</td>
-        </tr>
-        <tr>
-          <td>数据隐私</td>
-          <td>自部署，数据完全自控</td>
-          <td>数据存储在第三方</td>
-        </tr>
-      </tbody>
+  <!-- ══ 通道对比表 ══════════════════════════════════════════════ -->
+  <section>
+    <div class="sec-title">飞书 vs 微信，一眼看懂</div>
+    <div class="sec-sub">同一套 SendKey API，两个通道都能用。不同之处在于微信有平台侧的使用约束。</div>
+    <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
+    <table style="min-width:480px;">
+      <tr><th>能力</th><th>微信 ClawBot</th><th class="hl">飞书（推荐）</th></tr>
+      <tr><td>接收条数限制</td><td><span class="n">约 10 条后停收</span></td><td><span class="y">无限制</span></td></tr>
+      <tr><td>同账户多端绑定</td><td><span class="n">只能绑一端</span></td><td><span class="y">任意多端同时用</span></td></tr>
+      <tr><td>一个账户挂多通道</td><td><span class="n">一对一</span></td><td><span class="y">任意多个</span></td></tr>
+      <tr><td>需要回复「假装聊天」</td><td><span class="n">是（不回复=断流）</span></td><td><span class="y">否</span></td></tr>
+      <tr><td>断流恢复</td><td class="dim">回复一次即恢复</td><td><span class="y">几乎不会断</span></td></tr>
     </table>
-  </div>
-</section>
-
-<!-- ── Diagram ──────────────────────────────────────────────────── -->
-<section class="section">
-  <div class="container">
-    <h2>工作原理</h2>
-    <p>BotTalk 使用<strong>微信ClawBot 机器人</strong>作为消息通道。你的消息经 BotTalk 服务转发给微信ClawBot，再由机器人直接推送到你的微信私聊，流程如下：</p>
-
-    <div class="diagram">
-      <svg width="680" height="340" viewBox="0 0 680 340" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <!-- Actors -->
-        <rect x="40" y="20" width="120" height="44" rx="8" fill="#f5f5f7" stroke="#d2d2d7" stroke-width="1"/>
-        <text x="100" y="48" text-anchor="middle" font-size="15" font-weight="600" fill="#1d1d1f">用户</text>
-
-        <rect x="280" y="20" width="120" height="44" rx="8" fill="#0071e3" stroke="none"/>
-        <text x="340" y="48" text-anchor="middle" font-size="15" font-weight="600" fill="#fff">BotTalk</text>
-
-        <rect x="520" y="20" width="120" height="44" rx="8" fill="#f5f5f7" stroke="#d2d2d7" stroke-width="1"/>
-        <text x="580" y="48" text-anchor="middle" font-size="15" font-weight="600" fill="#1d1d1f">微信ClawBot</text>
-
-        <!-- Lifelines -->
-        <line x1="100" y1="64" x2="100" y2="280" stroke="#d2d2d7" stroke-width="1" stroke-dasharray="4 3"/>
-        <line x1="340" y1="64" x2="340" y2="280" stroke="#d2d2d7" stroke-width="1" stroke-dasharray="4 3"/>
-        <line x1="580" y1="64" x2="580" y2="280" stroke="#d2d2d7" stroke-width="1" stroke-dasharray="4 3"/>
-
-        <!-- Step 1: Scan QR -->
-        <line x1="100" y1="100" x2="330" y2="100" stroke="#86868b" stroke-width="1.5" stroke-dasharray="6 3"/>
-        <polygon points="330,96 340,100 330,104" fill="#86868b"/>
-        <text x="215" y="92" text-anchor="middle" font-size="12" fill="#86868b">扫码登录（一次性配置）</text>
-
-        <!-- Step 2: Get Key -->
-        <line x1="340" y1="140" x2="110" y2="140" stroke="#86868b" stroke-width="1.5" stroke-dasharray="6 3"/>
-        <polygon points="110,136 100,140 110,144" fill="#86868b"/>
-        <text x="225" y="132" text-anchor="middle" font-size="12" fill="#86868b">返回 SendKey（一次性配置）</text>
-
-        <!-- Step 3: Send message -->
-        <line x1="100" y1="185" x2="330" y2="185" stroke="#0071e3" stroke-width="2"/>
-        <polygon points="330,181 340,185 330,189" fill="#0071e3"/>
-        <text x="215" y="177" text-anchor="middle" font-size="13" font-weight="600" fill="#0071e3">发送消息（HTTP）</text>
-
-        <!-- Step 4: Forward -->
-        <line x1="350" y1="220" x2="570" y2="220" stroke="#34c759" stroke-width="2"/>
-        <polygon points="570,216 580,220 570,224" fill="#34c759"/>
-        <text x="460" y="212" text-anchor="middle" font-size="13" font-weight="500" fill="#248a3d">转发到微信</text>
-
-        <!-- Step 5: Received -->
-        <line x1="580" y1="255" x2="110" y2="255" stroke="#34c759" stroke-width="1.5"/>
-        <polygon points="110,251 100,255 110,259" fill="#34c759"/>
-        <text x="345" y="247" text-anchor="middle" font-size="13" font-weight="500" fill="#248a3d">微信收到消息 ✓</text>
-
-        <!-- Bottom actors -->
-        <rect x="40" y="288" width="120" height="44" rx="8" fill="#f5f5f7" stroke="#d2d2d7" stroke-width="1"/>
-        <text x="100" y="316" text-anchor="middle" font-size="15" font-weight="600" fill="#1d1d1f">用户</text>
-
-        <rect x="280" y="288" width="120" height="44" rx="8" fill="#0071e3" stroke="none"/>
-        <text x="340" y="316" text-anchor="middle" font-size="15" font-weight="600" fill="#fff">BotTalk</text>
-
-        <rect x="520" y="288" width="120" height="44" rx="8" fill="#f5f5f7" stroke="#d2d2d7" stroke-width="1"/>
-        <text x="580" y="316" text-anchor="middle" font-size="15" font-weight="600" fill="#1d1d1f">微信ClawBot</text>
-      </svg>
     </div>
-  </div>
-</section>
+  </section>
 
-<!-- ── Quick Start ──────────────────────────────────────────────── -->
-<section class="section" id="quick-start">
-  <div class="container">
-    <h2>快速开始</h2>
-
-    <p>最简单的方式 —— <strong>浏览器地址栏直接访问</strong>：</p>
-
-    <p><span class="method-badge method-get">GET</span> 仅发送标题：</p>
-    <div class="url-box">
-      https://bot-talk.com/<span class="key-highlight">&lt;SENDKEY&gt;</span>.send?<span class="param">title</span>=服务器挂了
-    </div>
-
-    <p><span class="method-badge method-get">GET</span> 发送标题 + 内容：</p>
-    <div class="url-box">
-      https://bot-talk.com/<span class="key-highlight">&lt;SENDKEY&gt;</span>.send?<span class="param">title</span>=服务器挂了&<span class="param">desp</span>=CPU 占用 100%，请立即处理
-    </div>
-
-    <p style="margin-top: 24px;"><span class="method-badge method-post">POST</span> 发送 JSON（推荐，内容不限长度）：</p>
-    <div class="code-block">
-      <span class="lang-tag">curl</span>
-<span class="comment"># POST JSON 请求</span>
-curl -X POST https://bot-talk.com/<span class="string">&lt;SENDKEY&gt;</span>.send \
-  -H <span class="string">"Content-Type: application/json"</span> \
-  -d <span class="string">'{"title": "部署完成", "desp": "v2.1.0 已成功上线"}'</span>
-    </div>
-  </div>
-</section>
-
-<!-- ── API Reference ───────────────────────────────────────────── -->
-<section class="section" id="api">
-  <div class="container">
-    <h2>API 调用说明</h2>
-
-    <p>BotTalk 提供两种风格的推送接口，兼容 Server酱 格式：</p>
-
-    <h3 style="margin: 24px 0 12px; font-size: 17px;">风格一：Server酱兼容</h3>
-    <div class="code-block">
-      <span class="lang-tag">HTTP</span>
-<span class="keyword">GET</span>/<span class="keyword">POST</span>  https://bot-talk.com/<span class="string">{sendkey}</span>.send
-
-<span class="comment">参数（Query 或 JSON Body）：</span>
-  <span class="param">title</span>    <span class="comment">— 消息标题（与 desp 不能同时为空）</span>
-  <span class="param">desp</span>     <span class="comment">— 消息内容（可选）</span>
-  <span class="param">channel</span>  <span class="comment">— 目标通道（可选，多通道时指定）</span>
-    </div>
-
-    <h3 style="margin: 24px 0 12px; font-size: 17px;">风格二：通用推送</h3>
-    <div class="code-block">
-      <span class="lang-tag">HTTP</span>
-<span class="keyword">GET</span>/<span class="keyword">POST</span>  https://bot-talk.com/notify
-
-<span class="comment">认证方式（二选一）：</span>
-  ?<span class="param">key</span>=SENDKEY                       <span class="comment">— Query 参数</span>
-  Authorization: Bearer SENDKEY        <span class="comment">— Header</span>
-
-<span class="comment">参数：</span>
-  <span class="param">title</span>   <span class="comment">— 消息标题</span>
-  <span class="param">msg</span>     <span class="comment">— 消息内容（也接受 desp / message）</span>
-    </div>
-
-    <h3 style="margin: 24px 0 12px; font-size: 17px;">响应格式</h3>
-    <div class="code-block">
-      <span class="lang-tag">JSON</span>
-<span class="comment">// 成功</span>
-{ <span class="string">"code"</span>: 0, <span class="string">"message"</span>: <span class="string">"success"</span>, <span class="string">"data"</span>: { ... } }
-
-<span class="comment">// 失败</span>
-{ <span class="string">"code"</span>: 40001, <span class="string">"message"</span>: <span class="string">"Invalid SendKey"</span> }
-
-<span class="comment">错误码：</span>
-  40001  <span class="comment">— SendKey 无效</span>
-  40002  <span class="comment">— 没有可用的推送通道</span>
-  40003  <span class="comment">— 消息内容为空</span>
-  42901  <span class="comment">— 超过频率限制</span>
-  50001  <span class="comment">— 推送失败（响应自带 data.reason + data.hint，可直接显示给终端用户）</span>
-
-<span class="comment">// 50001 自救（最常见 ret:-2 场景）：</span>
-{
-  <span class="string">"code"</span>: 50001,
-  <span class="string">"data"</span>: {
-    <span class="string">"reason"</span>: <span class="string">"context_expired"</span>,
-    <span class="string">"hint"</span>: <span class="string">"让收信人在微信里向 ClawBot 回复任意一条消息，1-2 分钟内自动补发"</span>
-  }
-}
-    </div>
-  </div>
-</section>
-
-<!-- ── SDK ──────────────────────────────────────────────────────── -->
-<section class="section" id="sdk">
-  <div class="container">
-    <h2>多语言 SDK</h2>
-    <p>所有可以发起 HTTP 请求的语言和工具都可以调用。我们还提供官方 SDK，让集成更简单：</p>
-
-    <div class="sdk-grid">
-      <div class="sdk-card">
-        <h4>🐍 Python</h4>
-        <p>零依赖，支持 Python 3.8+</p>
-        <code>pip install bottalk</code>
+  <!-- ══ 产品优势 ══════════════════════════════════════════════ -->
+  <section>
+    <div class="sec-title">为什么选 BotTalk</div>
+    <div class="sec-sub">对标 Server酱，全面免费，无使用上限。</div>
+    <div class="feat-grid">
+      <div class="feat">
+        <div class="icon">🆓</div>
+        <h4>完全免费</h4>
+        <p>无每日条数上限（Server酱 免费版限 5 条/天），托管服务永久免费。</p>
       </div>
-      <div class="sdk-card">
-        <h4>📦 Node.js</h4>
-        <p>TypeScript，零依赖</p>
-        <code>npm install bottalk</code>
+      <div class="feat">
+        <div class="icon">📦</div>
+        <h4>开源自部署</h4>
+        <p>MIT 协议，Docker 一键部署，数据完全自控。</p>
       </div>
-      <div class="sdk-card">
-        <h4>🔷 Go</h4>
-        <p>标准库，Go 1.21+</p>
-        <code>go get github.com/bot-talk-k/BotTalk-go</code>
+      <div class="feat">
+        <div class="icon">🔧</div>
+        <h4>多语言 SDK</h4>
+        <p>Python / Node.js / Go 官方 SDK，兼容 Server酱 API 格式，迁移零成本。</p>
+      </div>
+      <div class="feat">
+        <div class="icon">📊</div>
+        <h4>Admin 面板</h4>
+        <p>推送历史、通道管理、多通道分发，内置完整后台。</p>
       </div>
     </div>
+  </section>
 
-    <h3 style="margin: 24px 0 12px; font-size: 17px;">调用示例</h3>
+</div><!-- /wrap -->
 
-    <p style="font-weight: 600; font-size: 16px; margin-bottom: 8px;">最简单 — 一行搞定，无需任何 SDK，粘贴到<strong style="color: #0071e3;">浏览器地址栏</strong>即可：</p>
-    <div class="code-block" style="border: 2px solid #0071e3; background: #0a1628;">
-      <span class="lang-tag" style="color: #0071e3; font-size: 13px;">浏览器 / curl</span>
-https://bot-talk.com/<span class="string">YOUR_SENDKEY</span>.send?title=Hello
-    </div>
+<footer>BotTalk · 免费开源消息推送 · MIT 协议 · <a href="https://github.com/bot-talk-k/BotTalk" target="_blank" style="color:#0071e3;">GitHub</a></footer>
 
-    <p style="color: #6e6e73; margin: 24px 0 12px;">当然，也提供官方 SDK：</p>
-
-    <div class="code-block">
-      <span class="lang-tag">Python</span>
-<span class="keyword">from</span> bottalk <span class="keyword">import</span> BotTalk
-
-os = BotTalk(<span class="string">"YOUR_SENDKEY"</span>)
-os.send(<span class="string">"服务器挂了！"</span>, desp=<span class="string">"CPU 100%"</span>)
-    </div>
-
-    <div class="code-block">
-      <span class="lang-tag">Node.js</span>
-<span class="keyword">import</span> { BotTalk } <span class="keyword">from</span> <span class="string">'bottalk'</span>;
-
-<span class="keyword">const</span> os = <span class="keyword">new</span> <span class="func">BotTalk</span>(<span class="string">'YOUR_SENDKEY'</span>);
-<span class="keyword">await</span> os.<span class="func">send</span>(<span class="string">'Deploy done'</span>, { desp: <span class="string">'v2.1.0'</span> });
-    </div>
-
-    <div class="code-block">
-      <span class="lang-tag">Go</span>
-client := bottalk.<span class="func">New</span>(<span class="string">"YOUR_SENDKEY"</span>)
-client.<span class="func">Send</span>(<span class="string">"Hello from Go!"</span>)
-    </div>
-  </div>
-</section>
-
-
-<!-- ── Self Deploy ─────────────────────────────────────────────── -->
-<section class="section">
-  <div class="container">
-    <h2>自部署</h2>
-    <p>不想用托管服务？4 行命令部署你自己的 BotTalk 实例：</p>
-
-    <div class="code-block">
-      <span class="lang-tag">Shell</span>
-git clone https://github.com/bot-talk-k/BotTalk.git
-<span class="keyword">cd</span> bottalk
-cp .env.example .env   <span class="comment"># 编辑 BASE_URL 为你的域名</span>
-docker compose up -d
-    </div>
-
-    <p class="muted">详细部署文档请参考 <a href="docs/self-deploy-guide.md" style="color:#0071e3;">自部署指南</a>。</p>
-  </div>
-</section>
-
-<!-- ── CTA ──────────────────────────────────────────────────────── -->
-<section class="hero" style="padding: 60px 0 80px;">
-  <div class="container">
-    <h2 style="font-size: 32px; margin-bottom: 12px;">开始使用 BotTalk</h2>
-    <p style="font-size: 16px; color: #6e6e73; margin-bottom: 28px;">扫码即注册，免费，无限制。</p>
-    <div class="hero-actions">
-      <a href="app?from=intro" class="primary">立即开始</a>
-    </div>
-  </div>
-</section>
-
-<!-- ── Footer ──────────────────────────────────────────────────── -->
-<footer class="footer">
-  <div class="container">
-    <p>BotTalk — 开源微信推送服务 · <a href="https://github.com/bot-talk-k/BotTalk">GitHub</a> · MIT License</p>
-  </div>
-</footer>
-
-</div>
 <script>
-try {
-  var base = window.location.pathname.replace(/\/[^/]*$/, '');
-  var data = JSON.stringify({ page: 'intro' });
-  if (navigator.sendBeacon) {
-    navigator.sendBeacon(base + '/api/track', new Blob([data], { type: 'application/json' }));
-  } else {
-    fetch(base + '/api/track', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: data }).catch(function(){});
+  function showTab(id) {
+    ['curl','python','node'].forEach(t => {
+      document.getElementById('tab-'+t).style.display = t===id ? '' : 'none';
+      document.querySelectorAll('.ctab').forEach((b,i) => b.classList.toggle('active', ['curl','python','node'][i]===id));
+    });
   }
-} catch(e) {}
 </script>
 </body>
 </html>
