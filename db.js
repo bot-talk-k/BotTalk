@@ -601,6 +601,25 @@ if (!hasRun(28)) {
   markRun(28);
 }
 
+// Migration 29: 全量止血 — 把所有"显然失联但 disconnected_at 仍 null"的存量 channel
+// 一并标 disconnected。X5 之前只标 consecutive_neg2_count>=3 的(migration 28),漏了
+// send_disabled=1 / status=inactive 的 zombie(channel 55 send_disabled=1 但仍被真推 7889 次)。
+if (!hasRun(29)) {
+  try {
+    const r = db.prepare(`
+      UPDATE channels SET disconnected_at = CURRENT_TIMESTAMP
+      WHERE disconnected_at IS NULL
+        AND (send_disabled = 1 OR status = 'inactive' OR COALESCE(consecutive_neg2_count, 0) >= 3)
+    `).run();
+    if (r.changes > 0) {
+      console.log(`📋 migration 29: ${r.changes} 个 zombie channel 标 disconnected(send_disabled/inactive/neg2 高)`);
+    }
+  } catch (e) {
+    console.error('migration 29 error:', e.message);
+  }
+  markRun(29);
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────
 
 function generateSendKey() {

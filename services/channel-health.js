@@ -57,8 +57,9 @@ async function classifyAndMarkRet14(channelId, botToken) {
     try {
       const cls = await classifyRet14(channelId, botToken);
       if (cls.trueSessionDeath) {
-        db.prepare("UPDATE channels SET status = 'inactive' WHERE id = ?").run(channelId);
-        console.error(`⚠️ 通道 ${channelId} session 真失效（getUpdates 也 ret:-14），标记 inactive`);
+        // X5: status=inactive 时同步设 disconnected_at,让 handlePush fail-fast 检查到
+        db.prepare("UPDATE channels SET status = 'inactive', disconnected_at = COALESCE(disconnected_at, CURRENT_TIMESTAMP) WHERE id = ?").run(channelId);
+        console.error(`⚠️ 通道 ${channelId} session 真失效（getUpdates 也 ret:-14），标记 inactive + disconnected`);
         return { tokenInvalid: true, sendDisabled: false };
       }
       if (cls.sendDisabled) {
@@ -69,7 +70,7 @@ async function classifyAndMarkRet14(channelId, botToken) {
       return { tokenInvalid: false, sendDisabled: false };
     } catch (e) {
       console.error('classifyAndMarkRet14 异常，保守当 session 死:', e.message);
-      db.prepare("UPDATE channels SET status = 'inactive' WHERE id = ?").run(channelId);
+      db.prepare("UPDATE channels SET status = 'inactive', disconnected_at = COALESCE(disconnected_at, CURRENT_TIMESTAMP) WHERE id = ?").run(channelId);
       return { tokenInvalid: true, sendDisabled: false };
     } finally {
       classifyInFlight.delete(channelId);
@@ -224,6 +225,7 @@ async function classifyRet14(channelId, botToken) {
 }
 
 // 标记"半死态"
+// X5: 同步设 disconnected_at 让 handlePush fail-fast 统一检查到
 function markSendDisabled(channelId, reason) {
   if (!channelId) return;
   try {
@@ -231,7 +233,8 @@ function markSendDisabled(channelId, reason) {
       UPDATE channels
       SET send_disabled = 1,
           send_disabled_reason = ?,
-          send_disabled_at = CURRENT_TIMESTAMP
+          send_disabled_at = CURRENT_TIMESTAMP,
+          disconnected_at = COALESCE(disconnected_at, CURRENT_TIMESTAMP)
       WHERE id = ?
     `).run(reason || 'ret:-14 但 getUpdates 正常（可能账号被风控）', channelId);
   } catch (e) {
