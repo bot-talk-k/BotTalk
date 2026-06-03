@@ -162,7 +162,7 @@ requests.<span class="n">get</span>(<span class="s">"https://feishu.bot-talk.com
   <!-- ══ 选通道 ══════════════════════════════════════════════════ -->
   <section>
     <div class="sec-title">选择你的推送通道</div>
-    <div class="sec-sub">飞书是全新推荐通道，无任何平台限制；微信通道适合老用户沿用。</div>
+    <div class="sec-sub">两个通道，同一套 API。飞书无平台限制，推荐新用户首选；微信通道已稳定运行，老用户可继续沿用。</div>
     <div class="channels">
 
       <!-- 飞书(推荐) -->
@@ -179,16 +179,16 @@ requests.<span class="n">get</span>(<span class="s">"https://feishu.bot-talk.com
         <a class="btn btn-primary" href="/app">用飞书通道开始 →</a>
       </div>
 
-      <!-- 微信(legacy) -->
+      <!-- 微信(稳定运行) -->
       <div class="ch">
-        <span class="tag tag-old">已有 · 有平台限制</span>
+        <span class="tag tag-old">稳定通道</span>
         <h2>💬 微信通道</h2>
-        <div class="tagline">微信 ClawBot，适合已在用微信的老用户</div>
+        <div class="tagline">微信 ClawBot，消息直达微信私聊</div>
         <ul>
-          <li class="li-ok">消息直达微信私聊</li>
-          <li class="li-bad">连发约 10 条不回复即<strong>停止接收</strong>，需回复解锁</li>
-          <li class="li-bad">ClawBot <strong>只能绑一端</strong>，占用后其它工具无法使用</li>
-          <li class="li-bad">需靠回复「假装聊天」持续维持通道</li>
+          <li class="li-ok">已有数百用户在用，稳定运行</li>
+          <li class="li-ok">消息直达微信，无需安装额外 App</li>
+          <li class="li-bad">微信平台限制：连发约 10 条不回复即停收，回复解锁</li>
+          <li class="li-bad">ClawBot <strong>只能绑一端</strong>，与其它工具互斥</li>
         </ul>
         <a class="btn btn-secondary" id="wechat-link" href="https://bot-talk.com">前往微信通道 →</a>
       </div>
@@ -199,7 +199,7 @@ requests.<span class="n">get</span>(<span class="s">"https://feishu.bot-talk.com
   <!-- ══ 通道对比表 ══════════════════════════════════════════════ -->
   <section>
     <div class="sec-title">飞书 vs 微信，一眼看懂</div>
-    <div class="sec-sub">同一套 API，飞书让「消息推送」回归本意。</div>
+    <div class="sec-sub">同一套 SendKey API，两个通道都能用。不同之处在于微信有平台侧的使用约束。</div>
     <table>
       <tr><th>能力</th><th>微信 ClawBot</th><th class="hl">飞书（推荐）</th></tr>
       <tr><td>接收条数限制</td><td><span class="n">约 10 条后停收</span></td><td><span class="y">无限制</span></td></tr>
