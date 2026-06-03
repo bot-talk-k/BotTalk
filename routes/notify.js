@@ -330,7 +330,8 @@ function getClientIp(req) {
 // 飞书 SendKey 以 fs_ 开头 → 透明代理到飞书容器(127.0.0.1:3001)
 // 调用方只需使用 bot-talk.com,无需关心通道类型。
 const axios = require('axios');
-const FEISHU_BASE = 'http://127.0.0.1:3001';
+// 容器间通信走 Docker 共享网络(bottalk-shared),用容器名而非宿主 IP
+const FEISHU_BASE = process.env.FEISHU_INTERNAL_URL || 'http://bottalk-feishu:3000';
 
 async function proxyToFeishu(req, res, path) {
   try {

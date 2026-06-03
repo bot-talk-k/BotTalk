@@ -1,12 +1,19 @@
 # 飞书独立推送站 — 与微信站(docker-compose.yml 的 bottalk 容器)完全独立。
 # 独立容器 bottalk-feishu、独立端口 3001、独立 volume feishu-data。
+# 共享网络 bottalk-shared 允许 bottalk 容器通过容器名 bottalk-feishu 代理飞书推送。
 # 用法: docker compose -f docker-compose.feishu.yml up -d --build
+networks:
+  bottalk-shared:
+    name: bottalk-shared
+
 services:
   feishu:
     build: ./feishu
     container_name: bottalk-feishu
     ports:
       - "127.0.0.1:3001:3000"   # 只监听本地,由 nginx 反代 feishu.bot-talk.com
+    networks:
+      - bottalk-shared
     environment:
       - NODE_ENV=production
       - TZ=Asia/Shanghai
