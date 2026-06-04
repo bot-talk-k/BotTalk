@@ -101,7 +101,7 @@ router.post('/feishu/poll', async (req, res) => {
 
     // 把 SendKey 推进飞书 — fire-and-forget,不阻塞响应
     if (r.openId) {
-      const baseUrl = process.env.BASE_URL || 'https://feishu.bot-talk.com';
+      const baseUrl = process.env.BASE_URL || 'https://bot-talk.com';
       const welcomeMsg = isNewUser
         ? `🎉 绑定成功，欢迎使用 BotTalk！\n\n你的 SendKey：\n${user.send_key}\n\n请保存此消息，下次登录需要用到。\n\n推送示例：\ncurl "${baseUrl}/${user.send_key}.send?title=测试&desp=hello"`
         : `✅ 新通道「${name}」绑定成功\n\nSendKey（如已保存可忽略）：\n${user.send_key}`;
@@ -142,7 +142,7 @@ router.post('/feishu/test', async (req, res) => {
     || db.prepare("SELECT * FROM channels WHERE user_id = ? AND status = 'active' ORDER BY id DESC LIMIT 1").get(req.session.userId);
     if (!ch) return res.json({ success: false, error: '没有可用通道，请先扫码绑定' });
 
-    const baseUrl = process.env.BASE_URL || 'https://feishu.bot-talk.com';
+    const baseUrl = process.env.BASE_URL || 'https://bot-talk.com';
     const card = {
       config: { wide_screen_mode: true },
       header: {
