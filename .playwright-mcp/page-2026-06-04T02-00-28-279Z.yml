@@ -1,0 +1,52 @@
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - heading "🛠 飞书超管" [level=1] [ref=e4]
+    - generic [ref=e5]:
+      - button "↻ 刷新" [ref=e6] [cursor=pointer]
+      - link "← 控制台" [ref=e7] [cursor=pointer]:
+        - /url: /app
+  - generic [ref=e8]:
+    - generic [ref=e9]: 总览
+    - generic [ref=e10]:
+      - generic [ref=e11]:
+        - generic [ref=e12]: —
+        - generic [ref=e13]: 用户
+      - generic [ref=e14]:
+        - generic [ref=e15]: —
+        - generic [ref=e16]: 活跃通道
+      - generic [ref=e17]:
+        - generic [ref=e18]: —
+        - generic [ref=e19]: 累计推送
+      - generic [ref=e20]:
+        - generic [ref=e21]: —
+        - generic [ref=e22]: 成功推送
+      - generic [ref=e23]:
+        - generic [ref=e24]: —
+        - generic [ref=e25]: 近24h推送
+  - generic [ref=e26]:
+    - generic [ref=e27]: 页面访问
+    - generic [ref=e30]: 加载中…
+  - generic [ref=e31]:
+    - generic [ref=e32]: 最近活动
+    - list [ref=e33]:
+      - listitem [ref=e34]:
+        - generic [ref=e35]: 加载中…
+  - generic [ref=e36]:
+    - generic [ref=e37]:
+      - heading "推送日志" [level=2] [ref=e38]
+      - button "刷新" [ref=e40] [cursor=pointer]
+    - generic [ref=e41]: 最近 200 条全部用户推送记录
+    - table [ref=e43]:
+      - rowgroup [ref=e44]:
+        - row "ID 用户 标题 状态 时间" [ref=e45]:
+          - columnheader "ID" [ref=e46]
+          - columnheader "用户" [ref=e47]
+          - columnheader "标题" [ref=e48]
+          - columnheader "状态" [ref=e49]
+          - columnheader "时间" [ref=e50]
+      - rowgroup [ref=e51]:
+        - row "加载中…" [ref=e52]:
+          - cell "加载中…" [ref=e53] [cursor=pointer]
+  - generic [ref=e54]:
+    - generic [ref=e55]: 用户
+    - paragraph [ref=e57]: 加载中…
