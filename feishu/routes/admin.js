@@ -84,6 +84,8 @@ router.get('/recent', (req, res) => {
     const rows = db.prepare(`
       SELECT a.id, a.user_id, u.nickname, a.action, a.detail, a.ip, a.created_at
       FROM activity_logs a LEFT JOIN users u ON u.id = a.user_id
+      WHERE NOT (a.action = 'page_view'
+        AND a.user_id IN (SELECT id FROM users WHERE role='admin'))
       ORDER BY a.id DESC LIMIT 50
     `).all();
     res.json({ success: true, data: rows });
@@ -101,7 +103,9 @@ router.get('/pageviews', (req, res) => {
              SUM(CASE WHEN created_at > datetime('now','-1 day') THEN 1 ELSE 0 END) AS today,
              SUM(CASE WHEN created_at > datetime('now','-7 days') THEN 1 ELSE 0 END) AS week,
              COUNT(*) AS total
-      FROM activity_logs WHERE action = 'page_view'
+      FROM activity_logs
+      WHERE action = 'page_view'
+        AND (user_id IS NULL OR user_id NOT IN (SELECT id FROM users WHERE role='admin'))
       GROUP BY detail
     `).all();
     res.json({ success: true, data: rows });

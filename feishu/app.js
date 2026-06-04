@@ -49,9 +49,14 @@ app.use(session({
 function logPageView(page) {
   return (req, res, next) => {
     try {
+      // 超管自己的访问不记录,保持统计数据真实
+      if (req.session?.userId) {
+        const u = db.prepare('SELECT role FROM users WHERE id=?').get(req.session.userId);
+        if (u?.role === 'admin') { next(); return; }
+      }
       const ip = req.headers['x-real-ip'] || req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip;
-      db.prepare('INSERT INTO activity_logs (action, detail, ip, user_agent) VALUES (?,?,?,?)')
-        .run('page_view', page, ip || null, req.headers['user-agent'] || null);
+      db.prepare('INSERT INTO activity_logs (user_id, action, detail, ip, user_agent) VALUES (?,?,?,?,?)')
+        .run(req.session?.userId || null, 'page_view', page, ip || null, req.headers['user-agent'] || null);
     } catch (e) { /* 不阻塞请求 */ }
     next();
   };
