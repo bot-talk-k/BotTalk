@@ -133,13 +133,16 @@ async function loadMe(){
 function renderApiExample(key){
   const base = 'https://bot-talk.com';
   document.getElementById('api-example').innerHTML =
-    '<span style="color:#6a737d"># 普通文本消息</span>\n' +
-    'curl "' + base + '/' + key + '.send?title=部署完成&amp;desp=服务已上线"\n\n' +
-    '<span style="color:#6a737d"># 卡片消息(加 card=1，自动美化排版)</span>\n' +
-    'curl "' + base + '/' + key + '.send?title=部署完成&amp;desp=✅+服务已上线%0A%0A&gt;+版本+v2.1.0&amp;card=1"\n\n' +
-    '<span style="color:#6a737d"># POST + 卡片 + Markdown 正文</span>\n' +
+    '<span style="color:#79b8ff">## 浏览器地址栏直接粘贴</span>\n\n' +
+    '<span style="color:#6a737d"># 普通文本</span>\n' +
+    base + '/' + key + '.send?title=部署完成&amp;desp=服务已上线\n\n' +
+    '<span style="color:#6a737d"># 卡片消息（加 card=1 自动美化）</span>\n' +
+    base + '/' + key + '.send?title=🚀+部署完成&amp;desp=✅+服务已上线%0A%0A**版本+v2.1.0**&amp;card=1\n\n' +
+    '<span style="color:#79b8ff">## 终端 curl（支持长文本和完整 Markdown）</span>\n\n' +
     'curl -X POST "' + base + '/' + key + '.send" \\\n' +
-    '  -d "title=🚀+上线通知&amp;desp=**服务已成功部署**%0A%0A✅+API 正常%0A✅+数据库正常%0A%0A&gt;+耗时 42 秒&amp;card=1"';
+    '  -d "title=🚀+上线通知' +
+    '&amp;desp=**服务已成功部署**%0A%0A✅+API+正常%0A✅+数据库正常%0A%0A%3E+耗时+42+秒' +
+    '&amp;card=1"';
 }
 
 async function sendSimpleTest(){
