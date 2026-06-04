@@ -115,4 +115,89 @@ router.get('/pageviews', (req, res) => {
   }
 });
 
+// 工具: IP 脱敏(末段打码)
+function maskIp(ip) {
+  if (!ip) return '-';
+  if (ip.includes('.')) {
+    const p = ip.split('.');
+    if (p.length === 4) { p[3] = '*'; return p.join('.'); }
+  }
+  return ip.length > 4 ? ip.slice(0, -4) + '****' : '****';
+}
+
+// GET /visit-stats — 访问统计(汇总 + 按页 + 按天 + 最近50,排除超管)
+router.get('/visit-stats', (req, res) => {
+  try {
+    const excl = "AND (user_id IS NULL OR user_id NOT IN (SELECT id FROM users WHERE role='admin'))";
+    const total = db.prepare(`SELECT COUNT(*) c FROM activity_logs WHERE action='page_view' ${excl}`).get().c;
+    const today = db.prepare(`SELECT COUNT(*) c FROM activity_logs WHERE action='page_view' AND datetime(created_at,'+8 hours') >= date('now','+8 hours') ${excl}`).get().c;
+    const uniqueIps = db.prepare(`SELECT COUNT(DISTINCT ip) c FROM activity_logs WHERE action='page_view' ${excl}`).get().c;
+    const byPage = db.prepare(`SELECT detail AS page, COUNT(*) AS count, COUNT(DISTINCT ip) AS unique_ips FROM activity_logs WHERE action='page_view' ${excl} GROUP BY detail ORDER BY count DESC`).all();
+    const byDay = db.prepare(`
+      SELECT date(created_at,'+8 hours') AS date, COUNT(*) AS count
+      FROM activity_logs WHERE action='page_view'
+        AND datetime(created_at,'+8 hours') >= date('now','+8 hours','-30 days') ${excl}
+      GROUP BY date ORDER BY date ASC`).all();
+    const recentRaw = db.prepare(`
+      SELECT a.detail AS page, a.ip, a.user_agent, a.created_at, u.nickname
+      FROM activity_logs a LEFT JOIN users u ON u.id = a.user_id
+      WHERE a.action='page_view' ${excl.replace(/user_id/g, 'a.user_id')}
+      ORDER BY a.id DESC LIMIT 50`).all();
+    const recent = recentRaw.map(r => ({ ...r, ip: maskIp(r.ip) }));
+    res.json({ success: true, data: { summary: { total, today, unique_ips: uniqueIps }, by_page: byPage, by_day: byDay, recent } });
+  } catch (err) {
+    console.error('admin visit-stats error:', err.message);
+    res.status(500).json({ success: false, error: 'Internal error' });
+  }
+});
+
+// GET /user-activity — 用户活跃度(飞书版:注册趋势 + 推送量 + 活跃分桶 + 人均通道)
+router.get('/user-activity', (req, res) => {
+  try {
+    // 注册趋势(近30天,北京时间)
+    const registerByDay = db.prepare(`
+      SELECT date(created_at,'+8 hours') AS day, COUNT(*) AS cnt
+      FROM users
+      WHERE datetime(created_at,'+8 hours') >= date('now','+8 hours','-30 days')
+      GROUP BY day ORDER BY day ASC`).all();
+
+    // 推送量趋势(近30天,成功/失败)
+    const pushByDay = db.prepare(`
+      SELECT date(created_at,'+8 hours') AS day,
+             SUM(CASE WHEN status='success' THEN 1 ELSE 0 END) AS success,
+             SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END) AS failed
+      FROM push_logs
+      WHERE datetime(created_at,'+8 hours') >= date('now','+8 hours','-30 days')
+      GROUP BY day ORDER BY day ASC`).all();
+
+    // 活跃分桶: 按用户"最后一次推送"距今多久
+    const activeBuckets = db.prepare(`
+      SELECT bucket, COUNT(*) AS cnt FROM (
+        SELECT u.id,
+          CASE
+            WHEN MAX(p.created_at) >= datetime('now','-1 day')  THEN 'active_1d'
+            WHEN MAX(p.created_at) >= datetime('now','-7 days') THEN 'active_7d'
+            WHEN MAX(p.created_at) >= datetime('now','-30 days')THEN 'active_30d'
+            WHEN MAX(p.created_at) IS NULL                      THEN 'never'
+            ELSE 'over_30d'
+          END AS bucket
+        FROM users u LEFT JOIN push_logs p ON p.user_id = u.id
+        GROUP BY u.id
+      ) GROUP BY bucket`).all();
+
+    // 人均通道数分布
+    const channelDist = db.prepare(`
+      SELECT cnt AS channels, COUNT(*) AS users FROM (
+        SELECT u.id, COUNT(c.id) AS cnt
+        FROM users u LEFT JOIN channels c ON c.user_id = u.id AND c.status='active'
+        GROUP BY u.id
+      ) GROUP BY cnt ORDER BY cnt ASC`).all();
+
+    res.json({ success: true, data: { registerByDay, pushByDay, activeBuckets, channelDist } });
+  } catch (err) {
+    console.error('admin user-activity error:', err.message);
+    res.status(500).json({ success: false, error: 'Internal error' });
+  }
+});
+
 module.exports = router;
