@@ -10,6 +10,7 @@ const { requireLogin } = require('../middleware/auth');
 const { logActivity } = require('../services/logger');
 const feishuAuth = require('../services/feishu-auth');
 const feishuClient = require('../services/feishu-client');
+const adminNotify = require('../services/admin-notify');
 
 const MAX_CHANNELS = 20;
 
@@ -90,6 +91,11 @@ router.post('/feishu/poll', async (req, res) => {
        VALUES (?, ?, ?, ?, ?, ?, 'active', ?)`
     ).run(userId, name, r.appId, r.appSecret, r.domain, r.openId || null, isDefault);
     logActivity(userId, 'channel_add', { channel_id: chInfo.lastInsertRowid, domain: r.domain }, req);
+
+    // 超管通知:新绑定
+    const now = new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false });
+    const label = isNewUser ? '🎉 新用户注册' : '🔗 已有用户新增通道';
+    adminNotify.send(`${label}\n\n昵称: ${isNewUser ? (db.prepare('SELECT nickname FROM users WHERE id=?').get(userId)||{}).nickname||'—' : '(已有用户)'}\n通道: ${name} (${r.domain})\n时间: ${now}`);
 
     const user = db.prepare('SELECT send_key FROM users WHERE id = ?').get(userId);
 

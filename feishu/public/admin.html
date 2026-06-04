@@ -79,6 +79,19 @@
     .log-status-ok  { display:inline-block; background:rgba(52,199,89,0.12); color:#1a7e3f; padding:3px 10px; border-radius:20px; font-size:13px; font-weight:500; }
     .log-status-err { display:inline-block; background:rgba(255,59,48,0.10); color:#c41a1a; padding:3px 10px; border-radius:20px; font-size:13px; font-weight:500; }
     .log-time { color:#86868b; font-size:13px; white-space:nowrap; }
+    .log-table td { cursor:pointer; }
+
+    /* Modal */
+    .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.4); z-index:1000; align-items:center; justify-content:center; padding:20px; }
+    .modal-overlay.open { display:flex; }
+    .modal { background:#fff; border-radius:18px; padding:28px; max-width:560px; width:100%; box-shadow:0 20px 60px rgba(0,0,0,0.2); }
+    .modal-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px; }
+    .modal-title { font-size:18px; font-weight:700; line-height:1.3; flex:1; padding-right:16px; }
+    .modal-close { background:none; border:none; font-size:22px; color:#86868b; cursor:pointer; line-height:1; flex-shrink:0; }
+    .modal-meta { display:flex; gap:12px; margin-bottom:14px; flex-wrap:wrap; }
+    .modal-meta span { font-size:13px; color:#86868b; }
+    .modal-content { background:#f5f5f7; border-radius:10px; padding:14px; font-size:14px; white-space:pre-wrap; word-break:break-word; max-height:300px; overflow-y:auto; line-height:1.6; }
+    .modal-empty { color:#aeaeb2; font-style:italic; }
   </style>
 </head>
 <body>
@@ -141,8 +154,39 @@
   </div>
 </div>
 
+<!-- 内容 Modal -->
+<div class="modal-overlay" id="log-modal" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-title"></div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-meta">
+      <span id="modal-user"></span>
+      <span id="modal-time"></span>
+      <span id="modal-status"></span>
+    </div>
+    <div class="modal-content" id="modal-body"></div>
+  </div>
+</div>
+
 <script>
 function api(u){ return fetch(u,{credentials:'same-origin'}).then(r=>r.json()); }
+let _logMap = {};
+
+function openModal(id){
+  const p = _logMap[id]; if(!p) return;
+  document.getElementById('modal-title').textContent = p.title||'(无标题)';
+  document.getElementById('modal-user').textContent = '👤 '+(p.nickname||'User#'+p.user_id);
+  document.getElementById('modal-time').textContent = '🕐 '+fmtAbsTime(p.created_at);
+  document.getElementById('modal-status').textContent = p.status==='success'?'✅ 成功':'❌ 失败';
+  const body = document.getElementById('modal-body');
+  if(p.content){ body.classList.remove('modal-empty'); body.textContent = p.content; }
+  else { body.classList.add('modal-empty'); body.textContent = '(无正文内容)'; }
+  document.getElementById('log-modal').classList.add('open');
+}
+function closeModal(){ document.getElementById('log-modal').classList.remove('open'); }
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeModal(); });
 
 function fmtTime(s){
   if(!s) return '';
@@ -265,13 +309,15 @@ async function loadPushLogs(){
   const el = document.getElementById('push-logs-body');
   if(!r.success){ el.innerHTML='<tr><td colspan="5" class="empty">加载失败</td></tr>'; return; }
   if(!r.data.length){ el.innerHTML='<tr><td colspan="5" class="empty">暂无推送记录</td></tr>'; return; }
+  _logMap = {};
+  r.data.forEach(p => _logMap[p.id] = p);
   el.innerHTML = r.data.map(p=>{
     const status = p.status==='success'
       ? '<span class="log-status-ok">成功</span>'
       : '<span class="log-status-err">失败</span>';
     const title = escHtml(p.title||'(无标题)');
     const user = escHtml(p.nickname||('User#'+(p.user_id||'?')));
-    return `<tr>
+    return `<tr onclick="openModal(${p.id})" title="点击查看内容">
       <td class="log-id">${p.id}</td>
       <td class="muted">${user}</td>
       <td class="log-title">${title}</td>

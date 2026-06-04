@@ -8,6 +8,7 @@ const router = express.Router();
 const db = require('../db');
 const feishu = require('../services/feishu-client');
 const { logActivity } = require('../services/logger');
+const adminNotify = require('../services/admin-notify');
 
 // 简单内存限流:每 SendKey 每小时最多 200 条
 const rateLimits = {};
@@ -80,7 +81,12 @@ async function handlePush(sendKey, title, content, clientIp, channelParam, req) 
         if (dead) db.prepare("UPDATE channels SET status = 'inactive' WHERE id = ?").run(channel.id);
         db.prepare("INSERT INTO push_logs (user_id, channel_id, title, content, status, ip, response) VALUES (?, ?, ?, ?, 'failed', ?, ?)")
           .run(user.id, channel.id, title, content, clientIp, JSON.stringify({ code: r.code, msg: r.msg }));
-        results.push({ channel_id: channel.id, status: 'failed', reason: dead ? 'channel_dead' : 'feishu_other', feishu_code: r.code, feishu_msg: r.msg });
+        const reason = dead ? 'channel_dead' : 'feishu_other';
+        results.push({ channel_id: channel.id, status: 'failed', reason, feishu_code: r.code, feishu_msg: r.msg });
+        adminNotify.send(
+          `⚠️ 飞书推送失败\n用户: ${user.nickname||user.send_key.slice(0,12)}\n通道: ${channel.id}\n标题: ${title||'(无)'}\n原因: ${reason} code=${r.code}`,
+          `push-fail:${channel.id}:${r.code}`
+        );
       }
     } catch (e) {
       // getTenantToken 抛错:凭证死 → 标 inactive;否则网络瞬时
@@ -88,7 +94,12 @@ async function handlePush(sendKey, title, content, clientIp, channelParam, req) 
       if (dead) db.prepare("UPDATE channels SET status = 'inactive' WHERE id = ?").run(channel.id);
       db.prepare("INSERT INTO push_logs (user_id, channel_id, title, content, status, ip, response) VALUES (?, ?, ?, ?, 'failed', ?, ?)")
         .run(user.id, channel.id, title, content, clientIp, JSON.stringify({ error: e.message, code: e.feishuCode }));
-      results.push({ channel_id: channel.id, status: 'failed', reason: dead ? 'channel_dead' : 'network', error: e.message });
+      const reason = dead ? 'channel_dead' : 'network';
+      results.push({ channel_id: channel.id, status: 'failed', reason, error: e.message });
+      adminNotify.send(
+        `⚠️ 飞书推送失败\n用户: ${user.nickname||user.send_key.slice(0,12)}\n通道: ${channel.id}\n标题: ${title||'(无)'}\n原因: ${reason} ${e.message.slice(0,60)}`,
+        `push-fail:${channel.id}:${reason}`
+      );
     }
   }
 
