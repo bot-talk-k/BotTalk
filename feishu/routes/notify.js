@@ -44,7 +44,25 @@ function resolveChannels(userId, channelParam) {
   ).all(...ids, userId);
 }
 
-async function handlePush(sendKey, title, content, clientIp, channelParam, req) {
+// 把 title + content 包装成飞书卡片 JSON(绿色标题 + Markdown 正文)
+function buildCard(title, content) {
+  const elements = [];
+  if (content) {
+    elements.push({ tag: 'div', text: { tag: 'lark_md', content } });
+    elements.push({ tag: 'hr' });
+  }
+  elements.push({
+    tag: 'note',
+    elements: [{ tag: 'plain_text', content: '由 BotTalk 推送 · feishu.bot-talk.com' }],
+  });
+  return {
+    config: { wide_screen_mode: true },
+    header: { title: { tag: 'plain_text', content: title || '(无标题)' }, template: 'green' },
+    elements,
+  };
+}
+
+async function handlePush(sendKey, title, content, clientIp, channelParam, req, useCard = false) {
   const user = db.prepare('SELECT * FROM users WHERE send_key = ?').get(sendKey);
   if (!user) return { code: 40001, message: 'SendKey 无效', data: null };
   if (user.is_disabled) return { code: 40301, message: '账号已禁用', data: null };
@@ -63,14 +81,13 @@ async function handlePush(sendKey, title, content, clientIp, channelParam, req) 
       continue;
     }
     try {
-      const r = await feishu.sendText({
-        appId: channel.feishu_app_id,
-        appSecret: channel.feishu_app_secret,
-        domain: channel.feishu_domain,
-        receiveId: channel.feishu_open_id,
-        receiveIdType: 'open_id',
-        text: message,
-      });
+      const sendParams = {
+        appId: channel.feishu_app_id, appSecret: channel.feishu_app_secret,
+        domain: channel.feishu_domain, receiveId: channel.feishu_open_id, receiveIdType: 'open_id',
+      };
+      const r = useCard
+        ? await feishu.sendCard({ ...sendParams, card: buildCard(title, content) })
+        : await feishu.sendText({ ...sendParams, text: message });
       if (r.code === 0) {
         db.prepare("INSERT INTO push_logs (user_id, channel_id, title, content, status, ip, response) VALUES (?, ?, ?, ?, 'success', ?, ?)")
           .run(user.id, channel.id, title, content, clientIp, JSON.stringify({ code: 0, msgid: r.data && r.data.message_id }));
@@ -130,16 +147,18 @@ router.all('/notify', async (req, res) => {
   const title = req.body?.title || req.query?.title || '';
   const content = req.body?.message || req.body?.desp || req.query?.msg || req.query?.desp || '';
   const channel = req.body?.channel || req.query?.channel || '';
-  res.json(await handlePush(sendKey, title, content, getClientIp(req), channel, req));
+  const useCard = !!(req.body?.card || req.query?.card);
+  res.json(await handlePush(sendKey, title, content, getClientIp(req), channel, req, useCard));
 });
 
-// 风格2:Server酱风格  /:key.send?title=&desp=
+// 风格2:Server酱风格  /:key.send?title=&desp=&card=1
 router.all('/:key.send', async (req, res) => {
   const sendKey = req.params.key;
   const title = req.body?.title || req.query?.title || '';
   const content = req.body?.desp || req.body?.message || req.query?.desp || req.query?.msg || '';
   const channel = req.body?.channel || req.query?.channel || '';
-  res.json(await handlePush(sendKey, title, content, getClientIp(req), channel, req));
+  const useCard = !!(req.body?.card || req.query?.card);
+  res.json(await handlePush(sendKey, title, content, getClientIp(req), channel, req, useCard));
 });
 
 module.exports = router;

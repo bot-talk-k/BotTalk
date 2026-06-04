@@ -183,9 +183,9 @@ router.post('/feishu/test', async (req, res) => {
           actions: [
             {
               tag: 'button',
-              text: { tag: 'plain_text', content: '打开控制台' },
+              text: { tag: 'plain_text', content: '🌐 访问 BotTalk 官网' },
               type: 'primary',
-              url: baseUrl + '/app',
+              url: 'https://bot-talk.com',
             },
           ],
         },

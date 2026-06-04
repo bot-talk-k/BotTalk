@@ -70,8 +70,8 @@
       <h2>推送示例</h2>
       <button class="btn" id="btn-test" onclick="sendTestMsg()" style="padding:7px 16px;font-size:13px;">📨 点击测试</button>
     </div>
-    <pre id="api-example">…</pre>
-    <p class="muted">channel 参数可选:<code>default</code>(默认通道)/ <code>all</code>(全部)/ 逗号分隔的通道 id。</p>
+    <pre id="api-example" style="white-space:pre-wrap;word-break:break-all;">…</pre>
+    <p class="muted">加 <code>card=1</code> 发卡片消息，正文支持 Markdown 粗体 <code>**text**</code>、引用 <code>&gt;</code>、emoji。channel 可选 <code>default</code> / <code>all</code> / 逗号分隔通道 id。</p>
   </div>
 
   <!-- 通道管理 -->
@@ -128,13 +128,15 @@ async function loadMe(){
 }
 
 function renderApiExample(key){
-  const base = location.origin;
-  document.getElementById('api-example').textContent =
-    '# GET\n' +
-    'curl "' + base + '/' + key + '.send?title=部署完成&desp=服务已上线"\n\n' +
-    '# POST (Server酱风格)\n' +
+  const base = 'https://bot-talk.com';
+  document.getElementById('api-example').innerHTML =
+    '<span style="color:#6a737d"># 普通文本消息</span>\n' +
+    'curl "' + base + '/' + key + '.send?title=部署完成&amp;desp=服务已上线"\n\n' +
+    '<span style="color:#6a737d"># 卡片消息(加 card=1，自动美化排版)</span>\n' +
+    'curl "' + base + '/' + key + '.send?title=部署完成&amp;desp=✅+服务已上线%0A%0A&gt;+版本+v2.1.0&amp;card=1"\n\n' +
+    '<span style="color:#6a737d"># POST + 卡片 + Markdown 正文</span>\n' +
     'curl -X POST "' + base + '/' + key + '.send" \\\n' +
-    '  -d "title=部署完成&desp=服务已上线&channel=all"';
+    '  -d "title=🚀+上线通知&amp;desp=**服务已成功部署**%0A%0A✅+API 正常%0A✅+数据库正常%0A%0A&gt;+耗时 42 秒&amp;card=1"';
 }
 
 async function sendTestMsg(){
