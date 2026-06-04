@@ -35,6 +35,17 @@
     .hidden { display:none; }
     .toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:#1d1d1f; color:#fff; padding:10px 18px; border-radius:10px; font-size:14px; opacity:0; transition:opacity .2s; z-index:99; }
     .toast.show { opacity:1; }
+    /* 推送类型网格 */
+    .push-types { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    @media(max-width:600px){ .push-types { grid-template-columns:1fr; } }
+    .pt { background:#f5f5f7; border-radius:12px; padding:14px 16px; display:flex; flex-direction:column; gap:8px; }
+    .pt-header { display:flex; align-items:center; gap:8px; }
+    .pt-title { font-size:14px; font-weight:600; }
+    .pt-tag { font-size:11px; background:#fff; border:1px solid #d2d2d7; border-radius:6px; padding:1px 7px; color:#86868b; }
+    .pt-desc { font-size:13px; color:#6e6e73; }
+    .pt-desc code { background:#fff; border:1px solid #e5e5ea; border-radius:4px; padding:1px 5px; font-size:12px; }
+    .pt-code { background:#1d1d1f; color:#d1d1d6; padding:10px 12px; border-radius:8px; font-size:11.5px; overflow-x:auto; white-space:pre; flex:1; line-height:1.55; margin:0; }
+    .pt-btn { padding:7px 0; font-size:13px; width:100%; margin-top:2px; }
   </style>
 </head>
 <body>
@@ -65,16 +76,35 @@
       <span class="key-box" id="sendkey">—</span>
       <button class="btn ghost" onclick="copyKey()">复制</button>
     </div>
-    <p class="muted">用它调用推送 API。妥善保管,泄露等于别人能用你的通道发消息。</p>
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:18px;margin-bottom:6px;flex-wrap:wrap;gap:8px;">
-      <h2>推送示例</h2>
-      <div style="display:flex;gap:8px;">
-        <button class="btn ghost" id="btn-test-simple" onclick="sendSimpleTest()" style="padding:7px 14px;font-size:13px;">💬 简易消息测试</button>
-        <button class="btn" id="btn-test-card" onclick="sendCardTest()" style="padding:7px 14px;font-size:13px;">✨ 专业消息测试</button>
+    <p class="muted">用它调用推送 API。妥善保管，泄露等于别人能用你的通道发消息。</p>
+    <h2 style="margin-top:18px;margin-bottom:12px;">推送示例 · 点击测试</h2>
+    <div class="push-types" id="push-types">
+      <!-- 4 种推送类型，JS 渲染后填入真实 SendKey -->
+      <div class="pt" data-type="0">
+        <div class="pt-header"><span class="pt-title">纯标题</span><span class="pt-tag">最简单</span></div>
+        <div class="pt-desc">一行标题直接到飞书，用于快速告警。</div>
+        <pre class="pt-code" id="pt-code-0">…</pre>
+        <button class="btn pt-btn" id="pt-btn-0" onclick="runTest(0)">发送测试</button>
+      </div>
+      <div class="pt" data-type="1">
+        <div class="pt-header"><span class="pt-title">标题 + 正文</span><span class="pt-tag">文本</span></div>
+        <div class="pt-desc">标题 + 多行正文，纯文本格式。</div>
+        <pre class="pt-code" id="pt-code-1">…</pre>
+        <button class="btn ghost pt-btn" id="pt-btn-1" onclick="runTest(1)">发送测试</button>
+      </div>
+      <div class="pt" data-type="2">
+        <div class="pt-header"><span class="pt-title">简洁卡片</span><span class="pt-tag">card=1</span></div>
+        <div class="pt-desc">加 <code>card=1</code> 自动生成绿色标题卡片，正文支持 emoji。</div>
+        <pre class="pt-code" id="pt-code-2">…</pre>
+        <button class="btn ghost pt-btn" id="pt-btn-2" onclick="runTest(2)">发送测试</button>
+      </div>
+      <div class="pt" data-type="3">
+        <div class="pt-header"><span class="pt-title">完整 Markdown 卡片</span><span class="pt-tag">✨ 推荐</span></div>
+        <div class="pt-desc">卡片 + <code>**粗体**</code> <code>&gt; 引用</code> <code>[链接](url)</code> emoji，最漂亮。</div>
+        <pre class="pt-code" id="pt-code-3">…</pre>
+        <button class="btn pt-btn" id="pt-btn-3" onclick="runTest(3)">发送测试</button>
       </div>
     </div>
-    <pre id="api-example" style="white-space:pre-wrap;word-break:break-all;">…</pre>
-    <p class="muted">加 <code>card=1</code> 发卡片消息，正文支持 Markdown 粗体 <code>**text**</code>、引用 <code>&gt;</code>、emoji。channel 可选 <code>default</code> / <code>all</code> / 逗号分隔通道 id。</p>
   </div>
 
   <!-- 通道管理 -->
@@ -130,50 +160,56 @@ async function loadMe(){
   }
 }
 
+const PUSH_TYPES = [
+  {
+    label: '纯标题',
+    send: (k) => fetch('/'+k+'.send?title=BotTalk+测试&desp=', {credentials:'same-origin'}).then(r=>r.json()),
+    code: (k,b) => b+'/'+k+'.send?title=服务器异常警告',
+  },
+  {
+    label: '标题+正文',
+    send: (k) => fetch('/'+k+'.send?title=部署完成&desp=服务已成功上线%0A版本+v2.1.0', {credentials:'same-origin'}).then(r=>r.json()),
+    code: (k,b) => b+'/'+k+'.send?title=部署完成&desp=服务已成功上线%0A版本+v2.1.0',
+  },
+  {
+    label: '简洁卡片',
+    send: (k) => fetch('/'+k+'.send?title=✅+部署完成&desp=服务已成功上线&card=1', {credentials:'same-origin'}).then(r=>r.json()),
+    code: (k,b) => b+'/'+k+'.send?title=✅+部署完成&desp=服务已上线&card=1',
+  },
+  {
+    label: '完整 Markdown 卡片',
+    send: (k) => api('/api/channels/feishu/test', {method:'POST'}),
+    code: (k,b) =>
+      'curl -X POST "'+b+'/'+k+'.send" \\\n'+
+      '  -H "Content-Type: application/json" \\\n'+
+      "  -d '{\n"+
+      '    "title": "🚀 上线通知",\n'+
+      '    "desp": "**服务已成功部署**\\n\\n✅ API 正常\\n✅ 数据库正常\\n\\n> 耗时 42 秒 · [日志](https://your.server)",\n'+
+      '    "card": 1\n'+
+      "  }'",
+  },
+];
+
 function renderApiExample(key){
   const base = 'https://bot-talk.com';
-  document.getElementById('api-example').innerHTML =
-    '<span style="color:#79b8ff">## 浏览器地址栏直接粘贴</span>\n\n' +
-    '<span style="color:#6a737d"># 普通文本</span>\n' +
-    base + '/' + key + '.send?title=部署完成&amp;desp=服务已上线\n\n' +
-    '<span style="color:#6a737d"># 卡片消息（加 card=1 自动美化）</span>\n' +
-    base + '/' + key + '.send?title=🚀+部署完成&amp;desp=✅+服务已上线%0A%0A**版本+v2.1.0**&amp;card=1\n\n' +
-    '<span style="color:#79b8ff">## 终端 curl — 卡片消息（完整 Markdown）</span>\n\n' +
-    'curl -X POST "' + base + '/' + key + '.send" \\\n' +
-    '  -H "Content-Type: application/json" \\\n' +
-    '  -d \'{\n' +
-    '    "title": "🚀 上线通知",\n' +
-    '    "desp":  "**服务已成功部署** v2.1.0\\n\\n✅ API 正常\\n✅ 数据库连接正常\\n✅ 缓存已预热\\n\\n> 构建耗时 42 秒 · [查看日志](https://your-server.com)",\n' +
-    '    "card":  1\n' +
-    '  }\'\n\n' +
-    '<span style="color:#6a737d"># desp 支持的 Markdown 语法：</span>\n' +
-    '<span style="color:#6a737d"># **粗体**   *斜体*   ~~删除线~~</span>\n' +
-    '<span style="color:#6a737d"># > 引用块</span>\n' +
-    '<span style="color:#6a737d"># [链接文字](https://url)   emoji ✅ 🚀 ⚠️</span>';
+  PUSH_TYPES.forEach((t,i) => {
+    const el = document.getElementById('pt-code-'+i);
+    if (el) el.textContent = t.code(key, base);
+  });
 }
 
-async function sendSimpleTest(){
-  const btn = document.getElementById('btn-test-simple');
+async function runTest(i){
+  if (!me_?.send_key) { toast('请先登录'); return; }
+  const btn = document.getElementById('pt-btn-'+i);
+  const orig = btn.textContent;
   btn.disabled = true; btn.textContent = '发送中…';
   try {
-    const key = me_?.send_key;
-    if (!key) { toast('请先登录'); btn.disabled=false; btn.textContent='💬 简易消息测试'; return; }
-    const r = await fetch('/' + key + '.send?title=BotTalk+测试&desp=你的飞书推送通道工作正常%20✅', {credentials:'same-origin'}).then(r=>r.json());
-    if (r.code === 0) toast('✅ 简易消息已发到飞书！');
-    else toast('❌ 发送失败: ' + r.message);
+    const t = PUSH_TYPES[i];
+    const r = await t.send(me_.send_key);
+    const ok = r.code === 0 || r.success === true;
+    toast(ok ? '✅ 已发送，请查看飞书' : '❌ ' + (r.message || r.error || '失败'));
   } catch(e) { toast('❌ 网络错误'); }
-  btn.disabled = false; btn.textContent = '💬 简易消息测试';
-}
-
-async function sendCardTest(){
-  const btn = document.getElementById('btn-test-card');
-  btn.disabled = true; btn.textContent = '发送中…';
-  try {
-    const r = await api('/api/channels/feishu/test', { method: 'POST' });
-    if (r.success) toast('✅ 专业卡片已发到飞书，请查收！');
-    else toast('❌ ' + (r.error || '发送失败'));
-  } catch(e) { toast('❌ 网络错误'); }
-  btn.disabled = false; btn.textContent = '✨ 专业消息测试';
+  btn.disabled = false; btn.textContent = orig;
 }
 
 async function login(){
