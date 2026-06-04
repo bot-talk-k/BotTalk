@@ -66,9 +66,12 @@
       <button class="btn ghost" onclick="copyKey()">复制</button>
     </div>
     <p class="muted">用它调用推送 API。妥善保管,泄露等于别人能用你的通道发消息。</p>
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:18px;margin-bottom:6px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:18px;margin-bottom:6px;flex-wrap:wrap;gap:8px;">
       <h2>推送示例</h2>
-      <button class="btn" id="btn-test" onclick="sendTestMsg()" style="padding:7px 16px;font-size:13px;">📨 点击测试</button>
+      <div style="display:flex;gap:8px;">
+        <button class="btn ghost" id="btn-test-simple" onclick="sendSimpleTest()" style="padding:7px 14px;font-size:13px;">💬 简易消息测试</button>
+        <button class="btn" id="btn-test-card" onclick="sendCardTest()" style="padding:7px 14px;font-size:13px;">✨ 专业消息测试</button>
+      </div>
     </div>
     <pre id="api-example" style="white-space:pre-wrap;word-break:break-all;">…</pre>
     <p class="muted">加 <code>card=1</code> 发卡片消息，正文支持 Markdown 粗体 <code>**text**</code>、引用 <code>&gt;</code>、emoji。channel 可选 <code>default</code> / <code>all</code> / 逗号分隔通道 id。</p>
@@ -139,15 +142,28 @@ function renderApiExample(key){
     '  -d "title=🚀+上线通知&amp;desp=**服务已成功部署**%0A%0A✅+API 正常%0A✅+数据库正常%0A%0A&gt;+耗时 42 秒&amp;card=1"';
 }
 
-async function sendTestMsg(){
-  const btn = document.getElementById('btn-test');
+async function sendSimpleTest(){
+  const btn = document.getElementById('btn-test-simple');
+  btn.disabled = true; btn.textContent = '发送中…';
+  try {
+    const key = me_?.send_key;
+    if (!key) { toast('请先登录'); btn.disabled=false; btn.textContent='💬 简易消息测试'; return; }
+    const r = await fetch('/' + key + '.send?title=BotTalk+测试&desp=你的飞书推送通道工作正常%20✅', {credentials:'same-origin'}).then(r=>r.json());
+    if (r.code === 0) toast('✅ 简易消息已发到飞书！');
+    else toast('❌ 发送失败: ' + r.message);
+  } catch(e) { toast('❌ 网络错误'); }
+  btn.disabled = false; btn.textContent = '💬 简易消息测试';
+}
+
+async function sendCardTest(){
+  const btn = document.getElementById('btn-test-card');
   btn.disabled = true; btn.textContent = '发送中…';
   try {
     const r = await api('/api/channels/feishu/test', { method: 'POST' });
-    if (r.success) { toast('✅ 测试消息已发到飞书，请查收！'); }
-    else { toast('❌ ' + (r.error || '发送失败')); }
+    if (r.success) toast('✅ 专业卡片已发到飞书，请查收！');
+    else toast('❌ ' + (r.error || '发送失败'));
   } catch(e) { toast('❌ 网络错误'); }
-  btn.disabled = false; btn.textContent = '📨 点击测试';
+  btn.disabled = false; btn.textContent = '✨ 专业消息测试';
 }
 
 async function login(){
