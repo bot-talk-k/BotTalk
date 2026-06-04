@@ -133,6 +133,80 @@ function getOwned(channelId, userId) {
   return db.prepare('SELECT * FROM channels WHERE id = ? AND user_id = ?').get(channelId, userId);
 }
 
+// POST /feishu/test — 向用户默认通道发一条演示卡片消息,验证通道可用
+router.post('/feishu/test', async (req, res) => {
+  try {
+    const ch = db.prepare(
+      "SELECT * FROM channels WHERE user_id = ? AND status = 'active' AND is_default = 1 ORDER BY id DESC LIMIT 1"
+    ).get(req.session.userId)
+    || db.prepare("SELECT * FROM channels WHERE user_id = ? AND status = 'active' ORDER BY id DESC LIMIT 1").get(req.session.userId);
+    if (!ch) return res.json({ success: false, error: '没有可用通道，请先扫码绑定' });
+
+    const baseUrl = process.env.BASE_URL || 'https://feishu.bot-talk.com';
+    const card = {
+      config: { wide_screen_mode: true },
+      header: {
+        title: { tag: 'plain_text', content: '🎉 BotTalk 通道测试' },
+        template: 'green',
+      },
+      elements: [
+        {
+          tag: 'div',
+          text: { tag: 'lark_md', content: '**恭喜！你的飞书推送通道配置正确，消息已成功送达。**' },
+        },
+        { tag: 'hr' },
+        {
+          tag: 'div',
+          text: {
+            tag: 'lark_md',
+            content:
+              '**📊 通道能力**\n\n' +
+              '✅ **无限发送** — 无条数限制，不限流\n' +
+              '✅ **无需回复** — 不用假装聊天保活\n' +
+              '✅ **一账户多通道** — 按需添加，独立管理\n' +
+              '✅ **HTTP 任意语言** — curl / Python / Node.js / Go',
+          },
+        },
+        { tag: 'hr' },
+        {
+          tag: 'div',
+          text: {
+            tag: 'lark_md',
+            content:
+              '**💡 发送一条消息只需：**\n\n' +
+              '```\ncurl "' + baseUrl + '/YOUR_SENDKEY.send?title=Hello&desp=World"\n```',
+          },
+        },
+        { tag: 'hr' },
+        {
+          tag: 'action',
+          actions: [
+            {
+              tag: 'button',
+              text: { tag: 'plain_text', content: '打开控制台' },
+              type: 'primary',
+              url: baseUrl + '/app',
+            },
+          ],
+        },
+      ],
+    };
+    const r = await feishuClient.sendCard({
+      appId: ch.feishu_app_id, appSecret: ch.feishu_app_secret,
+      domain: ch.feishu_domain, receiveId: ch.feishu_open_id,
+      receiveIdType: 'open_id', card,
+    });
+    if (r.code === 0) {
+      res.json({ success: true });
+    } else {
+      res.json({ success: false, error: `飞书返回 code=${r.code}: ${r.msg}` });
+    }
+  } catch (e) {
+    console.error('test message error:', e.message);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 // GET / — 列出当前用户的通道(脱敏 secret)
 router.get('/', (req, res) => {
   try {

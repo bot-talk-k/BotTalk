@@ -66,7 +66,10 @@
       <button class="btn ghost" onclick="copyKey()">复制</button>
     </div>
     <p class="muted">用它调用推送 API。妥善保管,泄露等于别人能用你的通道发消息。</p>
-    <h2 style="margin-top:18px;">推送示例</h2>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:18px;margin-bottom:6px;">
+      <h2>推送示例</h2>
+      <button class="btn" id="btn-test" onclick="sendTestMsg()" style="padding:7px 16px;font-size:13px;">📨 点击测试</button>
+    </div>
     <pre id="api-example">…</pre>
     <p class="muted">channel 参数可选:<code>default</code>(默认通道)/ <code>all</code>(全部)/ 逗号分隔的通道 id。</p>
   </div>
@@ -132,6 +135,17 @@ function renderApiExample(key){
     '# POST (Server酱风格)\n' +
     'curl -X POST "' + base + '/' + key + '.send" \\\n' +
     '  -d "title=部署完成&desp=服务已上线&channel=all"';
+}
+
+async function sendTestMsg(){
+  const btn = document.getElementById('btn-test');
+  btn.disabled = true; btn.textContent = '发送中…';
+  try {
+    const r = await api('/api/channels/feishu/test', { method: 'POST' });
+    if (r.success) { toast('✅ 测试消息已发到飞书，请查收！'); }
+    else { toast('❌ ' + (r.error || '发送失败')); }
+  } catch(e) { toast('❌ 网络错误'); }
+  btn.disabled = false; btn.textContent = '📨 点击测试';
 }
 
 async function login(){

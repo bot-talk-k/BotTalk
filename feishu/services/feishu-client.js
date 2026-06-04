@@ -98,4 +98,25 @@ async function sendText({ appId, appSecret, domain, receiveId, receiveIdType = '
   };
 }
 
-module.exports = { getTenantToken, sendText, isDeadCredentialCode, _tokenCache };
+// 发送卡片消息 (msg_type: interactive) — 支持标题/Markdown/分割线/按钮
+// card 参数为飞书卡片 JSON 对象(不是字符串)
+async function sendCard({ appId, appSecret, domain, receiveId, receiveIdType = 'open_id', card }) {
+  const host = HOST_BY_DOMAIN[domain] || HOST_BY_DOMAIN.feishu;
+  const token = await getTenantToken(appId, appSecret, domain);
+  const resp = await axios.post(
+    `${host}/open-apis/im/v1/messages?receive_id_type=${encodeURIComponent(receiveIdType)}`,
+    { receive_id: receiveId, msg_type: 'interactive', content: JSON.stringify(card) },
+    {
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json; charset=utf-8' },
+      timeout: 15000, validateStatus: () => true,
+    },
+  );
+  return {
+    httpStatus: resp.status,
+    code: resp.data && resp.data.code,
+    msg: resp.data && resp.data.msg,
+    deadCredential: isDeadCredentialCode(resp.data && resp.data.code),
+  };
+}
+
+module.exports = { getTenantToken, sendText, sendCard, isDeadCredentialCode, _tokenCache };
