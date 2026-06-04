@@ -138,11 +138,18 @@ function renderApiExample(key){
     base + '/' + key + '.send?title=部署完成&amp;desp=服务已上线\n\n' +
     '<span style="color:#6a737d"># 卡片消息（加 card=1 自动美化）</span>\n' +
     base + '/' + key + '.send?title=🚀+部署完成&amp;desp=✅+服务已上线%0A%0A**版本+v2.1.0**&amp;card=1\n\n' +
-    '<span style="color:#79b8ff">## 终端 curl（支持长文本和完整 Markdown）</span>\n\n' +
+    '<span style="color:#79b8ff">## 终端 curl — 卡片消息（完整 Markdown）</span>\n\n' +
     'curl -X POST "' + base + '/' + key + '.send" \\\n' +
-    '  -d "title=🚀+上线通知' +
-    '&amp;desp=**服务已成功部署**%0A%0A✅+API+正常%0A✅+数据库正常%0A%0A%3E+耗时+42+秒' +
-    '&amp;card=1"';
+    '  -H "Content-Type: application/json" \\\n' +
+    '  -d \'{\n' +
+    '    "title": "🚀 上线通知",\n' +
+    '    "desp":  "**服务已成功部署** v2.1.0\\n\\n✅ API 正常\\n✅ 数据库连接正常\\n✅ 缓存已预热\\n\\n> 构建耗时 42 秒 · [查看日志](https://your-server.com)",\n' +
+    '    "card":  1\n' +
+    '  }\'\n\n' +
+    '<span style="color:#6a737d"># desp 支持的 Markdown 语法：</span>\n' +
+    '<span style="color:#6a737d"># **粗体**   *斜体*   ~~删除线~~</span>\n' +
+    '<span style="color:#6a737d"># > 引用块</span>\n' +
+    '<span style="color:#6a737d"># [链接文字](https://url)   emoji ✅ 🚀 ⚠️</span>';
 }
 
 async function sendSimpleTest(){
