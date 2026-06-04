@@ -72,7 +72,7 @@ router.post('/feishu/poll', async (req, res) => {
     if (!userId) {
       sendKey = generateSendKey();
       const now = new Date();
-      const nickname = '飞书' + now.getFullYear() + String(now.getMonth() + 1).padStart(2, '0') +
+      const nickname = now.getFullYear() + String(now.getMonth() + 1).padStart(2, '0') +
         String(now.getDate()).padStart(2, '0') + String(now.getHours()).padStart(2, '0') + String(now.getMinutes()).padStart(2, '0');
       const info = db.prepare(
         'INSERT INTO users (feishu_open_id, send_key, nickname) VALUES (?, ?, ?)'
