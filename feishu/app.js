@@ -72,6 +72,7 @@ app.use('/api/auth', require('./routes/auth'));
 app.use('/api/channels', require('./routes/channels'));
 app.use('/api/push-logs', require('./routes/push-logs'));
 app.use('/api/admin', require('./routes/admin'));
+app.use('/api/internal', require('./routes/internal'));
 app.use('/', require('./routes/notify')); // 推送 API:/notify + /:key.send
 
 // 前端配置

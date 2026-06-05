@@ -1,0 +1,18 @@
+{
+  "name": "bottalk-portal",
+  "version": "1.0.0",
+  "description": "BotTalk 官网门户 + 全站综合看板 — 列出多渠道供用户选择,超管聚合各渠道基本统计",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "axios": "^1.6.7",
+    "better-sqlite3": "^9.4.3",
+    "better-sqlite3-session-store": "^0.1.0",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "express-session": "^1.19.0"
+  }
+}

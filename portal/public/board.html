@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BotTalk · 全站综合看板</title>
+  <style>
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { font-family:-apple-system,BlinkMacSystemFont,"PingFang SC",Arial,sans-serif; color:#1d1d1f; background:#f5f5f7; line-height:1.5; }
+    .wrap { max-width:960px; margin:0 auto; padding:28px 18px 60px; }
+    .topbar { display:flex; align-items:center; justify-content:space-between; margin-bottom:22px; }
+    .topbar h1 { font-size:21px; }
+    .topbar a, .topbar button { font-size:13px; color:#0071e3; background:none; border:none; cursor:pointer; text-decoration:none; }
+    .card { background:#fff; border-radius:16px; padding:22px 24px; margin-bottom:16px; box-shadow:0 2px 12px rgba(0,0,0,0.04); }
+    input[type=password] { padding:10px 12px; border:1px solid #d2d2d7; border-radius:10px; font-size:14px; min-width:240px; }
+    button.btn { padding:10px 18px; border-radius:10px; border:none; background:#0071e3; color:#fff; font-size:14px; font-weight:600; cursor:pointer; }
+    .muted { color:#86868b; font-size:13px; }
+    .hidden { display:none; }
+    .ch-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; }
+    @media(max-width:760px){ .ch-grid{grid-template-columns:1fr;} }
+    .ch { background:#fff; border-radius:16px; padding:20px 22px; box-shadow:0 2px 12px rgba(0,0,0,0.04); border-top:4px solid #ccc; }
+    .ch-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+    .ch-name { font-size:17px; font-weight:700; }
+    .dot { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:5px; vertical-align:middle; }
+    .st { font-size:12px; font-weight:600; }
+    .st.online { color:#1a7e3f; } .st.offline { color:#c41a1a; } .st.none { color:#86868b; }
+    .metrics { display:grid; grid-template-columns:1fr 1fr; gap:10px 14px; margin-bottom:16px; }
+    .m .v { font-size:22px; font-weight:700; } .m .l { font-size:11.5px; color:#86868b; }
+    .enter { display:block; text-align:center; padding:9px 0; border-radius:10px; background:#f0f0f3; color:#1d1d1f; font-size:13.5px; font-weight:600; text-decoration:none; }
+    .enter:hover { background:#e8e8ec; }
+    .ch-note { font-size:12px; color:#aeaeb2; margin-bottom:14px; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <h1>📊 全站综合看板</h1>
+    <div style="display:flex;gap:16px;align-items:center;">
+      <button id="btn-refresh" class="hidden" onclick="loadBoard()">↻ 刷新</button>
+      <button id="btn-logout" class="hidden" onclick="logout()">退出</button>
+      <a href="/">← 官网</a>
+    </div>
+  </div>
+
+  <!-- 登录 -->
+  <div id="login-card" class="card hidden">
+    <h2 style="font-size:16px;margin-bottom:12px;">超管登录</h2>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      <input type="password" id="pw" placeholder="门户管理密码" onkeydown="if(event.key==='Enter')login()">
+      <button class="btn" onclick="login()">登录</button>
+    </div>
+    <div id="login-err" class="muted" style="color:#ff3b30;margin-top:8px;"></div>
+  </div>
+
+  <!-- 看板 -->
+  <div id="board" class="hidden">
+    <p class="muted" style="margin-bottom:14px;">各渠道独立运行,数据实时只读拉取。点「进入 X 后台」跳到该渠道自己的 admin。</p>
+    <div class="ch-grid" id="ch-grid"><p class="muted">加载中…</p></div>
+  </div>
+</div>
+
+<script>
+function api(url, opts){ return fetch(url, Object.assign({ credentials:'same-origin', headers:{'Content-Type':'application/json'} }, opts||{})).then(r=>r.json()); }
+function show(id,on){ document.getElementById(id).classList.toggle('hidden', !on); }
+
+async function loadMe(){
+  const r = await api('/api/auth/me');
+  if (r.success && r.data.isAdmin){
+    show('login-card', false); show('board', true); show('btn-logout', true); show('btn-refresh', true);
+    loadBoard();
+  } else {
+    show('login-card', true); show('board', false); show('btn-logout', false); show('btn-refresh', false);
+  }
+}
+async function login(){
+  const pw = document.getElementById('pw').value;
+  const r = await api('/api/auth/login', { method:'POST', body: JSON.stringify({ password: pw }) });
+  if (r.success) loadMe();
+  else document.getElementById('login-err').textContent = r.error || '登录失败';
+}
+async function logout(){ await api('/api/auth/logout', { method:'POST' }); location.reload(); }
+
+function metric(v, l){ return '<div class="m"><div class="v">'+(v==null?'—':v)+'</div><div class="l">'+l+'</div></div>'; }
+
+async function loadBoard(){
+  const r = await api('/api/board/summary');
+  const el = document.getElementById('ch-grid');
+  if (!r.success){ el.innerHTML = '<p class="muted">需要超管登录</p>'; return; }
+  el.innerHTML = r.data.channels.map(c=>{
+    let statusHtml, metricsHtml;
+    if (c.status==='online' && c.stats){
+      const s = c.stats;
+      statusHtml = '<span class="st online"><span class="dot" style="background:#34c759"></span>在线</span>';
+      metricsHtml = '<div class="metrics">'+
+        metric(s.users, '用户')+
+        metric(s.channels_active, '活跃通道')+
+        metric(s.pushes_24h, '近24h推送')+
+        metric(s.success_rate==null?'—':(s.success_rate+'%'), '成功率')+
+        '</div>';
+    } else if (c.status==='offline' || c.status==='error'){
+      statusHtml = '<span class="st offline"><span class="dot" style="background:#ff3b30"></span>离线</span>';
+      metricsHtml = '<div class="ch-note">该渠道暂时不可达(不影响其它渠道)</div>';
+    } else {
+      statusHtml = '<span class="st none"><span class="dot" style="background:#c7c7cc"></span>未接入统计</span>';
+      metricsHtml = '<div class="ch-note">'+(c.note||'未接入聚合统计,仅深链')+'</div>';
+    }
+    return '<div class="ch" style="border-top-color:'+c.color+'">'+
+      '<div class="ch-head"><span class="ch-name">'+escapeHtml(c.name)+'</span>'+statusHtml+'</div>'+
+      metricsHtml+
+      '<a class="enter" href="'+c.admin+'" target="_blank">进入 '+escapeHtml(c.name)+' 后台 →</a>'+
+      '</div>';
+  }).join('');
+}
+
+function escapeHtml(s){ return String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+loadMe();
+setInterval(()=>{ if(!document.getElementById('board').classList.contains('hidden')) loadBoard(); }, 30000);
+</script>
+</body>
+</html>

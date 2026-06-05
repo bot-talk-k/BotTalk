@@ -1,0 +1,37 @@
+# BotTalk 官网门户 + 综合看板 — 独立容器,与各渠道零运行时耦合。
+# 看板在 bottalk-shared 网络内用容器名拉各渠道 /api/internal/stats。
+# 用法: docker compose -f docker-compose.portal.yml up -d --build
+networks:
+  bottalk-shared:
+    name: bottalk-shared
+
+services:
+  portal:
+    build: ./portal
+    container_name: bottalk-portal
+    ports:
+      - "127.0.0.1:3004:3000"   # 只监听本地,由 nginx 反代 portal.bot-talk.com
+    networks:
+      - bottalk-shared
+    environment:
+      - NODE_ENV=production
+      - TZ=Asia/Shanghai
+      - BASE_URL=https://portal.bot-talk.com
+      - WECHAT_SITE_URL=https://bot-talk.com
+      # 各渠道 internal 统计共享 token + 门户超管密码,均从服务器 .env 注入
+      - INTERNAL_STATS_TOKEN=${INTERNAL_STATS_TOKEN:-}
+      - PORTAL_ADMIN_PASSWORD=${PORTAL_ADMIN_PASSWORD:-}
+    volumes:
+      - ./portal-data:/app/data   # 仅 session,docker rebuild 不动
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/api/config', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

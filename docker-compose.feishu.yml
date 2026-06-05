@@ -19,6 +19,8 @@ services:
       - TZ=Asia/Shanghai
       - BASE_URL=https://feishu.bot-talk.com
       - WECHAT_SITE_URL=https://bot-talk.com
+      # portal 综合看板拉只读统计用(未设则 /api/internal/stats 一律 403)
+      - INTERNAL_STATS_TOKEN=${INTERNAL_STATS_TOKEN:-}
     volumes:
       - ./feishu-data:/app/data   # 独立 DB,docker rebuild 不动
     restart: unless-stopped

@@ -6,6 +6,9 @@ feishu/node_modules/
 wecom-data/
 wecom/data/
 wecom/node_modules/
+portal-data/
+portal/data/
+portal/node_modules/
 tests/tmp-data/
 *.log
 .DS_Store
