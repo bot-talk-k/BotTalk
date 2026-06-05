@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BotTalk 企业微信 · 超管</title>
+  <style>
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { font-family:-apple-system,BlinkMacSystemFont,"PingFang SC",Arial,sans-serif; color:#1d1d1f; background:#f5f5f7; line-height:1.5; }
+    .wrap { max-width:980px; margin:0 auto; padding:24px 18px 60px; }
+    .topbar { display:flex; align-items:center; justify-content:space-between; margin-bottom:18px; }
+    .topbar h1 { font-size:20px; }
+    .topbar a { font-size:13px; color:#0071e3; text-decoration:none; }
+    .refresh-btn { font-size:13px; color:#0071e3; background:none; border:none; cursor:pointer; padding:0; }
+
+    /* Tab 导航 */
+    .tabs { display:flex; gap:6px; margin-bottom:18px; flex-wrap:wrap; }
+    .tab { padding:7px 16px; border-radius:20px; font-size:14px; cursor:pointer; background:#fff; border:1px solid #e5e5ea; color:#1d1d1f; }
+    .tab.active { background:#0071e3; color:#fff; border-color:#0071e3; }
+    .panel { display:none; }
+    .panel.active { display:block; }
+
+    .card { background:#fff; border-radius:16px; padding:20px 22px; margin-bottom:16px; box-shadow:0 2px 12px rgba(0,0,0,0.04); }
+    .card-title { font-size:15px; font-weight:600; margin-bottom:14px; color:#1d1d1f; }
+
+    .stat-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:12px; }
+    @media(max-width:680px){ .stat-grid{grid-template-columns:repeat(2,1fr);} }
+    .stat { background:#f5f5f7; border-radius:12px; padding:14px; text-align:center; }
+    .stat .v { font-size:26px; font-weight:700; }
+    .stat .l { font-size:12px; color:#86868b; margin-top:4px; }
+    .stat .v.blue { color:#0071e3; } .stat .v.green { color:#1a7e3f; }
+
+    .pv-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+    @media(max-width:680px){ .pv-grid{grid-template-columns:1fr;} }
+    .pv-box { background:#f5f5f7; border-radius:10px; padding:14px; }
+    .pv-box .page { font-size:13px; color:#86868b; margin-bottom:6px; }
+    .pv-box .nums { display:flex; gap:16px; }
+    .pv-box .num-item { text-align:center; }
+    .pv-box .num-item .n { font-size:20px; font-weight:700; }
+    .pv-box .num-item .d { font-size:11px; color:#86868b; }
+
+    /* 时间线 */
+    .timeline { list-style:none; }
+    .timeline li { display:flex; gap:12px; padding:9px 0; border-bottom:1px solid #f0f0f0; align-items:flex-start; }
+    .timeline li:last-child { border-bottom:none; }
+    .tl-icon { width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:13px; flex-shrink:0; margin-top:1px; }
+    .ic-register { background:rgba(52,199,89,0.15); } .ic-channel { background:rgba(0,113,227,0.12); }
+    .ic-push { background:rgba(255,149,0,0.12); } .ic-view { background:rgba(142,142,147,0.12); }
+    .ic-login { background:rgba(90,200,250,0.15); } .ic-other { background:#f0f0f0; }
+    .tl-body { flex:1; min-width:0; }
+    .tl-action { font-size:14px; font-weight:500; }
+    .tl-action .who { color:#86868b; font-weight:400; }
+    .tl-meta { font-size:12px; color:#86868b; margin-top:2px; }
+    .tl-time { font-size:12px; color:#aeaeb2; flex-shrink:0; white-space:nowrap; margin-top:3px; }
+
+    table { width:100%; border-collapse:collapse; font-size:14px; }
+    th,td { text-align:left; padding:10px 8px; border-bottom:1px solid #f0f0f0; }
+    th { font-size:12px; color:#86868b; font-weight:600; }
+    tr:last-child td { border-bottom:none; }
+    .muted { color:#86868b; font-size:13px; }
+    .badge { display:inline-block; padding:2px 8px; border-radius:6px; font-size:12px; }
+    .badge-admin { background:rgba(0,113,227,0.1); color:#0071e3; }
+    .badge-dis { background:rgba(255,59,48,0.1); color:#c41a1a; }
+    button.sm { padding:3px 10px; border-radius:6px; border:1px solid #d2d2d7; background:#fff; cursor:pointer; font-size:12px; }
+    .empty { color:#86868b; font-size:14px; text-align:center; padding:20px 0; }
+
+    /* 推送日志 */
+    .log-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
+    .log-header h2 { font-size:20px; font-weight:700; }
+    .log-sub { font-size:13px; color:#86868b; margin-bottom:16px; }
+    .outline-btn { padding:7px 16px; border-radius:20px; border:1.5px solid #0071e3; background:#fff; color:#0071e3; font-size:13px; font-weight:600; cursor:pointer; }
+    .log-table { width:100%; border-collapse:collapse; font-size:14px; }
+    .log-table th { text-align:left; padding:10px 12px; color:#86868b; font-size:13px; font-weight:500; border-bottom:1px solid #f0f0f0; }
+    .log-table td { padding:13px 12px; border-bottom:1px solid #f5f5f7; vertical-align:middle; cursor:pointer; }
+    .log-table tr:last-child td { border-bottom:none; }
+    .log-table tr:hover td { background:#fafafa; }
+    .log-id { color:#aeaeb2; font-size:13px; }
+    .log-title { color:#0071e3; font-weight:500; }
+    .log-status-ok { display:inline-block; background:rgba(52,199,89,0.12); color:#1a7e3f; padding:3px 10px; border-radius:20px; font-size:13px; font-weight:500; }
+    .log-status-err { display:inline-block; background:rgba(255,59,48,0.10); color:#c41a1a; padding:3px 10px; border-radius:20px; font-size:13px; font-weight:500; }
+    .log-time { color:#86868b; font-size:13px; white-space:nowrap; }
+
+    /* 条形图 */
+    .bar-row { display:flex; align-items:center; gap:10px; margin-bottom:6px; font-size:12.5px; }
+    .bar-label { width:78px; color:#86868b; flex-shrink:0; text-align:right; }
+    .bar-track { flex:1; background:#f0f0f0; border-radius:4px; height:18px; overflow:hidden; display:flex; }
+    .bar-fill { height:100%; min-width:2px; }
+    .bar-val { width:120px; flex-shrink:0; font-weight:600; font-size:12px; }
+    .legend { display:flex; gap:16px; font-size:12px; color:#86868b; margin-bottom:10px; }
+    .legend .dot { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:4px; vertical-align:middle; }
+
+    /* Modal */
+    .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.4); z-index:1000; align-items:center; justify-content:center; padding:20px; }
+    .modal-overlay.open { display:flex; }
+    .modal { background:#fff; border-radius:18px; padding:28px; max-width:560px; width:100%; box-shadow:0 20px 60px rgba(0,0,0,0.2); }
+    .modal-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px; }
+    .modal-title { font-size:18px; font-weight:700; line-height:1.3; flex:1; padding-right:16px; }
+    .modal-close { background:none; border:none; font-size:22px; color:#86868b; cursor:pointer; line-height:1; flex-shrink:0; }
+    .modal-meta { display:flex; gap:12px; margin-bottom:14px; flex-wrap:wrap; }
+    .modal-meta span { font-size:13px; color:#86868b; }
+    .modal-content { background:#f5f5f7; border-radius:10px; padding:14px; font-size:14px; white-space:pre-wrap; word-break:break-word; max-height:300px; overflow-y:auto; line-height:1.6; }
+    .modal-empty { color:#aeaeb2; font-style:italic; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <h1>🛠 企业微信超管</h1>
+    <div style="display:flex;gap:16px;align-items:center;">
+      <button class="refresh-btn" onclick="loadAll()">↻ 刷新</button>
+      <a href="/app">← 控制台</a>
+    </div>
+  </div>
+
+  <div class="tabs" id="tabs">
+    <div class="tab active" data-tab="dashboard" onclick="switchTab('dashboard')">仪表盘</div>
+    <div class="tab" data-tab="users" onclick="switchTab('users')">用户管理</div>
+    <div class="tab" data-tab="logs" onclick="switchTab('logs')">推送日志</div>
+    <div class="tab" data-tab="visits" onclick="switchTab('visits')">访问统计</div>
+    <div class="tab" data-tab="activity" onclick="switchTab('activity')">用户活跃度</div>
+  </div>
+
+  <!-- ════ 仪表盘 ════ -->
+  <div class="panel active" id="panel-dashboard">
+    <div class="card">
+      <div class="card-title">总览</div>
+      <div class="stat-grid" id="stats"><div class="stat"><div class="v">—</div><div class="l">加载中</div></div></div>
+    </div>
+    <div class="card">
+      <div class="card-title">页面访问</div>
+      <div class="pv-grid" id="pageviews"><div class="pv-box"><div class="page">加载中…</div></div></div>
+    </div>
+    <div class="card">
+      <div class="card-title">最近活动（最多 50 条）</div>
+      <ul class="timeline" id="timeline"><li><span class="muted">加载中…</span></li></ul>
+    </div>
+  </div>
+
+  <!-- ════ 用户管理 ════ -->
+  <div class="panel" id="panel-users">
+    <div class="card">
+      <div class="card-title">用户</div>
+      <div id="users"><p class="muted">加载中…</p></div>
+    </div>
+  </div>
+
+  <!-- ════ 推送日志 ════ -->
+  <div class="panel" id="panel-logs">
+    <div class="card">
+      <div class="log-header"><h2>推送日志</h2><button class="outline-btn" onclick="loadPushLogs()">刷新</button></div>
+      <div class="log-sub">最近 200 条全部用户推送记录 · 点击行查看正文</div>
+      <div style="overflow-x:auto;">
+        <table class="log-table">
+          <thead><tr><th>ID</th><th>用户</th><th>标题</th><th>状态</th><th>时间</th></tr></thead>
+          <tbody id="push-logs-body"><tr><td colspan="5" class="empty">加载中…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════ 访问统计 ════ -->
+  <div class="panel" id="panel-visits">
+    <div class="card">
+      <div class="card-title">访问汇总（已排除超管）</div>
+      <div class="stat-grid" id="visit-summary" style="grid-template-columns:repeat(3,1fr);"><div class="stat"><div class="v">—</div><div class="l">加载中</div></div></div>
+    </div>
+    <div class="card">
+      <div class="card-title">各页面访问</div>
+      <div id="visit-bypage"><p class="muted">加载中…</p></div>
+    </div>
+    <div class="card">
+      <div class="card-title">近 30 天访问趋势</div>
+      <div id="visit-byday"><p class="muted">加载中…</p></div>
+    </div>
+    <div class="card">
+      <div class="card-title">最近访问（IP 已脱敏）</div>
+      <div style="overflow-x:auto;"><table><thead><tr><th>时间</th><th>页面</th><th>访客</th><th>IP</th></tr></thead><tbody id="visit-recent"><tr><td colspan="4" class="empty">加载中…</td></tr></tbody></table></div>
+    </div>
+  </div>
+
+  <!-- ════ 用户活跃度 ════ -->
+  <div class="panel" id="panel-activity">
+    <div class="card">
+      <div class="card-title">用户活跃分布（按最后推送时间）</div>
+      <div id="act-buckets"><p class="muted">加载中…</p></div>
+    </div>
+    <div class="card">
+      <div class="card-title">近 30 天注册趋势</div>
+      <div id="act-register"><p class="muted">加载中…</p></div>
+    </div>
+    <div class="card">
+      <div class="card-title">近 30 天推送量</div>
+      <div class="legend"><span><span class="dot" style="background:#34c759"></span>成功</span><span><span class="dot" style="background:#ff3b30"></span>失败</span></div>
+      <div id="act-push"><p class="muted">加载中…</p></div>
+    </div>
+    <div class="card">
+      <div class="card-title">人均通道数分布</div>
+      <div id="act-channels"><p class="muted">加载中…</p></div>
+    </div>
+  </div>
+</div>
+
+<!-- 内容 Modal -->
+<div class="modal-overlay" id="log-modal" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <div class="modal-header"><div class="modal-title" id="modal-title"></div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div class="modal-meta"><span id="modal-user"></span><span id="modal-time"></span><span id="modal-status"></span></div>
+    <div class="modal-content" id="modal-body"></div>
+  </div>
+</div>
+
+<script>
+function api(u){ return fetch(u,{credentials:'same-origin'}).then(r=>r.json()); }
+let _logMap = {};
+
+function switchTab(name){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active', t.dataset.tab===name));
+  document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('active', p.id==='panel-'+name));
+}
+
+function escHtml(s){ return String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function fmtAbsTime(s){ if(!s) return ''; return new Date(s.replace(' ','T')+'Z').toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false,year:'numeric',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}); }
+function fmtTime(s){
+  if(!s) return '';
+  const d = new Date(s.replace(' ','T')+'Z'); const diffMin = Math.floor((Date.now()-d)/60000);
+  if(diffMin<1) return '刚刚'; if(diffMin<60) return diffMin+'分钟前';
+  const h=Math.floor(diffMin/60); if(h<24) return h+'小时前';
+  const dd=Math.floor(h/24); if(dd<7) return dd+'天前';
+  return d.toLocaleDateString('zh-CN',{timeZone:'Asia/Shanghai',month:'short',day:'numeric'});
+}
+
+// 简易条形图
+function bars(rows, labelKey, valueKey, color){
+  if(!rows || !rows.length) return '<p class="empty">暂无数据</p>';
+  const max = Math.max(1, ...rows.map(r=>+r[valueKey]||0));
+  return rows.map(r=>{
+    const v = +r[valueKey]||0;
+    return `<div class="bar-row"><span class="bar-label">${escHtml(r[labelKey])}</span>`+
+      `<div class="bar-track"><div class="bar-fill" style="width:${v/max*100}%;background:${color}"></div></div>`+
+      `<span class="bar-val">${v}</span></div>`;
+  }).join('');
+}
+
+// ════ Modal ════
+function openModal(id){
+  const p=_logMap[id]; if(!p) return;
+  document.getElementById('modal-title').textContent=p.title||'(无标题)';
+  document.getElementById('modal-user').textContent='👤 '+(p.nickname||'User#'+p.user_id);
+  document.getElementById('modal-time').textContent='🕐 '+fmtAbsTime(p.created_at);
+  document.getElementById('modal-status').textContent=p.status==='success'?'✅ 成功':'❌ 失败';
+  const body=document.getElementById('modal-body');
+  if(p.content){ body.classList.remove('modal-empty'); body.textContent=p.content; }
+  else { body.classList.add('modal-empty'); body.textContent='(无正文内容)'; }
+  document.getElementById('log-modal').classList.add('open');
+}
+function closeModal(){ document.getElementById('log-modal').classList.remove('open'); }
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeModal(); });
+
+function actionIcon(a){ return ({register:['ic-register','🎉'],channel_add:['ic-channel','🔗'],push:['ic-push','📨'],page_view:['ic-view','👁'],login:['ic-login','🔑']})[a]||['ic-other','·']; }
+function actionLabel(action,detail,nickname){
+  const who = nickname ? `<span class="who">${escHtml(nickname)}</span>` : '<span class="who">访客</span>';
+  switch(action){
+    case 'register': return `${who} 扫码注册`;
+    case 'channel_add': return `${who} 绑定了新通道`;
+    case 'push': return `${who} 发起推送`;
+    case 'login': return `${who} 登录`;
+    case 'page_view': return `访客访问了<strong>${detail==='intro'?'首页':'控制台'}</strong>`;
+    default: return `${who} ${escHtml(action)}`;
+  }
+}
+
+// ════ 加载各区 ════
+async function loadStats(){
+  const r = await api('/api/admin/stats');
+  if(!r.success){ document.getElementById('stats').innerHTML='<span class="muted">需要超管权限，请先登录</span>'; return false; }
+  const d=r.data;
+  document.getElementById('stats').innerHTML =
+    stat(d.users,'用户','blue')+stat(d.channels,'活跃通道','blue')+stat(d.pushes,'累计推送','')+stat(d.push_success,'成功','green')+stat(d.pushes_24h,'近24h','');
+  return true;
+}
+function stat(v,l,cls){ return `<div class="stat"><div class="v ${cls||''}">${v}</div><div class="l">${l}</div></div>`; }
+
+async function loadPageviews(){
+  const r=await api('/api/admin/pageviews'); const el=document.getElementById('pageviews');
+  if(!r.success||!r.data.length){ el.innerHTML='<div class="pv-box"><div class="page">暂无访问记录</div></div>'; return; }
+  const pages={intro:'🏠 首页',app:'🖥 控制台'};
+  el.innerHTML=r.data.map(row=>`<div class="pv-box"><div class="page">${pages[row.page]||row.page}</div><div class="nums">
+    <div class="num-item"><div class="n">${row.today}</div><div class="d">今日</div></div>
+    <div class="num-item"><div class="n">${row.week}</div><div class="d">近7天</div></div>
+    <div class="num-item"><div class="n">${row.total}</div><div class="d">总计</div></div></div></div>`).join('');
+}
+
+async function loadTimeline(){
+  const r=await api('/api/admin/recent'); const el=document.getElementById('timeline');
+  if(!r.success||!r.data.length){ el.innerHTML='<li><span class="empty">暂无活动记录</span></li>'; return; }
+  el.innerHTML=r.data.map(row=>{ const [cls,icon]=actionIcon(row.action);
+    return `<li><div class="tl-icon ${cls}">${icon}</div><div class="tl-body">
+      <div class="tl-action">${actionLabel(row.action,row.detail,row.nickname)}</div>
+      <div class="tl-meta">${row.ip||''}</div></div><div class="tl-time">${fmtTime(row.created_at)}</div></li>`; }).join('');
+}
+
+async function loadUsers(){
+  const r=await api('/api/admin/users'); const el=document.getElementById('users');
+  if(!r.success){ el.innerHTML='<p class="muted">—</p>'; return; }
+  if(!r.data.length){ el.innerHTML='<p class="empty">暂无用户</p>'; return; }
+  let h='<table><tr><th>ID</th><th>昵称</th><th>通道</th><th>推送</th><th>注册时间</th><th>角色</th><th></th></tr>';
+  r.data.forEach(u=>{
+    const role=u.role==='admin'?'<span class="badge badge-admin">超管</span>':'';
+    const dis=u.is_disabled?'<span class="badge badge-dis">禁用</span>':'';
+    h+=`<tr><td class="muted">${u.id}</td><td>${escHtml(u.nickname||'—')}${role}${dis}</td>
+      <td>${u.channel_count}</td><td>${u.push_count}</td><td class="muted">${fmtTime(u.created_at)}</td><td class="muted">${u.role}</td>
+      <td>${u.role!=='admin'?`<button class="sm" onclick="setAdmin(${u.id})">设超管</button> `:''}
+      <button class="sm" onclick="toggleDisable(${u.id},${u.is_disabled?0:1})">${u.is_disabled?'启用':'禁用'}</button></td></tr>`;
+  });
+  el.innerHTML=h+'</table>';
+}
+
+async function loadPushLogs(){
+  const r=await api('/api/admin/push-logs'); const el=document.getElementById('push-logs-body');
+  if(!r.success){ el.innerHTML='<tr><td colspan="5" class="empty">加载失败</td></tr>'; return; }
+  if(!r.data.length){ el.innerHTML='<tr><td colspan="5" class="empty">暂无推送记录</td></tr>'; return; }
+  _logMap={}; r.data.forEach(p=>_logMap[p.id]=p);
+  el.innerHTML=r.data.map(p=>{
+    const status=p.status==='success'?'<span class="log-status-ok">成功</span>':'<span class="log-status-err">失败</span>';
+    return `<tr onclick="openModal(${p.id})" title="点击查看内容"><td class="log-id">${p.id}</td>
+      <td class="muted">${escHtml(p.nickname||('User#'+(p.user_id||'?')))}</td>
+      <td class="log-title">${escHtml(p.title||'(无标题)')}</td><td>${status}</td>
+      <td class="log-time">${fmtAbsTime(p.created_at)}</td></tr>`;
+  }).join('');
+}
+
+async function loadVisitStats(){
+  const r=await api('/api/admin/visit-stats'); if(!r.success) return;
+  const d=r.data;
+  document.getElementById('visit-summary').innerHTML =
+    stat(d.summary.total,'总访问','blue')+stat(d.summary.today,'今日','')+stat(d.summary.unique_ips,'独立IP','green');
+  const pages={intro:'🏠 首页',app:'🖥 控制台',admin:'🛠 超管'};
+  document.getElementById('visit-bypage').innerHTML = bars(
+    d.by_page.map(p=>({label:pages[p.page]||p.page, count:p.count})), 'label','count','#0071e3') || '<p class="empty">暂无</p>';
+  document.getElementById('visit-byday').innerHTML = bars(
+    d.by_day.map(x=>({label:x.date.slice(5), count:x.count})), 'label','count','#5ac8fa') || '<p class="empty">暂无</p>';
+  const rec=document.getElementById('visit-recent');
+  rec.innerHTML = d.recent.length ? d.recent.map(x=>`<tr><td class="muted">${fmtTime(x.created_at)}</td>
+    <td>${pages[x.page]||x.page}</td><td class="muted">${escHtml(x.nickname||'访客')}</td><td class="muted">${escHtml(x.ip)}</td></tr>`).join('')
+    : '<tr><td colspan="4" class="empty">暂无访问记录</td></tr>';
+}
+
+async function loadUserActivity(){
+  const r=await api('/api/admin/user-activity'); if(!r.success) return;
+  const d=r.data;
+  const bucketLabel={active_1d:'今日活跃',active_7d:'7天内',active_30d:'30天内',over_30d:'30天前',never:'从未推送'};
+  const order=['active_1d','active_7d','active_30d','over_30d','never'];
+  const bmap={}; d.activeBuckets.forEach(b=>bmap[b.bucket]=b.cnt);
+  document.getElementById('act-buckets').innerHTML = bars(
+    order.filter(k=>bmap[k]).map(k=>({label:bucketLabel[k], cnt:bmap[k]})), 'label','cnt','#0071e3') || '<p class="empty">暂无</p>';
+  document.getElementById('act-register').innerHTML = bars(
+    d.registerByDay.map(x=>({label:x.day.slice(5), cnt:x.cnt})), 'label','cnt','#34c759') || '<p class="empty">暂无</p>';
+  // 推送量: 成功+失败 双段
+  const pmax = Math.max(1, ...d.pushByDay.map(x=>x.success+x.failed));
+  document.getElementById('act-push').innerHTML = d.pushByDay.length ? d.pushByDay.map(x=>`
+    <div class="bar-row"><span class="bar-label">${x.day.slice(5)}</span>
+    <div class="bar-track">
+      <div class="bar-fill" style="width:${x.success/pmax*100}%;background:#34c759"></div>
+      <div class="bar-fill" style="width:${x.failed/pmax*100}%;background:#ff3b30"></div>
+    </div><span class="bar-val">${x.success}✓ ${x.failed}✗</span></div>`).join('') : '<p class="empty">暂无</p>';
+  document.getElementById('act-channels').innerHTML = bars(
+    d.channelDist.map(x=>({label:x.channels+' 个通道', users:x.users})), 'label','users','#af52de') || '<p class="empty">暂无</p>';
+}
+
+async function setAdmin(id){ await fetch('/api/admin/users/'+id,{method:'PATCH',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({role:'admin'})}); loadAll(); }
+async function toggleDisable(id,val){ await fetch('/api/admin/users/'+id,{method:'PATCH',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({is_disabled:val})}); loadAll(); }
+
+async function loadAll(){
+  const ok=await loadStats(); if(!ok) return;
+  await Promise.all([loadPageviews(), loadTimeline(), loadUsers(), loadPushLogs(), loadVisitStats(), loadUserActivity()]);
+}
+
+loadAll();
+setInterval(loadAll, 30000);
+</script>
+</body>
+</html>

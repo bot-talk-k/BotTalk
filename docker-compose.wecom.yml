@@ -1,0 +1,37 @@
+# 企业微信智能机器人独立推送站 — 与微信站(bottalk)/飞书站(bottalk-feishu)完全独立。
+# 独立容器 bottalk-wecom、独立端口 3002、独立 volume wecom-data。
+# 共享网络 bottalk-shared 允许 portal 容器通过容器名 bottalk-wecom 拉只读统计。
+# 用法: docker compose -f docker-compose.wecom.yml up -d --build
+networks:
+  bottalk-shared:
+    name: bottalk-shared
+
+services:
+  wecom:
+    build: ./wecom
+    container_name: bottalk-wecom
+    ports:
+      - "127.0.0.1:3002:3000"   # 只监听本地,由 nginx 反代 wecom.bot-talk.com
+    networks:
+      - bottalk-shared
+    environment:
+      - NODE_ENV=production
+      - TZ=Asia/Shanghai
+      - BASE_URL=https://wecom.bot-talk.com
+      - WECHAT_SITE_URL=https://bot-talk.com
+      # portal 综合看板拉只读统计用(未设则 /api/internal/stats 一律 403);Phase 2 在服务器 .env 配
+      - INTERNAL_STATS_TOKEN=${INTERNAL_STATS_TOKEN:-}
+    volumes:
+      - ./wecom-data:/app/data   # 独立 DB(含 botid/secret/captured userid),docker rebuild 不动
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/api/config', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

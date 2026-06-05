@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BotTalk 企业微信通道 — HTTP 一行,消息直达企业微信</title>
+  <style>
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { font-family:-apple-system,BlinkMacSystemFont,"PingFang SC",Arial,sans-serif; color:#1d1d1f; background:#f5f5f7; line-height:1.6; }
+    .wrap { max-width:760px; margin:0 auto; padding:56px 20px 80px; }
+    .hero { text-align:center; margin-bottom:40px; }
+    .hero h1 { font-size:32px; font-weight:800; letter-spacing:-.5px; margin-bottom:12px; }
+    .hero p { font-size:16px; color:#6e6e73; margin-bottom:24px; }
+    .btns { display:flex; gap:12px; justify-content:center; flex-wrap:wrap; }
+    .btn { padding:12px 26px; border-radius:12px; font-size:15px; font-weight:600; text-decoration:none; }
+    .btn.primary { background:#0071e3; color:#fff; }
+    .btn.ghost { background:#fff; color:#0071e3; border:1px solid #d2d2d7; }
+    .card { background:#fff; border-radius:18px; padding:26px 28px; margin-bottom:18px; box-shadow:0 2px 14px rgba(0,0,0,0.04); }
+    .card h2 { font-size:18px; margin-bottom:14px; }
+    .feat { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+    @media(max-width:560px){ .feat{grid-template-columns:1fr;} }
+    .feat div { font-size:14px; color:#3a3a3c; }
+    pre { background:#1d1d1f; color:#d1d1d6; padding:16px; border-radius:12px; font-size:13px; overflow-x:auto; }
+    .foot { text-align:center; font-size:13px; color:#86868b; margin-top:30px; }
+    .foot a { color:#0071e3; text-decoration:none; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hero">
+    <h1>🏢 企业微信推送通道</h1>
+    <p>HTTP 一行调用,消息直达企业微信智能机器人。<br>无条数限制 · 激活后无需回复 · 个人扫码即用。</p>
+    <div class="btns">
+      <a class="btn primary" href="/app">扫码接入 / 进入控制台</a>
+      <a class="btn ghost" id="home-link" href="https://bot-talk.com">← BotTalk 官网</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>为什么用企业微信通道</h2>
+    <div class="feat">
+      <div>✅ <strong>无限发送</strong> — 无 10 条限流,告警随便发</div>
+      <div>✅ <strong>激活后无需回复</strong> — 首次发一句话激活,之后单向接收</div>
+      <div>✅ <strong>扫码即用</strong> — 企业微信扫码一键创建机器人,零后台配置</div>
+      <div>✅ <strong>HTTP 任意语言</strong> — curl / Python / Node.js / Go</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>发送一条消息只需</h2>
+    <pre>curl "https://wecom.bot-talk.com/YOUR_SENDKEY.send?title=部署完成&desp=服务已上线"</pre>
+    <p style="font-size:13px;color:#86868b;margin-top:10px;">扫码绑定后会拿到你的 SendKey,替换上面的 <code>YOUR_SENDKEY</code> 即可。</p>
+  </div>
+
+  <div class="foot">
+    BotTalk · 多渠道消息推送 &nbsp;·&nbsp; <a href="/app">控制台</a> &nbsp;·&nbsp; <a id="wechat-link" href="https://bot-talk.com">微信通道</a>
+  </div>
+</div>
+<script>
+  fetch('/api/config',{credentials:'same-origin'}).then(r=>r.json()).then(c=>{
+    if(c && c.wechat_site_url){ document.getElementById('wechat-link').href=c.wechat_site_url; document.getElementById('home-link').href=c.wechat_site_url; }
+  }).catch(()=>{});
+</script>
+</body>
+</html>
