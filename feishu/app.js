@@ -45,10 +45,15 @@ app.use(session({
   cookie: { maxAge: 30 * 24 * 60 * 60 * 1000, httpOnly: true },
 }));
 
-// 页面访问日志(记到 activity_logs,供超管仪表盘统计)
+// 已知爬虫/扫描器 UA(明牌搜索/AI 爬虫 + 常见 CLI/库);命中则不计入访问统计
+const BOT_UA = /bingbot|googlebot|gptbot|claudebot|ccbot|petalbot|dotbot|mj12bot|semrushbot|ahrefsbot|bytespider|baiduspider|yandex|duckduckbot|applebot|perplexity|amazonbot|crawler|crawl|spider|slurp|scanner|zgrab|masscan|censys|shodan|expanse|facebookexternalhit|curl\/|wget|python-requests|python-urllib|go-http-client|java\/|libwww|okhttp|headless|phantomjs|node-fetch|axios\/|dataforseo|\bbot\b/i;
+
+// 页面访问日志(记到 activity_logs,供超管仪表盘统计;排除超管自己 + 爬虫)
 function logPageView(page) {
   return (req, res, next) => {
     try {
+      const ua = req.headers['user-agent'] || '';
+      if (!ua || BOT_UA.test(ua)) { next(); return; } // 空 UA / 爬虫 不记
       // 超管自己的访问不记录,保持统计数据真实
       if (req.session?.userId) {
         const u = db.prepare('SELECT role FROM users WHERE id=?').get(req.session.userId);
