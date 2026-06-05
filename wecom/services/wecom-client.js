@@ -16,14 +16,13 @@ function createConnection({ botId, secret, onAuthenticated, onDisconnected, onEr
   client.on('disconnected', (reason) => onDisconnected && onDisconnected(String(reason)));
   client.on('error', (err) => onError && onError(err && err.message ? err.message : String(err)));
 
-  // 捕获 userid:单聊任意消息 或 enter_chat 事件
+  // 捕获 userid + 激活 —— 只认「真实 inbound 单聊消息」。
+  // ⚠️ 不要用 enter_chat 事件激活:用户"打开"会话会触发 enter_chat,但企业微信的
+  // aibot_send_msg 主动推送要求用户真正发过一条消息(建立可推送会话),光打开会话
+  // 推送会失败。所以仅在收到真实消息时才 capture/激活,避免页面假"已激活"。
   client.on('message', (frame) => {
     const b = (frame && frame.body) || {};
     if (b.chattype === 'single' && b.from && b.from.userid) onCapture && onCapture(b.from.userid);
-  });
-  client.on('event.enter_chat', (frame) => {
-    const b = (frame && frame.body) || {};
-    if (b.from && b.from.userid) onCapture && onCapture(b.from.userid);
   });
 
   const wrapped = {
