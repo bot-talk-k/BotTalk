@@ -21,6 +21,8 @@ services:
       - WECHAT_SITE_URL=https://bot-talk.com
       # portal 综合看板拉只读统计用(未设则 /api/internal/stats 一律 403);Phase 2 在服务器 .env 配
       - INTERNAL_STATS_TOKEN=${INTERNAL_STATS_TOKEN:-}
+      # 企业微信超管事件(新用户注册/推送失败)推到「超管飞书」,在服务器 .env 配
+      - SUPERADMIN_FEISHU_SENDKEY=${SUPERADMIN_FEISHU_SENDKEY:-}
     volumes:
       - ./wecom-data:/app/data   # 独立 DB(含 botid/secret/captured userid),docker rebuild 不动
     restart: unless-stopped
