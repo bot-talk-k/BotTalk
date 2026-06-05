@@ -16,6 +16,7 @@ module.exports = [
       'public/i18n.js',
       'public/**/*.html',
       'public/**/*.min.js',
+      'public/**/*.umd.js',
       'feishu/public/**/*.min.js',
       'sdk/**',
       'tests/tmp.sqlite*',

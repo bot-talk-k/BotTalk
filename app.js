@@ -105,6 +105,16 @@ if (process.env.ENABLE_FEISHU_PROTO === '1') {
   }
 }
 
+// 企业微信智能机器人 MVP 原型(默认关闭;ENABLE_WECOM_PROTO=1 启用)
+if (process.env.ENABLE_WECOM_PROTO === '1') {
+  try {
+    app.use('/api/wecom-proto', require('./experiments/wecom/routes'));
+    console.log('🧪 企业微信 MVP 原型已挂载: /api/wecom-proto/* + /wecom-proto.html (admin only)');
+  } catch (e) {
+    console.error('🧪 企业微信原型挂载失败:', e.message);
+  }
+}
+
 // Existing routes (login.js removed — replaced by routes/auth.js)
 app.use('/api/reminders', require('./routes/reminders'));
 app.use('/', require('./routes/notify'));

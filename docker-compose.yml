@@ -10,6 +10,9 @@ services:
       - "${PORT:-3000}:3000"
     env_file:
       - .env
+    environment:
+      # 企业微信智能机器人 MVP 原型(默认关闭;此处开启供 staging 自验,见 experiments/wecom/)
+      - ENABLE_WECOM_PROTO=1
     volumes:
       - ./data:/app/data
     restart: unless-stopped

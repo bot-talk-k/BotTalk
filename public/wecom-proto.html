@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>企业微信通道原型 — BotTalk</title>
+  <script src="wecom-aibot-sdk.umd.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "PingFang SC", Arial, sans-serif;
+      margin: 0; padding: 24px; color: #1d1d1f; background: #f5f5f7; line-height: 1.5;
+    }
+    .wrap { max-width: 900px; margin: 0 auto; }
+    h1 { font-size: 24px; margin: 0 0 8px; }
+    .subtitle { color: #6e6e73; font-size: 13px; margin: 0 0 24px; }
+    .card {
+      background: #fff; border-radius: 14px; padding: 20px 24px; margin-bottom: 16px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    }
+    .card h2 { font-size: 16px; margin: 0 0 12px; }
+    .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+    button {
+      padding: 8px 16px; border-radius: 8px; border: 1px solid #0071e3; background: #0071e3;
+      color: #fff; font-size: 14px; cursor: pointer; font-weight: 500;
+    }
+    button.secondary { background: #fff; color: #0071e3; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    label { font-size: 13px; color: #6e6e73; margin-right: 6px; }
+    input[type=text], textarea {
+      padding: 8px 10px; border: 1px solid #d2d2d7; border-radius: 8px; font-size: 14px;
+      font-family: inherit; min-width: 220px;
+    }
+    textarea { width: 100%; min-height: 60px; resize: vertical; }
+    .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 12px 0; }
+    .stat { background: #f5f5f7; border-radius: 10px; padding: 12px; text-align: center; }
+    .stat-value { font-size: 22px; font-weight: 600; color: #1d1d1f; }
+    .stat-value.green { color: #34c759; }
+    .stat-value.red { color: #ff3b30; }
+    .stat-label { font-size: 11px; color: #6e6e73; margin-top: 4px; }
+    .log {
+      background: #1d1d1f; color: #d1d1d6; font-family: "SF Mono", Menlo, monospace; font-size: 12px;
+      padding: 12px; border-radius: 8px; max-height: 280px; overflow-y: auto; white-space: pre-wrap;
+    }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 12px; }
+    .badge-ok  { background: rgba(52,199,89,0.12); color: #1a7e3f; }
+    .badge-err { background: rgba(255,59,48,0.12); color: #c41a1a; }
+    .badge-info{ background: rgba(0,113,227,0.12); color: #0071e3; }
+    .badge-warn{ background: rgba(255,149,0,0.14); color: #b35a00; }
+    a.nav-link { color: #0071e3; text-decoration: none; font-size: 13px; }
+    code { background: #f0f0f2; padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🧪 企业微信通道 MVP 原型</h1>
+  <p class="subtitle">
+    验证假设: 浏览器扫码(<code>@wecom/wecom-aibot-sdk</code>)拿 BotID/Secret + 后端 WS 长连接(<code>@wecom/aibot-node-sdk</code> → <code>wss://openws.work.weixin.qq.com</code>)收发 + 无 iLink 式限流。
+    本页仅 admin 可访问,凭证存 <code>data/wecom-proto.json</code>(非生产 channels 表)。
+    <a class="nav-link" href="admin.html">← 返回管理后台</a>
+  </p>
+
+  <!-- 当前状态 -->
+  <div class="card">
+    <h2>当前状态</h2>
+    <div id="status-area">加载中…</div>
+  </div>
+
+  <!-- 扫码绑定 -->
+  <div class="card">
+    <h2>① 扫码绑定(浏览器弹窗 → 企业微信扫码)</h2>
+    <div class="row">
+      <label>source <input type="text" id="source" value="lobster-ai" style="min-width:140px"></label>
+      <button id="btn-bind" onclick="startBind()">扫码接入 / 重新绑定</button>
+      <button class="secondary" onclick="reset()">清除绑定(重测用)</button>
+    </div>
+    <div id="bind-progress" style="font-size:13px;color:#6e6e73;">
+      点「扫码接入」会弹出企业微信授权窗(<code>work.weixin.qq.com/ai/qc/gen</code>),用企业微信扫码 → 自动获取 BotID/Secret → 自动建立 WS 长连接。
+      <br><span style="color:#8e8e93;font-size:12px;">注: source 默认沿用 TomAI 的 <code>lobster-ai</code>(已实测可用)。若授权失败可尝试改它。</span>
+    </div>
+  </div>
+
+  <!-- 捕获 userid / 接收测试 -->
+  <div class="card">
+    <h2>② 捕获你的 userid + 接收测试(双向证明)</h2>
+    <p style="font-size:13px;color:#6e6e73;margin-top:0;">
+      扫码只给 BotID/Secret,<strong>不含发送目标</strong>。请在<strong>企业微信里打开这个机器人的会话,发一句话(如 <code>hi</code>)</strong> —
+      后端 WS 会收到并自动抓取你的 <code>userid</code>,之后才能主动推送。下面是实时收到的消息/事件:
+    </p>
+    <div class="row">
+      <span>捕获到的 userid: <span id="captured" class="badge badge-warn">尚未捕获</span></span>
+      <button class="secondary" onclick="refreshInbound()">手动刷新</button>
+    </div>
+    <div class="log" id="inbound-log">等待你在企业微信给机器人发消息…</div>
+  </div>
+
+  <!-- 发送测试 -->
+  <div class="card">
+    <h2>③ 主动推送测试</h2>
+    <textarea id="msg-text">📢 企业微信 MVP 测试消息(**markdown** 加粗)</textarea>
+    <div class="row" style="margin-top:8px;">
+      <button onclick="sendOnce()">单条发送</button>
+      <button onclick="sendBatch(20)">连发 20 条(限流压测)</button>
+      <button class="secondary" onclick="sendBatch(5)">连发 5 条</button>
+      <button class="secondary" onclick="resetCounters()">重置计数</button>
+    </div>
+    <div class="stat-grid">
+      <div class="stat"><div class="stat-value" id="cnt-total">0</div><div class="stat-label">总尝试</div></div>
+      <div class="stat"><div class="stat-value green" id="cnt-ok">0</div><div class="stat-label">成功</div></div>
+      <div class="stat"><div class="stat-value red" id="cnt-fail">0</div><div class="stat-label">失败</div></div>
+      <div class="stat"><div class="stat-value" id="cnt-rate">-</div><div class="stat-label">成功率</div></div>
+    </div>
+    <div class="log" id="log">尚未发送任何消息</div>
+  </div>
+
+  <!-- 诊断 -->
+  <div class="card">
+    <h2>④ 诊断</h2>
+    <div class="row">
+      <button class="secondary" onclick="doConnect()">用已存凭证重连 WS</button>
+      <button class="secondary" onclick="doDisconnect()">断开 WS</button>
+      <button class="secondary" onclick="loadStatus()">刷新状态</button>
+    </div>
+    <div class="log" id="diag-log" style="min-height:40px;">WS 长连接状态见上方「当前状态」。进程重启后需「重连」。</div>
+  </div>
+</div>
+
+<script>
+let cntTotal = 0, cntOk = 0, cntFail = 0;
+
+function api(url, opts) {
+  return fetch(url, Object.assign({ credentials: 'same-origin', headers: { 'Content-Type': 'application/json' } }, opts || {}))
+    .then(r => r.json().then(j => ({ status: r.status, body: j })));
+}
+
+function appendLog(line, target) {
+  const el = document.getElementById(target || 'log');
+  const placeholders = ['尚未发送任何消息', '等待你在企业微信给机器人发消息…'];
+  if (placeholders.includes(el.textContent)) el.textContent = '';
+  el.textContent = (el.textContent ? el.textContent + '\n' : '') + line;
+  el.scrollTop = el.scrollHeight;
+}
+
+function refreshCounters() {
+  document.getElementById('cnt-total').textContent = cntTotal;
+  document.getElementById('cnt-ok').textContent = cntOk;
+  document.getElementById('cnt-fail').textContent = cntFail;
+  document.getElementById('cnt-rate').textContent = cntTotal ? Math.round(cntOk * 100 / cntTotal) + '%' : '-';
+}
+function resetCounters() {
+  cntTotal = 0; cntOk = 0; cntFail = 0; refreshCounters();
+  document.getElementById('log').textContent = '尚未发送任何消息';
+}
+
+function wsBadge(d) {
+  if (d.isConnected && d.authenticated) return '<span class="badge badge-ok">WS 已连接+认证</span>';
+  if (d.connected) return '<span class="badge badge-warn">WS 连接中(未认证)</span>';
+  if (d.lastError) return '<span class="badge badge-err">WS 异常: ' + d.lastError + '</span>';
+  return '<span class="badge badge-info">WS 未连接</span>';
+}
+
+async function loadStatus() {
+  const { body } = await api('/api/wecom-proto/status');
+  if (!body.success) { document.getElementById('status-area').innerHTML = '<span class="badge badge-err">查询失败</span>'; return; }
+  const d = body.data;
+  let html;
+  if (!d.bound) {
+    html = '<span class="badge badge-info">尚未绑定</span> — 用下面「扫码接入」开始';
+  } else {
+    html = '<span class="badge badge-ok">已绑定</span>&nbsp;' + wsBadge(d) +
+      '<br><span style="color:#6e6e73;font-size:13px;">' +
+      'BotID=<code>' + d.botIdMasked + '</code>' +
+      ' &nbsp;userid=<code>' + (d.capturedUserId || '(未捕获)') + '</code>' +
+      ' &nbsp;收到 ' + d.inboundCount + ' 条' +
+      ' &nbsp;绑定于 ' + (d.boundAt ? new Date(d.boundAt).toLocaleString('zh-CN') : '-') + '</span>';
+  }
+  document.getElementById('status-area').innerHTML = html;
+  // 同步 captured badge
+  const cap = document.getElementById('captured');
+  if (d.capturedUserId) { cap.textContent = d.capturedUserId; cap.className = 'badge badge-ok'; }
+  else { cap.textContent = '尚未捕获'; cap.className = 'badge badge-warn'; }
+}
+
+async function startBind() {
+  const sourceVal = (document.getElementById('source').value || 'lobster-ai').trim();
+  const NS = window.WecomAIBotSDK;
+  const sdk = (NS && typeof NS.openBotInfoAuthWindow === 'function') ? NS
+            : (NS && NS.default && typeof NS.default.openBotInfoAuthWindow === 'function') ? NS.default
+            : (NS && NS.WecomAIBotSDK) ? new NS.WecomAIBotSDK() : null;
+  if (!sdk) { document.getElementById('bind-progress').innerHTML = '<span class="badge badge-err">SDK 未加载</span>'; return; }
+
+  document.getElementById('bind-progress').innerHTML = '<span class="badge badge-info">已弹出授权窗,请用企业微信扫码…</span>';
+  try {
+    const bot = await sdk.openBotInfoAuthWindow({ source: sourceVal });
+    if (!bot || !bot.botid || !bot.secret) throw new Error('授权窗未返回 botid/secret');
+    document.getElementById('bind-progress').innerHTML = '<span class="badge badge-ok">扫码成功,建立 WS 连接中…</span>';
+    const { body } = await api('/api/wecom-proto/bind', { method: 'POST', body: JSON.stringify({ botId: bot.botid, secret: bot.secret }) });
+    if (!body.success) throw new Error(body.error || 'bind 失败');
+    document.getElementById('bind-progress').innerHTML = '<span class="badge badge-ok">绑定完成 ✓</span> 现在去企业微信打开机器人会话发一句话,以捕获 userid。';
+    loadStatus();
+  } catch (e) {
+    document.getElementById('bind-progress').innerHTML = '<span class="badge badge-err">绑定失败: ' + (e.message || e.code || e) + '</span>';
+  }
+}
+
+async function reset() {
+  if (!confirm('清除当前绑定并断开 WS?')) return;
+  await api('/api/wecom-proto/reset', { method: 'POST' });
+  document.getElementById('inbound-log').textContent = '等待你在企业微信给机器人发消息…';
+  loadStatus();
+}
+
+async function refreshInbound() {
+  const { body } = await api('/api/wecom-proto/inbound');
+  if (!body.success) return;
+  const { inbound, events } = body.data;
+  const lines = [];
+  events.slice(-20).forEach(e => lines.push('[事件 ' + new Date(e.at).toLocaleTimeString() + '] ' + e.type + (e.userid ? ' userid=' + e.userid : '') + (e.reason ? ' (' + e.reason + ')' : '') + (e.error ? ' ' + e.error : '')));
+  inbound.slice(-30).forEach(m => lines.push('[收到 ' + new Date(m.at).toLocaleTimeString() + '] ' + (m.chattype || '') + ' ' + (m.userid || '') + ' ' + m.msgtype + ': ' + (m.text || '')));
+  const el = document.getElementById('inbound-log');
+  el.textContent = lines.length ? lines.join('\n') : '等待你在企业微信给机器人发消息…';
+  el.scrollTop = el.scrollHeight;
+}
+
+async function sendOnce() {
+  const text = document.getElementById('msg-text').value;
+  if (!text) return alert('消息不能为空');
+  const { body } = await api('/api/wecom-proto/send', { method: 'POST', body: JSON.stringify({ text, count: 1 }) });
+  if (!body.success) { appendLog('[ERROR] ' + body.error); cntFail++; cntTotal++; refreshCounters(); return; }
+  body.data.results.forEach(r => {
+    cntTotal++;
+    if (r.success) { cntOk++; appendLog('[' + new Date(r.at).toLocaleTimeString() + '] ✓ → ' + body.data.chatid + ' "' + r.text + '"'); }
+    else { cntFail++; appendLog('[' + new Date(r.at).toLocaleTimeString() + '] ✗ errcode=' + r.errcode + ' ' + (r.errmsg || r.error)); }
+  });
+  refreshCounters();
+}
+
+async function sendBatch(n) {
+  const text = document.getElementById('msg-text').value;
+  if (!text) return alert('消息不能为空');
+  if (!confirm('确认连发 ' + n + ' 条到当前绑定的企业微信?')) return;
+  appendLog('━━━ 开始连发 ' + n + ' 条 ━━━');
+  const t0 = Date.now();
+  const { body } = await api('/api/wecom-proto/send', { method: 'POST', body: JSON.stringify({ text, count: n }) });
+  const dt = ((Date.now() - t0) / 1000).toFixed(1);
+  if (!body.success) { appendLog('[ERROR] ' + body.error); return; }
+  body.data.results.forEach(r => {
+    cntTotal++;
+    if (r.success) { cntOk++; appendLog('[' + new Date(r.at).toLocaleTimeString() + '] ✓ #' + r.idx + '/' + n); }
+    else { cntFail++; appendLog('[' + new Date(r.at).toLocaleTimeString() + '] ✗ #' + r.idx + '/' + n + ' errcode=' + r.errcode + ' ' + (r.errmsg || r.error)); }
+  });
+  appendLog('━━━ 完成 (耗时 ' + dt + 's,成功 ' + body.data.succeeded + '/' + body.data.sent + ') ━━━');
+  refreshCounters();
+}
+
+async function doConnect() {
+  const { body } = await api('/api/wecom-proto/connect', { method: 'POST' });
+  appendLog(body.success ? 'WS 重连已触发' : ('重连失败: ' + body.error), 'diag-log');
+  loadStatus();
+}
+async function doDisconnect() {
+  await api('/api/wecom-proto/disconnect', { method: 'POST' });
+  appendLog('WS 已断开', 'diag-log');
+  loadStatus();
+}
+
+loadStatus();
+refreshInbound();
+setInterval(() => { loadStatus(); refreshInbound(); }, 2500);
+</script>
+</body>
+</html>
