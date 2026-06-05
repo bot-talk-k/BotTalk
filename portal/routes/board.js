@@ -10,7 +10,8 @@ const CHANNELS = [
   {
     key: 'wechat', name: '微信', color: '#07c160',
     site: process.env.WECHAT_SITE_URL || 'https://bot-talk.com',
-    admin: (process.env.WECHAT_SITE_URL || 'https://bot-talk.com') + '/admin',
+    // 微信站 admin 是静态页 admin.html(无 /admin 路由,区别于 feishu/wecom)
+    admin: (process.env.WECHAT_SITE_URL || 'https://bot-talk.com') + '/admin.html',
     internal: null, note: '冻结站,未接入聚合统计',
   },
   {
