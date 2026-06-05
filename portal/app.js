@@ -39,7 +39,8 @@ app.use(session({
   cookie: { maxAge: 30 * 24 * 60 * 60 * 1000, httpOnly: true },
 }));
 
-app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+// portal 只做综合看板;官网 landing 是 bot-talk.com(裸域名),根路径直接跳看板
+app.get('/', (req, res) => res.redirect('/board'));
 app.get('/board', (req, res) => res.sendFile(path.join(__dirname, 'public', 'board.html')));
 app.use(express.static(path.join(__dirname, 'public'), { index: false }));
 
