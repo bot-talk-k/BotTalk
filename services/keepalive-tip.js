@@ -21,14 +21,14 @@ function getDb() {
 
 const MODE = process.env.KEEPALIVE_TIP_MODE || 'smart';
 
-const SHORT_TIP = '\n\n—— 💬 收到请回复';
+const SHORT_TIP = '\n\n—— 💬 收到请回复保活 ｜ 微信限流烦? 可改用飞书/企业微信无限通道 → bot-talk.com';
 
 const LONG_TIP =
   '\n\n━━━━━━━━━━━━━━━━\n' +
-  '💬 由于微信官方目前的局限，通道24小时无对话或者连续只接收（实测似乎快速连续5条以上即可能触发）不回复，' +
-  '可能就被腾讯强制解绑，在OpenClaw中也是一样。\n' +
-  '因此，如果你使用这个通道，尽量收到几条信息即回复一次任意消息，可稳定使用无需再次扫码绑定。\n' +
-  '详情：bot-talk.com/intro#clawbot-limitation';
+  '⚠️ 微信通道受腾讯限制：连续接收约 10 条不回复就会被强制停发，需回复任意消息才恢复，长期困扰用户。\n' +
+  '本站已新增「飞书」与「企业微信」两个新消息通道 —— 均可个人手机安装、扫码即绑定，真正无限且稳定，无需"假装聊天"保活。\n' +
+  '建议在腾讯对个人微信的支持改善之前，改用飞书或企业微信（扫码或 SendKey 即可使用）。\n' +
+  '详情访问：bot-talk.com';
 
 // 北京时间纯算 helper（不依赖 Intl/ICU）
 function beijingDateStr(d) {
