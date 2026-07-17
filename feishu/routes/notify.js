@@ -15,10 +15,13 @@ const adminNotify = require('../services/admin-notify');
 //
 // 分钟窗防**突发洪水**,小时窗防**持续刷量**。
 // 血账: 旧版只有 200/小时,粒度太粗 —— 它允许第 1 分钟打完 200 条再静默 59 分钟。
-// user 16/24 的抖音舆情监控丢了「已通知」状态,每轮扫描把整个评论区历史全量重推
-// (同一条老评论一天重推 6-8 次、峰值 14 条/分钟),140 条/小时**全程未触发**小时窗。
-// 分钟窗让这类失控循环第一分钟就被摁住;正常用户(整点齐发 3-4 条)无感。
-const LIMIT_PER_MIN = 20;
+// user 16/24 的抖音舆情监控丢了「已通知」状态,每轮扫描把整个评论区历史全量重推。
+//
+// 阈值按近 7 天真实分布校准(2026-07-17):合法用户每分钟峰值最高是 user 9(整点跑行情)
+// 的 19 条;洪水 user 24 峰值 24、常态 14。**每分钟条数这个维度分不开「失控」和「合法高频」**
+// (两者 14~24 重叠) → 门限只当**平台安全上限**,定在不误伤任何合法用户处(30,离 19 有余量);
+// 真正区分洪水靠「同一正文重复度」(见 trackDuplicate),那条走告警+人工,不拦。
+const LIMIT_PER_MIN = 30;
 const LIMIT_PER_HOUR = 200;
 
 const _minuteCounts = new Map();
@@ -240,3 +243,5 @@ router.all('/:key.send', async (req, res) => {
 
 module.exports = router;
 module.exports.handlePush = handlePush;
+module.exports.LIMIT_PER_MIN = LIMIT_PER_MIN;
+module.exports.LIMIT_PER_HOUR = LIMIT_PER_HOUR;

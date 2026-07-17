@@ -162,23 +162,39 @@ test('handlePush: 无效 SendKey 返回 40001', async () => {
   assert.strictEqual(r.code, 40001);
 });
 
-// ── 分钟门限:失控循环(user 16/24 峰值 14 条/分)必须第一分钟被摁住 ──
+// ── 分钟门限:真正跑飞的循环(分钟级几十上百条)必须被摁住,阈值随常量走 ──
 // channelParam='all' 走 db.all()→[] → 未超限时落到 40002(无通道),以此区分"放行 vs 被拦"
-test('频率门限: 每分钟超过 20 条 → 42901', async () => {
-  const { handlePush } = require('../routes/notify');
+test('频率门限: 每分钟超过上限 → 42901', async () => {
+  const { handlePush, LIMIT_PER_MIN } = require('../routes/notify');
   dbGetImpl = () => ({ id: 99, send_key: 'fs_rate', is_disabled: 0, nickname: 'ratetest' });
   try {
     const key = `fs_rate_${Date.now()}`; // 独立 key,避免与其它用例共用计数桶
     const codes = [];
-    for (let i = 0; i < 22; i++) {
+    for (let i = 0; i < LIMIT_PER_MIN + 2; i++) {
       const r = await handlePush(key, `title ${i}`, 'body', '127.0.0.1', 'all', null);
       codes.push(r.code);
     }
-    assert.ok(codes.slice(0, 20).every((c) => c === 40002), '前 20 条应放行(落到无通道 40002)');
-    assert.strictEqual(codes[20], 42901, '第 21 条应被分钟门限拦下');
-    assert.strictEqual(codes[21], 42901, '之后持续拦');
+    assert.ok(codes.slice(0, LIMIT_PER_MIN).every((c) => c === 40002), '上限内应放行(落到无通道 40002)');
+    assert.strictEqual(codes[LIMIT_PER_MIN], 42901, '超一条应被分钟门限拦下');
+    assert.strictEqual(codes[LIMIT_PER_MIN + 1], 42901, '之后持续拦');
     const r = await handlePush(key, 'x', 'body', '127.0.0.1', 'all', null);
     assert.match(r.message, /分钟/, '提示应指明是分钟门限,而非小时');
+  } finally {
+    dbGetImpl = () => null;
+  }
+});
+
+// 合法高频用户不得被误伤 —— user 9(整点跑行情)峰值 19 条/分,必须能过
+test('频率门限: 合法高频用户(19 条/分,如行情整点齐发)不被误伤', async () => {
+  const { handlePush, LIMIT_PER_MIN } = require('../routes/notify');
+  assert.ok(LIMIT_PER_MIN > 19, `阈值 ${LIMIT_PER_MIN} 必须高于合法峰值 19,否则误伤 user 9`);
+  dbGetImpl = () => ({ id: 97, send_key: 'fs_hifreq', is_disabled: 0, nickname: 'hangqing' });
+  try {
+    const key = `fs_hifreq_${Date.now()}`;
+    for (let i = 0; i < 19; i++) {
+      const r = await handlePush(key, `【期货行情】${i}`, 'body', '127.0.0.1', 'all', null);
+      assert.strictEqual(r.code, 40002, `第 ${i + 1} 条(合法高频)应放行`);
+    }
   } finally {
     dbGetImpl = () => null;
   }
