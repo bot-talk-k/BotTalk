@@ -44,31 +44,44 @@ function checkRateLimit(sendKey) {
   return null;
 }
 
-// ── 重复内容检测:只告警,永不拦截 ──
+// ── 相同消息重复限速(2026-07-18 加,推翻 07-17「只告警不拦」)──
 //
-// 静默丢弃用户内容 = 僵尸通道那个坑的翻版(用户以为发出去了,实则被我们扔了且无从察觉)。
-// 合法的周期性告警本就会重复同样正文,故这里只把「失控循环」的特征(同一正文反复重推)
-// 报给超管,由人判断要不要联系用户。
-const DUP_ALERT_THRESHOLD = 10; // 同一小时内重复条数达此值 → 告警一次
-const _dupState = new Map(); // userId -> { hour, hashes, dupTotal, alerted }
+// 同一条消息(**标题+正文完全相同**)短时间快速重复超过 10 次 = 用户程序多半异常在重推
+// (丢了「已通知」状态、循环没退出…),他自己收到几十条一模一样的也看不过来。
+// 达阈值后把**这一条**限速到「每分钟最多 1 条」,超出返回 42901 明确提示 —— 不静默丢,
+// 让他的程序能看到自己在被限速(避免 [[feishu-zombie-channel]] 那种「以为发了实则被扔」)。
+//
+// 判定键=标题+正文完全相同,是刻意的:user 23(行情)标题固定但正文条条在变(实时报价),
+// 按标题会误伤他 32 条真实更新;按整条相同只打 user 16/24 那种「同一条老评论重推 6-8 次」。
+const DUP_BURST_THRESHOLD = 10; // 快速重复超过此值 → 进入限速
+const DUP_WINDOW_MS = 10 * 60 * 1000; // 计数窗:该消息 10 分钟没再来则重置
+const DUP_THROTTLE_INTERVAL_MS = 60 * 1000; // 限速后同一条最小间隔
+const _dupState = new Map(); // `${userId}:${hash}` -> { count, windowStart, lastPassAt, alerted }
 
-// 返回 >0 表示本次应告警(值 = 该小时累计重复条数),0 表示无需告警
-function trackDuplicate(userId, title, content) {
-  const hour = Math.floor(Date.now() / 3600000);
-  let st = _dupState.get(userId);
-  if (!st || st.hour !== hour) {
-    st = { hour, hashes: new Map(), dupTotal: 0, alerted: false };
-    _dupState.set(userId, st);
-  }
+// 返回 { allow, throttled?, firstThrottle?, count? }
+function checkDuplicate(userId, title, content) {
+  const now = Date.now();
   const hash = crypto.createHash('sha1').update(`${title}\n${content}`).digest('hex').slice(0, 16);
-  const seen = (st.hashes.get(hash) || 0) + 1;
-  st.hashes.set(hash, seen);
-  if (seen > 1) st.dupTotal++;
-  if (st.dupTotal >= DUP_ALERT_THRESHOLD && !st.alerted) {
-    st.alerted = true;
-    return st.dupTotal;
+  const key = `${userId}:${hash}`;
+  let st = _dupState.get(key);
+  if (!st || now - st.windowStart > DUP_WINDOW_MS) {
+    // 新建状态时顺手清理过期项,避免 Map 无限增长
+    if (_dupState.size > 500) {
+      for (const [k, v] of _dupState) { if (now - v.windowStart > DUP_WINDOW_MS) _dupState.delete(k); }
+    }
+    st = { count: 0, windowStart: now, lastPassAt: 0, alerted: false };
+    _dupState.set(key, st);
   }
-  return 0;
+  st.count++;
+  if (st.count <= DUP_BURST_THRESHOLD) return { allow: true };
+  // 已进入限速:每 60s 放一条
+  if (now - st.lastPassAt >= DUP_THROTTLE_INTERVAL_MS) {
+    st.lastPassAt = now;
+    return { allow: true, throttled: true };
+  }
+  const firstThrottle = !st.alerted;
+  st.alerted = true;
+  return { allow: false, firstThrottle, count: st.count };
 }
 
 // 解析目标通道:default(默认通道)/ all(全部)/ 逗号 id 列表
@@ -133,13 +146,16 @@ async function handlePush(sendKey, title, content, clientIp, channelParam, req, 
   }
   if (!title && !content) return { code: 40003, message: 'title 和消息内容不能同时为空', data: null };
 
-  // 重复内容只告警不拦(见 trackDuplicate 注释)
-  const dupTotal = trackDuplicate(user.id, title, content);
-  if (dupTotal) {
+  // 相同消息(标题+正文完全相同)高频重复 → 限速 1 条/分钟(见 checkDuplicate 注释)
+  const dup = checkDuplicate(user.id, title, content);
+  if (dup.firstThrottle) {
     adminNotify.send(
-      `🔁 飞书推送内容大量重复\n用户: ${who}\n本小时重复: ${dupTotal} 条\n标题: ${title || '(无)'}\n疑似推送源丢失「已通知」状态在重推历史,消息未拦截`,
-      `dup-flood:${user.id}`,
+      `🔁 飞书推送相同消息高频重复\n用户: ${who}\n同一条已重复: ${dup.count} 次\n标题: ${title || '(无)'}\n疑似程序异常在重推,该消息已限速为每分钟最多 1 条`,
+      `dup-throttle:${user.id}`,
     );
+  }
+  if (!dup.allow) {
+    return { code: 42901, message: '相同消息重复过于频繁(疑似程序异常),已限速为每分钟最多1条,请检查推送源', data: null };
   }
 
   const channels = resolveChannels(user.id, channelParam);

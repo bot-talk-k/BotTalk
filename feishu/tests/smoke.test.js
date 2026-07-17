@@ -200,6 +200,47 @@ test('频率门限: 合法高频用户(19 条/分,如行情整点齐发)不被�
   }
 });
 
+// ── 相同消息重复限速:整条(标题+正文)重复 >10 次 → 限速 1 条/分钟 ──
+test('重复限速: 同一条消息重复 >10 次后被限速(42901)', async () => {
+  const { handlePush } = require('../routes/notify');
+  dbGetImpl = () => ({ id: 96, send_key: 'fs_dup', is_disabled: 0, nickname: 'duptest' });
+  try {
+    const key = `fs_dup_${Date.now()}`;
+    const codes = [];
+    for (let i = 0; i < 14; i++) {
+      // 标题+正文完全相同(复刻 user 16/24 整条重推)
+      const r = await handlePush(key, '🔴 舆情提醒', '同一条老评论', '127.0.0.1', 'all', null);
+      codes.push(r.code);
+    }
+    // 前 11 条放行(阈值 10,第 11 条进入限速时因距上次已久仍放 1 条),之后同一分钟内被拦
+    const passed = codes.filter((c) => c === 40002).length;
+    const blocked = codes.filter((c) => c === 42901).length;
+    assert.ok(passed <= 11 && passed >= 10, `应放行约 10-11 条,实际 ${passed}`);
+    assert.ok(blocked >= 2, `其余应被限速拦下,实际拦 ${blocked}`);
+    const last = await handlePush(key, '🔴 舆情提醒', '同一条老评论', '127.0.0.1', 'all', null);
+    assert.strictEqual(last.code, 42901);
+    assert.match(last.message, /限速/, '提示应说明是重复限速');
+  } finally {
+    dbGetImpl = () => null;
+  }
+});
+
+// user 23 形态:标题固定但正文条条在变(实时行情)→ 绝不能被重复限速误伤
+test('重复限速: 标题相同但正文各不相同(如行情)不被误伤', async () => {
+  const { handlePush } = require('../routes/notify');
+  dbGetImpl = () => ({ id: 95, send_key: 'fs_hq', is_disabled: 0, nickname: 'hangqing23' });
+  try {
+    const key = `fs_hq_${Date.now()}`;
+    for (let i = 0; i < 20; i++) {
+      // 标题固定 "15",正文每条不同(报价在变)
+      const r = await handlePush(key, '15', `142_lum 高 ${4900 + i} 其他`, '127.0.0.1', 'all', null);
+      assert.strictEqual(r.code, 40002, `第 ${i + 1} 条(正文各异)应全部放行,不被重复限速`);
+    }
+  } finally {
+    dbGetImpl = () => null;
+  }
+});
+
 // 正常用户(整点齐发 3-4 条)不得被误伤
 test('频率门限: 正常低频推送不受影响', async () => {
   const { handlePush } = require('../routes/notify');
