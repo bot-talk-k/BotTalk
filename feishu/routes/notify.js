@@ -93,12 +93,12 @@ async function handlePush(sendKey, title, content, clientIp, channelParam, req, 
           .run(user.id, channel.id, title, content, clientIp, JSON.stringify({ code: 0, msgid: r.data && r.data.message_id }));
         results.push({ channel_id: channel.id, status: 'success' });
       } else {
-        // 非 0 业务码:凭证死 → 标 inactive(重扫);否则瞬时
+        // 非 0 业务码:凭证死 → 标 inactive(重扫);频控(已退避重试仍失败)→ throttled;否则瞬时
         const dead = r.deadCredential;
         if (dead) db.prepare("UPDATE channels SET status = 'inactive' WHERE id = ?").run(channel.id);
         db.prepare("INSERT INTO push_logs (user_id, channel_id, title, content, status, ip, response) VALUES (?, ?, ?, ?, 'failed', ?, ?)")
-          .run(user.id, channel.id, title, content, clientIp, JSON.stringify({ code: r.code, msg: r.msg }));
-        const reason = dead ? 'channel_dead' : 'feishu_other';
+          .run(user.id, channel.id, title, content, clientIp, JSON.stringify({ code: r.code, msg: r.msg, attempts: r.attempts }));
+        const reason = dead ? 'channel_dead' : (feishu.isThrottleCode(r.code) ? 'throttled' : 'feishu_other');
         results.push({ channel_id: channel.id, status: 'failed', reason, feishu_code: r.code, feishu_msg: r.msg });
         adminNotify.send(
           `⚠️ 飞书推送失败\n用户: ${user.nickname||user.send_key.slice(0,12)}\n通道: ${channel.id}\n标题: ${title||'(无)'}\n原因: ${reason} code=${r.code}`,
@@ -126,10 +126,17 @@ async function handlePush(sendKey, title, content, clientIp, channelParam, req, 
   if (anySuccess) return { code: 0, message: 'success', data: { results } };
 
   const anyDead = results.some(r => r.reason === 'channel_dead');
-  const hint = anyDead
-    ? '飞书通道凭证已失效,请到控制台重新扫码绑定。'
-    : '飞书推送失败(临时或参数问题),请稍后重试或检查通道。';
-  return { code: 50001, message: '全部推送失败', data: { results, reason: anyDead ? 'channel_dead' : 'feishu_other', hint } };
+  const anyThrottled = results.some(r => r.reason === 'throttled');
+  let reason = 'feishu_other';
+  let hint = '飞书推送失败(临时或参数问题),请稍后重试或检查通道。';
+  if (anyDead) {
+    reason = 'channel_dead';
+    hint = '飞书通道凭证已失效,请到控制台重新扫码绑定。';
+  } else if (anyThrottled) {
+    reason = 'throttled';
+    hint = '触发飞书接口频控(同一接收者 5 QPS),退避重试后仍失败。通道本身健康,建议把整点齐发的定时任务错峰。';
+  }
+  return { code: 50001, message: '全部推送失败', data: { results, reason, hint } };
 }
 
 function getClientIp(req) {

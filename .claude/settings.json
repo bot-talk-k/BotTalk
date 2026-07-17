@@ -35,7 +35,8 @@
       "mcp__plugin_playwright_playwright__browser_evaluate"
     ],
     "additionalDirectories": [
-      "c:\\Users\\thoma\\Documents\\bottalk\\.claude"
+      "c:\\Users\\thoma\\Documents\\bottalk\\.claude",
+      "C:\\Users\\thoma\\.claude"
     ]
   },
   "availableModels": [
