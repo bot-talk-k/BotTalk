@@ -9,8 +9,10 @@ const assert = require('node:assert');
 const Module = require('node:module');
 
 // ── mock better-sqlite3:链式 stub,够 db.js / routes 加载即可 ──
+// db.get 默认返回 null(等价"查无此记录");单测内可换 impl 让 handlePush 走到更深分支
+let dbGetImpl = () => null;
 function makeStmt() {
-  return { get: () => null, all: () => [], run: () => ({ lastInsertRowid: 1, changes: 0 }) };
+  return { get: (...a) => dbGetImpl(...a), all: () => [], run: () => ({ lastInsertRowid: 1, changes: 0 }) };
 }
 function FakeDatabase() {
   return {
@@ -158,6 +160,43 @@ test('handlePush: 无效 SendKey 返回 40001', async () => {
   const { handlePush } = require('../routes/notify');
   const r = await handlePush('bogus', 'title', 'content', '127.0.0.1', 'default', null);
   assert.strictEqual(r.code, 40001);
+});
+
+// ── 分钟门限:失控循环(user 16/24 峰值 14 条/分)必须第一分钟被摁住 ──
+// channelParam='all' 走 db.all()→[] → 未超限时落到 40002(无通道),以此区分"放行 vs 被拦"
+test('频率门限: 每分钟超过 20 条 → 42901', async () => {
+  const { handlePush } = require('../routes/notify');
+  dbGetImpl = () => ({ id: 99, send_key: 'fs_rate', is_disabled: 0, nickname: 'ratetest' });
+  try {
+    const key = `fs_rate_${Date.now()}`; // 独立 key,避免与其它用例共用计数桶
+    const codes = [];
+    for (let i = 0; i < 22; i++) {
+      const r = await handlePush(key, `title ${i}`, 'body', '127.0.0.1', 'all', null);
+      codes.push(r.code);
+    }
+    assert.ok(codes.slice(0, 20).every((c) => c === 40002), '前 20 条应放行(落到无通道 40002)');
+    assert.strictEqual(codes[20], 42901, '第 21 条应被分钟门限拦下');
+    assert.strictEqual(codes[21], 42901, '之后持续拦');
+    const r = await handlePush(key, 'x', 'body', '127.0.0.1', 'all', null);
+    assert.match(r.message, /分钟/, '提示应指明是分钟门限,而非小时');
+  } finally {
+    dbGetImpl = () => null;
+  }
+});
+
+// 正常用户(整点齐发 3-4 条)不得被误伤
+test('频率门限: 正常低频推送不受影响', async () => {
+  const { handlePush } = require('../routes/notify');
+  dbGetImpl = () => ({ id: 98, send_key: 'fs_ok', is_disabled: 0, nickname: 'normal' });
+  try {
+    const key = `fs_ok_${Date.now()}`;
+    for (let i = 0; i < 4; i++) {
+      const r = await handlePush(key, `【期货行情】${i}`, 'body', '127.0.0.1', 'all', null);
+      assert.strictEqual(r.code, 40002, '整点齐发 4 条应全部放行');
+    }
+  } finally {
+    dbGetImpl = () => null;
+  }
 });
 
 test.after(() => { Module._load = originalLoad; });

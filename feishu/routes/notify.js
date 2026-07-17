@@ -3,6 +3,7 @@
 //
 // 极简:飞书无限流/无衰减/无需互动 → 无 appendTip、无重试队列、无失联状态机。
 // 失败只两类:凭证死(标 inactive,需重扫)/ 瞬时(不杀通道)。
+const crypto = require('crypto');
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
@@ -10,14 +11,61 @@ const feishu = require('../services/feishu-client');
 const { logActivity } = require('../services/logger');
 const adminNotify = require('../services/admin-notify');
 
-// 简单内存限流:每 SendKey 每小时最多 200 条
-const rateLimits = {};
-function checkRateLimit(sendKey, limit = 200) {
+// ── 频率门限(2026-07-17 加分钟窗)──
+//
+// 分钟窗防**突发洪水**,小时窗防**持续刷量**。
+// 血账: 旧版只有 200/小时,粒度太粗 —— 它允许第 1 分钟打完 200 条再静默 59 分钟。
+// user 16/24 的抖音舆情监控丢了「已通知」状态,每轮扫描把整个评论区历史全量重推
+// (同一条老评论一天重推 6-8 次、峰值 14 条/分钟),140 条/小时**全程未触发**小时窗。
+// 分钟窗让这类失控循环第一分钟就被摁住;正常用户(整点齐发 3-4 条)无感。
+const LIMIT_PER_MIN = 20;
+const LIMIT_PER_HOUR = 200;
+
+const _minuteCounts = new Map();
+const _hourCounts = new Map();
+
+function bumpWindow(map, sendKey, bucket) {
+  const key = `${sendKey}:${bucket}`;
+  const n = (map.get(key) || 0) + 1;
+  map.set(key, n);
+  for (const k of map.keys()) { if (!k.endsWith(`:${bucket}`)) map.delete(k); }
+  return n;
+}
+
+// 通过返回 null;超限返回 { scope, limit, count }
+function checkRateLimit(sendKey) {
+  const perMin = bumpWindow(_minuteCounts, sendKey, Math.floor(Date.now() / 60000));
+  const perHour = bumpWindow(_hourCounts, sendKey, Math.floor(Date.now() / 3600000));
+  if (perMin > LIMIT_PER_MIN) return { scope: 'minute', limit: LIMIT_PER_MIN, count: perMin };
+  if (perHour > LIMIT_PER_HOUR) return { scope: 'hour', limit: LIMIT_PER_HOUR, count: perHour };
+  return null;
+}
+
+// ── 重复内容检测:只告警,永不拦截 ──
+//
+// 静默丢弃用户内容 = 僵尸通道那个坑的翻版(用户以为发出去了,实则被我们扔了且无从察觉)。
+// 合法的周期性告警本就会重复同样正文,故这里只把「失控循环」的特征(同一正文反复重推)
+// 报给超管,由人判断要不要联系用户。
+const DUP_ALERT_THRESHOLD = 10; // 同一小时内重复条数达此值 → 告警一次
+const _dupState = new Map(); // userId -> { hour, hashes, dupTotal, alerted }
+
+// 返回 >0 表示本次应告警(值 = 该小时累计重复条数),0 表示无需告警
+function trackDuplicate(userId, title, content) {
   const hour = Math.floor(Date.now() / 3600000);
-  const key = `${sendKey}:${hour}`;
-  rateLimits[key] = (rateLimits[key] || 0) + 1;
-  for (const k in rateLimits) { if (!k.endsWith(`:${hour}`)) delete rateLimits[k]; }
-  return rateLimits[key] <= limit;
+  let st = _dupState.get(userId);
+  if (!st || st.hour !== hour) {
+    st = { hour, hashes: new Map(), dupTotal: 0, alerted: false };
+    _dupState.set(userId, st);
+  }
+  const hash = crypto.createHash('sha1').update(`${title}\n${content}`).digest('hex').slice(0, 16);
+  const seen = (st.hashes.get(hash) || 0) + 1;
+  st.hashes.set(hash, seen);
+  if (seen > 1) st.dupTotal++;
+  if (st.dupTotal >= DUP_ALERT_THRESHOLD && !st.alerted) {
+    st.alerted = true;
+    return st.dupTotal;
+  }
+  return 0;
 }
 
 // 解析目标通道:default(默认通道)/ all(全部)/ 逗号 id 列表
@@ -66,8 +114,30 @@ async function handlePush(sendKey, title, content, clientIp, channelParam, req, 
   const user = db.prepare('SELECT * FROM users WHERE send_key = ?').get(sendKey);
   if (!user) return { code: 40001, message: 'SendKey 无效', data: null };
   if (user.is_disabled) return { code: 40301, message: '账号已禁用', data: null };
-  if (!checkRateLimit(sendKey)) return { code: 42901, message: '发送频率超限(每小时最多200条)', data: null };
+
+  const who = user.nickname || user.send_key.slice(0, 12);
+  const limited = checkRateLimit(sendKey);
+  if (limited) {
+    // 分钟窗被打爆 = 失控循环的特征信号 → 报超管(人工联系用户),小时窗多为正常刷量不报
+    if (limited.scope === 'minute') {
+      adminNotify.send(
+        `🚧 飞书推送触发分钟门限\n用户: ${who}\n本分钟已达: ${limited.count} 条(上限 ${limited.limit})\n疑似推送源失控循环,建议人工核实`,
+        `rate-limit-min:${user.id}`,
+      );
+    }
+    const unit = limited.scope === 'minute' ? '分钟' : '小时';
+    return { code: 42901, message: `发送频率超限(每${unit}最多${limited.limit}条)`, data: null };
+  }
   if (!title && !content) return { code: 40003, message: 'title 和消息内容不能同时为空', data: null };
+
+  // 重复内容只告警不拦(见 trackDuplicate 注释)
+  const dupTotal = trackDuplicate(user.id, title, content);
+  if (dupTotal) {
+    adminNotify.send(
+      `🔁 飞书推送内容大量重复\n用户: ${who}\n本小时重复: ${dupTotal} 条\n标题: ${title || '(无)'}\n疑似推送源丢失「已通知」状态在重推历史,消息未拦截`,
+      `dup-flood:${user.id}`,
+    );
+  }
 
   const channels = resolveChannels(user.id, channelParam);
   if (channels.length === 0) return { code: 40002, message: '没有可用的飞书通道,请先扫码绑定', data: null };
@@ -101,7 +171,7 @@ async function handlePush(sendKey, title, content, clientIp, channelParam, req, 
         const reason = dead ? 'channel_dead' : (feishu.isThrottleCode(r.code) ? 'throttled' : 'feishu_other');
         results.push({ channel_id: channel.id, status: 'failed', reason, feishu_code: r.code, feishu_msg: r.msg });
         adminNotify.send(
-          `⚠️ 飞书推送失败\n用户: ${user.nickname||user.send_key.slice(0,12)}\n通道: ${channel.id}\n标题: ${title||'(无)'}\n原因: ${reason} code=${r.code}`,
+          `⚠️ 飞书推送失败\n用户: ${who}\n通道: ${channel.id}\n标题: ${title||'(无)'}\n原因: ${reason} code=${r.code}`,
           `push-fail:${channel.id}:${r.code}`
         );
       }
@@ -114,7 +184,7 @@ async function handlePush(sendKey, title, content, clientIp, channelParam, req, 
       const reason = dead ? 'channel_dead' : 'network';
       results.push({ channel_id: channel.id, status: 'failed', reason, error: e.message });
       adminNotify.send(
-        `⚠️ 飞书推送失败\n用户: ${user.nickname||user.send_key.slice(0,12)}\n通道: ${channel.id}\n标题: ${title||'(无)'}\n原因: ${reason} ${e.message.slice(0,60)}`,
+        `⚠️ 飞书推送失败\n用户: ${who}\n通道: ${channel.id}\n标题: ${title||'(无)'}\n原因: ${reason} ${e.message.slice(0,60)}`,
         `push-fail:${channel.id}:${reason}`
       );
     }
