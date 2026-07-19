@@ -1,0 +1,13 @@
+# Traefik Middleware: HTTP → HTTPS 301 重定向
+# 应用: kubectl apply -f k8s/middleware.yaml -n bottalk
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: redirect-https
+  namespace: bottalk
+  labels:
+    app.kubernetes.io/part-of: bottalk
+spec:
+  redirectScheme:
+    scheme: https
+    permanent: true

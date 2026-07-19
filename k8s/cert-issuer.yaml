@@ -1,0 +1,39 @@
+# Let's Encrypt ClusterIssuer (cert-manager)
+# 用于 Traefik Ingress 自动申请 TLS 证书
+# 应用: kubectl apply -f k8s/cert-issuer.yaml
+#
+# 前置条件: cert-manager 已安装 (homevps 已有)
+# 注意: 首次部署建议先用 staging 测试,避免触发 LE 速率限制
+#        将 server 改为 https://acme-staging-v02.api.letsencrypt.org/directory
+#        验证通过后再换成 production
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: admin@bot-talk.com   # 改为你的邮箱,LE 会发到期提醒
+    privateKeySecretRef:
+      name: letsencrypt-prod-account-key
+    solvers:
+      - http01:
+          ingress:
+            class: traefik
+---
+# staging 版本(测试用,不限速)
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-staging
+spec:
+  acme:
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    email: admin@bot-talk.com
+    privateKeySecretRef:
+      name: letsencrypt-staging-account-key
+    solvers:
+      - http01:
+          ingress:
+            class: traefik

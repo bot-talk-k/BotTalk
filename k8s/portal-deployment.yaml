@@ -1,0 +1,92 @@
+# BotTalk Portal Deployment + Service
+# 应用: kubectl apply -f k8s/portal-deployment.yaml -n bottalk
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bottalk-portal
+  namespace: bottalk
+  labels:
+    app.kubernetes.io/name: bottalk-portal
+    app.kubernetes.io/part-of: bottalk
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: bottalk-portal
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: bottalk-portal
+        app.kubernetes.io/part-of: bottalk
+    spec:
+      containers:
+        - name: bottalk-portal
+          # ️ 部署前需在 homevps 上构建镜像:
+          # cd /path/to/bottalk/portal && docker build -t bottalk-portal:latest .
+          image: bottalk-portal:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3000
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: bottalk-config
+            - secretRef:
+                name: bottalk-secret
+          env:
+            - name: PORT
+              value: "3000"
+            - name: BASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: bottalk-config
+                  key: PORTAL_BASE_URL
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          readinessProbe:
+            httpGet:
+              path: /api/config
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /api/config
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: portal-data
+      restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: bottalk-portal
+  namespace: bottalk
+  labels:
+    app.kubernetes.io/name: bottalk-portal
+    app.kubernetes.io/part-of: bottalk
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3000
+      targetPort: 3000
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: bottalk-portal

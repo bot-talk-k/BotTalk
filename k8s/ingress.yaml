@@ -1,0 +1,208 @@
+# BotTalk Ingress (Traefik via k3s)
+# 4 个子域名各路由到对应 Service
+# 应用: kubectl apply -f k8s/ingress.yaml -n bottalk
+#
+# TLS 由阿里云 nginx (back2china_lq) 统一处理, k8s 内部纯 HTTP
+# 流量链路: 用户 → 阿里云(443 TLS) → Tailscale → homevps(nginx:80) → k3s(Traefik) → Pod
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: bottalk-app
+  namespace: bottalk
+  labels:
+    app.kubernetes.io/name: bottalk-app
+    app.kubernetes.io/part-of: bottalk
+spec:
+  rules:
+    - host: bot-talk.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: bottalk-app
+                port:
+                  number: 3000
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: bottalk-feishu
+  namespace: bottalk
+  labels:
+    app.kubernetes.io/name: bottalk-feishu
+    app.kubernetes.io/part-of: bottalk
+spec:
+  rules:
+    - host: feishu.bot-talk.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: bottalk-feishu
+                port:
+                  number: 3000
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: bottalk-wecom
+  namespace: bottalk
+  labels:
+    app.kubernetes.io/name: bottalk-wecom
+    app.kubernetes.io/part-of: bottalk
+spec:
+  rules:
+    - host: wecom.bot-talk.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: bottalk-wecom
+                port:
+                  number: 3000
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: bottalk-portal
+  namespace: bottalk
+  labels:
+    app.kubernetes.io/name: bottalk-portal
+    app.kubernetes.io/part-of: bottalk
+spec:
+  rules:
+    - host: portal.bot-talk.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: bottalk-portal
+                port:
+                  number: 3000
+# BotTalk Ingress (Traefik via k3s)
+# 4 个子域名各路由到对应 Service, TLS 由 cert-manager + Let's Encrypt 自动管理
+# 应用: kubectl apply -f k8s/ingress.yaml -n bottalk
+#
+# 前置: 先 apply cert-issuer.yaml (ClusterIssuer)
+# 首次建议用 staging: 把 annotation 改为 letsencrypt-staging, 验证后再改 prod
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: bottalk-app
+  namespace: bottalk
+  labels:
+    app.kubernetes.io/name: bottalk-app
+    app.kubernetes.io/part-of: bottalk
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    traefik.ingress.kubernetes.io/router.middlewares: bottalk-redirect-https@kubernetescrd
+spec:
+  tls:
+    - hosts:
+        - bot-talk.com
+      secretName: bottalk-app-tls
+  rules:
+    - host: bot-talk.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: bottalk-app
+                port:
+                  number: 3000
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: bottalk-feishu
+  namespace: bottalk
+  labels:
+    app.kubernetes.io/name: bottalk-feishu
+    app.kubernetes.io/part-of: bottalk
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    traefik.ingress.kubernetes.io/router.middlewares: bottalk-redirect-https@kubernetescrd
+spec:
+  tls:
+    - hosts:
+        - feishu.bot-talk.com
+      secretName: bottalk-feishu-tls
+  rules:
+    - host: feishu.bot-talk.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: bottalk-feishu
+                port:
+                  number: 3000
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: bottalk-wecom
+  namespace: bottalk
+  labels:
+    app.kubernetes.io/name: bottalk-wecom
+    app.kubernetes.io/part-of: bottalk
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    traefik.ingress.kubernetes.io/router.middlewares: bottalk-redirect-https@kubernetescrd
+spec:
+  tls:
+    - hosts:
+        - wecom.bot-talk.com
+      secretName: bottalk-wecom-tls
+  rules:
+    - host: wecom.bot-talk.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: bottalk-wecom
+                port:
+                  number: 3000
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: bottalk-portal
+  namespace: bottalk
+  labels:
+    app.kubernetes.io/name: bottalk-portal
+    app.kubernetes.io/part-of: bottalk
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    traefik.ingress.kubernetes.io/router.middlewares: bottalk-redirect-https@kubernetescrd
+spec:
+  tls:
+    - hosts:
+        - portal.bot-talk.com
+      secretName: bottalk-portal-tls
+  rules:
+    - host: portal.bot-talk.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: bottalk-portal
+                port:
+                  number: 3000

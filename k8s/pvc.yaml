@@ -1,0 +1,65 @@
+# BotTalk 持久化存储 (SQLite 数据库)
+# 每个服务独立 PVC,避免数据互相干扰
+# 应用: kubectl apply -f k8s/pvc.yaml -n bottalk
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: bottalk-data
+  namespace: bottalk
+  labels:
+    app.kubernetes.io/part-of: bottalk
+    app.kubernetes.io/component: app
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  # k3s 默认 storageClass 通常是 local-path
+  # 如果有自定义 storageClass,取消下面注释并修改
+  # storageClassName: local-path
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: feishu-data
+  namespace: bottalk
+  labels:
+    app.kubernetes.io/part-of: bottalk
+    app.kubernetes.io/component: feishu
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: wecom-data
+  namespace: bottalk
+  labels:
+    app.kubernetes.io/part-of: bottalk
+    app.kubernetes.io/component: wecom
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: portal-data
+  namespace: bottalk
+  labels:
+    app.kubernetes.io/part-of: bottalk
+    app.kubernetes.io/component: portal
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
