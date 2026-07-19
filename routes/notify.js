@@ -332,6 +332,7 @@ function getClientIp(req) {
 const axios = require('axios');
 // 容器间通信走 Docker 共享网络(bottalk-shared),用容器名而非宿主 IP
 const FEISHU_BASE = process.env.FEISHU_INTERNAL_URL || 'http://bottalk-feishu:3000';
+const WECOM_BASE = process.env.WECOM_INTERNAL_URL || 'http://bottalk-wecom:3000';
 
 async function proxyToFeishu(req, res, path) {
   try {
@@ -356,6 +357,29 @@ async function proxyToFeishu(req, res, path) {
   }
 }
 
+async function proxyToWecom(req, res, path) {
+  try {
+    const url = `${WECOM_BASE}${path}`;
+    const r = await axios({
+      method: req.method,
+      url,
+      params: req.query,
+      data: req.body,
+      headers: {
+        'content-type': 'application/json',
+        'x-real-ip': getClientIp(req),
+        'x-forwarded-for': getClientIp(req),
+      },
+      timeout: 20000,
+      validateStatus: () => true,
+    });
+    res.status(r.status).json(r.data);
+  } catch (e) {
+    console.error('wecom proxy error:', e.message);
+    res.json({ code: 50001, message: '企业微信通道暂时不可用', data: null });
+  }
+}
+
 // ===== 风格1：兼容现有 relay-api 格式 =====
 // GET /notify?key=KEY&msg=消息&title=标题
 // POST /notify (Authorization: Bearer KEY, body: {message, title})
@@ -372,6 +396,7 @@ router.all('/notify', async (req, res) => {
   }
 
   if (sendKey.startsWith('fs_')) return proxyToFeishu(req, res, '/notify');
+  if (sendKey.startsWith('ww_')) return proxyToWecom(req, res, '/notify');
 
   const title = req.body?.title || req.query?.title || '';
   const content = req.body?.message || req.body?.desp || req.query?.msg || req.query?.desp || '';
@@ -387,6 +412,7 @@ router.all('/:key.send', async (req, res) => {
   const sendKey = req.params.key;
 
   if (sendKey.startsWith('fs_')) return proxyToFeishu(req, res, `/${sendKey}.send`);
+  if (sendKey.startsWith('ww_')) return proxyToWecom(req, res, `/${sendKey}.send`);
 
   const title = req.body?.title || req.query?.title || '';
   const content = req.body?.desp || req.body?.message || req.query?.desp || req.query?.msg || '';

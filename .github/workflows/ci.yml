@@ -14,6 +14,8 @@ jobs:
       pull-requests: read
     outputs:
       server: ${{ steps.filter.outputs.server }}
+      feishu: ${{ steps.filter.outputs.feishu }}
+      wecom: ${{ steps.filter.outputs.wecom }}
       python-sdk: ${{ steps.filter.outputs.python-sdk }}
       node-sdk: ${{ steps.filter.outputs.node-sdk }}
       go-sdk: ${{ steps.filter.outputs.go-sdk }}
@@ -36,6 +38,10 @@ jobs:
               - 'eslint.config.js'
               - 'tests/**'
               - '.github/workflows/ci.yml'
+            feishu:
+              - 'feishu/**'
+            wecom:
+              - 'wecom/**'
             python-sdk:
               - 'sdk/python/**'
             node-sdk:
@@ -73,6 +79,54 @@ jobs:
           sleep 5
           curl -sf http://localhost:3000/ > /dev/null
           kill $SERVER_PID
+
+  feishu:
+    name: Feishu
+    needs: changes
+    if: needs.changes.outputs.feishu == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        working-directory: feishu
+        run: npm install
+
+      - name: Lint
+        working-directory: feishu
+        run: npm run lint
+
+      - name: Smoke tests
+        working-directory: feishu
+        run: npm test
+
+  wecom:
+    name: WeCom
+    needs: changes
+    if: needs.changes.outputs.wecom == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        working-directory: wecom
+        run: npm install
+
+      - name: Lint
+        working-directory: wecom
+        run: npm run lint
+
+      - name: Smoke tests
+        working-directory: wecom
+        run: npm test
 
   python-sdk:
     name: Python SDK (${{ matrix.python-version }})
