@@ -176,112 +176,13 @@ console.log('⏰ 定时任务已启动');
 // 基于 last_send_success_at + last_inbound_at 更精准，不会误伤刚回复过的用户。
 
 // ═══════════════════════════════════════════════════════════════════
-// 预防性保活提醒 — 在 context_token 还能用的"黄色警告"窗口主动提醒用户回复
-//
-// 前置过滤（都要满足）：
-//   1. 有 context_token（能发送）
-//   2. consecutive_neg2_count = 0（尚未开始连续失败）
-//   3. send_disabled = 0（不处于半死态）
-//   4. 最近 4 小时内没发过保活提醒（去重）
-//
-// 触发条件（二选一即可）：
-//   A. 时间型：过去 4h 没成功推送 AND 用户超过 22h 未回复
-//   B. 频次型：距上次 inbound 已累计成功推送 ≥ 5 条 AND 距 inbound > 2h
-//
-// Why 频次型：2026-04-15 多样本实锤，context_token 衰退是"时间 + 发送次数"
-// 复合效应。高频推送（每小时）9h 就失败，纯时间阈值对这类用户失效。
+// 预防性保活提醒 — 已废弃移除 (2026-07-19)
+// 原因：用户已迁移至企业微信/飞书通道，不再需要微信 24h 保活机制。
+// 如未来需要恢复，见 git history: feat(wecom) commit 之前的版本。
 // ═══════════════════════════════════════════════════════════════════
 
-const lastKeepaliveReminderAt = {}; // channel_id → epoch ms
-
-async function checkKeepaliveReminders() {
-  try {
-    const channels = db.prepare(`
-      SELECT c.id, c.user_id, c.bot_token, c.wechat_openid, c.context_token,
-             c.consecutive_neg2_count, c.last_send_success_at, c.last_inbound_at,
-             c.created_at, c.send_disabled, u.nickname
-      FROM channels c JOIN users u ON u.id = c.user_id
-      WHERE c.context_token IS NOT NULL
-        AND (c.consecutive_neg2_count IS NULL OR c.consecutive_neg2_count = 0)
-        AND (c.send_disabled IS NULL OR c.send_disabled = 0)
-    `).all();
-
-    const now = Date.now();
-    for (const ch of channels) {
-      // 去重：4 小时内已发过就跳过
-      const lastSent = lastKeepaliveReminderAt[ch.id];
-      if (lastSent && now - lastSent < 4 * 60 * 60 * 1000) continue;
-
-      const lastOkAge = ch.last_send_success_at
-        ? now - new Date(ch.last_send_success_at + 'Z').getTime()
-        : now - new Date(ch.created_at + 'Z').getTime();
-      const lastInboundAge = ch.last_inbound_at
-        ? now - new Date(ch.last_inbound_at + 'Z').getTime()
-        : Infinity;
-
-      // A: 时间型（低频推送场景的兜底）
-      const timeBasedReminder =
-        lastOkAge > 4 * 60 * 60 * 1000 &&
-        lastInboundAge > 22 * 60 * 60 * 1000;
-
-      // B: 频次型（高频推送场景：距上次回复已真实推业务消息 ≥ 5 条 + 至少 2h 无回复）
-      //   只统计"真实业务推送"（api/scheduler/scheduler-retry），排除补发/欢迎/
-      //   回执/保活提醒本身/管理员测试——这些要么是追回过去漏的、要么是系统自身
-      //   消息，不代表"当前对用户的推送压力"。
-      const COUNTED_SOURCES = "('api','scheduler','scheduler-retry')";
-      let sendsSinceInbound = 0;
-      if (lastInboundAge > 2 * 60 * 60 * 1000) {
-        sendsSinceInbound = ch.last_inbound_at
-          ? db.prepare(`SELECT COUNT(*) AS c FROM push_logs WHERE channel_id = ? AND status = 'success' AND ip IN ${COUNTED_SOURCES} AND datetime(created_at) > datetime(?)`).get(ch.id, ch.last_inbound_at).c
-          : db.prepare(`SELECT COUNT(*) AS c FROM push_logs WHERE channel_id = ? AND status = 'success' AND ip IN ${COUNTED_SOURCES}`).get(ch.id).c;
-      }
-      const freqBasedReminder = sendsSinceInbound >= 5 && lastInboundAge > 2 * 60 * 60 * 1000;
-
-      if (!timeBasedReminder && !freqBasedReminder) continue;
-
-      const okHours = Math.round(lastOkAge / 3600000);
-      const inboundDesc = ch.last_inbound_at
-        ? `已 ${Math.round(lastInboundAge / 3600000)} 小时未回复 Bot`
-        : '从未回复过 Bot';
-      const triggerReason = freqBasedReminder
-        ? `(频次触发: 距上次回复已推 ${sendsSinceInbound} 条)`
-        : '(时间触发)';
-      const msg = '🔔 通道保活提醒\n\n' +
-        `你的 BotTalk 通道距今已 ${okHours} 小时没有成功推送，${inboundDesc}。\n\n` +
-        '微信官方文档明确：ClawBot「仅接收 24 小时内的回复」。\n' +
-        '超时后通道会被微信静默断开，这不是 BotTalk 的问题。\n\n' +
-        '✅ 现在回复"1"即可保持通道畅通：\n' +
-        '给我（Bot）回"1"或任意一字，通道立刻刷新。\n\n' +
-        '💡 没收到系统回执？说明通道已断——访问 bot-talk.com/app 扫码重绑即可。\n\n' +
-        '详细说明：bot-talk.com/intro#clawbot-limitation\n' +
-        '本提醒 4 小时内不会重复发送。';
-
-      try {
-        const r = await enqueueSend(ch.id,
-          () => ilink.sendMessage(ch.bot_token, ch.wechat_openid, msg, ch.context_token),
-          { title: '🔔 保活提醒', source: 'keepalive-reminder' });
-        db.prepare("INSERT INTO push_logs (user_id, title, content, status, ip, channel_id, response) VALUES (?, ?, ?, 'success', ?, ?, ?)")
-          .run(ch.user_id, '🔔 通道保活提醒', msg, 'keepalive-reminder', ch.id, JSON.stringify(r));
-        markSendResult(ch.id, r, true);
-        lastKeepaliveReminderAt[ch.id] = now;
-        console.log(`🔔 保活提醒已发送: channel=${ch.id} user=${ch.nickname} (${okHours}h 无成功推送) ${triggerReason}`);
-      } catch (e) {
-        const errData = e.response?.data;
-        db.prepare("INSERT INTO push_logs (user_id, title, content, status, ip, channel_id, response) VALUES (?, ?, ?, 'failed', ?, ?, ?)")
-          .run(ch.user_id, '🔔 通道保活提醒', msg, 'keepalive-reminder', ch.id, JSON.stringify(errData || { error: e.message }));
-        markSendResult(ch.id, e, false);
-        console.error(`❌ 保活提醒失败 channel=${ch.id}:`, JSON.stringify(errData));
-        // 即使失败也记录"已尝试"，避免无效重试（会记在内存 dedup 里）
-        lastKeepaliveReminderAt[ch.id] = now;
-      }
-    }
-  } catch (e) {
-    console.error('checkKeepaliveReminders 错误:', e.message);
-  }
-}
-
 // 每 30 分钟扫一次
-setInterval(checkKeepaliveReminders, 30 * 60 * 1000);
+// setInterval(checkKeepaliveReminders, 30 * 60 * 1000);  // 已移除：保活提醒废弃
 
 // 延时重试队列：每 30 秒扫描到期任务
 const { processRetries, cleanupStalePaused } = require('./services/retry-queue');
@@ -314,7 +215,7 @@ setTimeout(() => {
   processProbes().catch(e => console.error('processProbes 错误:', e.message));
 }, 3 * 60 * 1000);
 // 启动 60 秒后先跑一次
-setTimeout(checkKeepaliveReminders, 60000);
-console.log('🔔 预防性保活提醒任务已启动');
+// setTimeout(checkKeepaliveReminders, 60000);  // 已移除
+// console.log('🔔 预防性保活提醒任务已启动');  // 已移除
 
-module.exports = { checkReminders, checkKeepaliveReminders };
+module.exports = { checkReminders };
