@@ -263,9 +263,11 @@ requests.<span class="n">get</span>(<span class="s">"https://bot-talk.com/&lt;Se
 <footer>BotTalk · 免费开源消息推送 · MIT 协议 · <a href="https://github.com/bot-talk-k/BotTalk" target="_blank" style="color:#0071e3;">GitHub</a></footer>
 
 <script>
-  // 动态替换跨域链接和代码示例，测试环境下自动指向当前域名
+  // 动态替换跨域链接和代码示例，仅在 dev 环境下自动指向当前域名
   (function(){
     var o=window.location.origin;
+    // 生产域名不做重写，保持原始子域名链接
+    if(o==='https://bot-talk.com'||o==='https://feishu.bot-talk.com'||o==='https://wecom.bot-talk.com'||o==='https://portal.bot-talk.com') return;
     // 替换 <a> 链接
     document.querySelectorAll('a[href]').forEach(function(a){
       var h=a.href;

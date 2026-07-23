@@ -61,9 +61,10 @@
   fetch('/api/config',{credentials:'same-origin'}).then(r=>r.json()).then(c=>{
     if(c && c.wechat_site_url){ document.getElementById('wechat-link').href=c.wechat_site_url; document.getElementById('home-link').href=c.wechat_site_url; }
   }).catch(()=>{});
-  // 动态替换跨域链接和代码示例，测试环境下自动指向当前域名
+  // 动态替换跨域链接和代码示例，仅在 dev 环境下自动指向当前域名
   (function(){
     var o=window.location.origin;
+    if(o==='https://bot-talk.com'||o==='https://feishu.bot-talk.com'||o==='https://wecom.bot-talk.com'||o==='https://portal.bot-talk.com') return;
     document.querySelectorAll('a[href]').forEach(function(a){
       var h=a.href;
       if(h.indexOf('https://feishu.bot-talk.com')===0) a.href=o+'/feishu-app'+h.replace('https://feishu.bot-talk.com','');
