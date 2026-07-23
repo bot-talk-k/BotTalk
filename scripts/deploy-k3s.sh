@@ -137,7 +137,7 @@ docker build -t bottalk-portal:latest ./portal
 # Step 5: Import images into k3s containerd
 echo ""
 echo "[5/6] Importing images into k3s..."
-CTR="sudo ctr -a /run/k3s/containerd/containerd.sock -n k8s.io"
+CTR="sudo ctr -a /run/containerd/containerd.sock -n k8s.io"
 for img in bottalk-app bottalk-feishu bottalk-wecom bottalk-portal; do
   echo "  -> $img"
   docker save "$img:latest" | $CTR images import -
