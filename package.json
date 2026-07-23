@@ -39,5 +39,8 @@
     "type": "git",
     "url": "https://github.com/yourusername/bottalk.git"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "pnpm": {
+    "onlyBuiltDependencies": ["better-sqlite3"]
+  }
 }
