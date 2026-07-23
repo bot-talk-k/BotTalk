@@ -32,24 +32,5 @@ jobs:
       - name: Run tests
         run: node --test tests/keepalive-tip.test.js tests/smoke.test.js tests/guard-bash.test.js tests/channel-health.test.js
 
-  build:
-    name: Build Docker Images
-    needs: lint-and-test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Build app
-        run: docker build -t bottalk-app:latest .
-
-      - name: Build feishu
-        run: docker build -t bottalk-feishu:latest ./feishu
-
-      - name: Build wecom
-        run: docker build -t bottalk-wecom:latest ./wecom
-
-      - name: Build portal
-        run: docker build -t bottalk-portal:latest ./portal
-
-      - name: Verify images
-        run: docker images | grep bottalk
+  # TODO: Add CD (Build & Deploy) job when ready for automated deployment
+  # Requires Docker-in-Docker sidecar or host Docker access in the runner
