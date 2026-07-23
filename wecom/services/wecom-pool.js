@@ -126,7 +126,7 @@ function sendWelcome(channelId, userid) {
   if (!ch) return;
   const user = db.prepare('SELECT send_key FROM users WHERE id = ?').get(ch.user_id);
   if (!user) return;
-  const base = process.env.BASE_URL || 'https://wecom.bot-talk.com';
+  const base = process.env.BASE_URL || 'https://bot-talk.com';
   const md = `**🎉 企业微信通道已激活!**\n\n你的 SendKey:\n\`${user.send_key}\`\n\n请保存。推送示例:\n\`curl "${base}/${user.send_key}.send?title=测试&desp=hello"\`\n\n激活后无需再回复,可无限接收推送。`;
   const entry = pool.get(channelId);
   if (entry && entry.client) entry.client.sendMarkdown(userid, md).catch((e) => console.error('welcome failed', e.message));

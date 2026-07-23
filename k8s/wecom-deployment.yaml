@@ -24,7 +24,7 @@ spec:
           # ️ 部署前需在 homevps 上构建镜像:
           # cd /path/to/bottalk/wecom && docker build -t bottalk-wecom:latest .
           image: bottalk-wecom:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Never
           ports:
             - containerPort: 3000
               protocol: TCP
@@ -82,10 +82,11 @@ metadata:
     app.kubernetes.io/name: bottalk-wecom
     app.kubernetes.io/part-of: bottalk
 spec:
-  type: ClusterIP
+  type: NodePort
   ports:
     - port: 3000
       targetPort: 3000
+      nodePort: 30102
       protocol: TCP
       name: http
   selector:

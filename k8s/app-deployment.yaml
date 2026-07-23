@@ -24,7 +24,7 @@ spec:
           # ️ 部署前需在 homevps 上构建镜像:
           # cd /path/to/bottalk && docker build -t bottalk-app:latest .
           image: bottalk-app:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Never
           ports:
             - containerPort: 3000
               protocol: TCP
@@ -77,10 +77,11 @@ metadata:
     app.kubernetes.io/name: bottalk-app
     app.kubernetes.io/part-of: bottalk
 spec:
-  type: ClusterIP
+  type: NodePort
   ports:
     - port: 3000
       targetPort: 3000
+      nodePort: 30100
       protocol: TCP
       name: http
   selector:

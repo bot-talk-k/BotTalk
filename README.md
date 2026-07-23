@@ -12,7 +12,7 @@ Push notifications to Feishu or WeChat — free, open-source, self-hostable.
 [![Docker](https://img.shields.io/badge/docker-ready-2496ED.svg)](docker-compose.yml)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg)](package.json)
 
-[**官网**](https://bot-talk.com) · [**飞书通道**](https://feishu.bot-talk.com) · [**API 文档**](docs/api-reference.md) · [**自部署指南**](docs/self-deploy-guide.md)
+[**官网**](https://bot-talk.com) · [**API 文档**](docs/api-reference.md) · [**自部署指南**](docs/self-deploy-guide.md)
 
 ---
 
@@ -34,15 +34,17 @@ Push notifications to Feishu or WeChat — free, open-source, self-hostable.
 
 | 通道 | 特点 | 入口 |
 |---|---|---|
-| <img src="https://www.feishu.cn/favicon.ico" height="14"> **飞书（推荐）** | 个人用户可扫码即绑，可一个账户多个消息通道，稳定而无限接收 | [feishu.bot-talk.com](https://feishu.bot-talk.com) |
-| 💬 **微信** | 已稳定运行数月；受腾讯通道设计限制：连续收消息达到 10 条需回复一条任意消息，假装聊天即可无限使用 | [bot-talk.com](https://bot-talk.com) |
+| <img src="https://www.feishu.cn/favicon.ico" height="14"> **飞书（推荐）** | 个人用户可扫码即绑，可一个账户多个消息通道，稳定而无限接收 | [bot-talk.com](https://bot-talk.com) |
+|  **微信** | 已稳定运行数月；受腾讯通道设计限制：连续收消息达到 10 条需回复一条任意消息，假装聊天即可无限使用 | [bot-talk.com](https://bot-talk.com) |
+| 🏢 **企业微信** | 扫码创建智能机器人，消息直达企业微信，无接收条数限制 | [bot-talk.com](https://bot-talk.com) |
 
-> **两个通道共用同一套 API**，SendKey 格式区分：飞书以 `fs_` 开头，微信为 32 位 hex。`bot-talk.com` 会根据 SendKey 自动路由。
+> **三个通道共用同一套 API**，SendKey 格式区分：飞书以 `fs_` 开头，企业微信以 `ww_` 开头，微信为 32 位 hex。`bot-talk.com` 会根据 SendKey 自动路由。
 
 ## 🚀 一分钟上手
 
 **1️⃣ 选通道，扫码绑定**
-- 飞书（推荐） → [feishu.bot-talk.com](https://feishu.bot-talk.com)
+- 飞书（推荐） → [bot-talk.com](https://bot-talk.com)
+- 企业微信 → [bot-talk.com](https://bot-talk.com)
 - 微信 → [bot-talk.com](https://bot-talk.com)
 
 **2️⃣ 获取 SendKey** — 绑定后自动生成

@@ -145,19 +145,19 @@
         <button class="ctab" onclick="showTab('node')">Node.js</button>
       </div>
       <pre id="tab-curl"><span class="c"># GET 风格 (Server酱兼容)</span>
-<span class="k">curl</span> <span class="s">"https://feishu.bot-talk.com/&lt;SendKey&gt;.send?title=部署完成&amp;desp=服务已上线"</span>
+<span class="k">curl</span> <span class="s">"https://bot-talk.com/&lt;SendKey&gt;.send?title=部署完成&amp;desp=服务已上线"</span>
 
 <span class="c"># POST 风格</span>
-<span class="k">curl</span> -X POST <span class="s">"https://feishu.bot-talk.com/&lt;SendKey&gt;.send"</span> \
+<span class="k">curl</span> -X POST <span class="s">"https://bot-talk.com/&lt;SendKey&gt;.send"</span> \
   -d <span class="s">"title=部署完成&amp;desp=服务已上线&amp;channel=all"</span></pre>
       <pre id="tab-python" style="display:none"><span class="k">import</span> requests
 
-requests.<span class="n">get</span>(<span class="s">"https://feishu.bot-talk.com/&lt;SendKey&gt;.send"</span>, params={
+requests.<span class="n">get</span>(<span class="s">"https://bot-talk.com/&lt;SendKey&gt;.send"</span>, params={
     <span class="s">"title"</span>: <span class="s">"部署完成"</span>,
     <span class="s">"desp"</span>:  <span class="s">"服务已上线"</span>,
 })</pre>
       <pre id="tab-node" style="display:none"><span class="c">// Node.js (fetch)</span>
-<span class="k">await</span> fetch(<span class="s">`https://feishu.bot-talk.com/${sendKey}.send?title=部署完成&amp;desp=服务已上线`</span>)</pre>
+<span class="k">await</span> fetch(<span class="s">`https://bot-talk.com/${sendKey}.send?title=部署完成&amp;desp=服务已上线`</span>)</pre>
     </div>
   </section>
 
@@ -256,6 +256,17 @@ requests.<span class="n">get</span>(<span class="s">"https://feishu.bot-talk.com
   fetch('/api/config').then(r=>r.json()).then(c=>{
     if(c.wechat_site_url) document.getElementById('wechat-link').href=c.wechat_site_url;
   }).catch(()=>{});
+  // 动态替换跨域链接和代码示例，测试环境下自动指向当前域名
+  (function(){
+    var o=window.location.origin;
+    document.querySelectorAll('a[href]').forEach(function(a){
+      var h=a.href;
+      if(h.indexOf('https://feishu.bot-talk.com')===0) a.href=o+'/feishu-app'+h.replace('https://feishu.bot-talk.com','');
+      else if(h.indexOf('https://wecom.bot-talk.com')===0) a.href=o+'/wecom-app'+h.replace('https://wecom.bot-talk.com','');
+      else if(h.indexOf('https://bot-talk.com')===0) a.href=o+h.replace('https://bot-talk.com','');
+    });
+    document.querySelectorAll('pre,code').forEach(function(el){if(el.textContent.indexOf('bot-talk.com')>=0)el.innerHTML=el.innerHTML.replace(/https?:\/\/bot-talk\.com/g,o);});
+  })();
 </script>
 </body>
 </html>

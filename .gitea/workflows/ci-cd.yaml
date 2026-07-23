@@ -1,0 +1,75 @@
+name: CI - Lint & Test
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    name: ESLint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run lint
+
+  test-main:
+    name: Test (main)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm test
+
+  test-feishu:
+    name: Test (feishu)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: cd feishu && npm ci
+      - run: cd feishu && npm test
+
+  test-wecom:
+    name: Test (wecom)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: cd wecom && npm ci
+      - run: cd wecom && npm test
+
+  build:
+    name: Build Docker Images
+    needs: [lint, test-main, test-feishu, test-wecom]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build app
+        run: docker build -t bottalk-app:latest .
+
+      - name: Build feishu
+        run: docker build -t bottalk-feishu:latest ./feishu
+
+      - name: Build wecom
+        run: docker build -t bottalk-wecom:latest ./wecom
+
+      - name: Build portal
+        run: docker build -t bottalk-portal:latest ./portal
+
+      - name: Verify images
+        run: docker images | grep bottalk

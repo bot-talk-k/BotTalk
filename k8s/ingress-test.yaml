@@ -1,0 +1,87 @@
+# BotTalk Ingress - 测试版 (DDNS 直连 homevps)
+# 链路: 用户 → bot-talk.back2china.net → 家庭公网IP → 路由器端口映射 → homevps(k3s Traefik)
+# 应用: kubectl apply -f k8s/ingress-test.yaml -n bottalk
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: bottalk-app
+  namespace: bottalk
+  labels:
+    app.kubernetes.io/name: bottalk-app
+    app.kubernetes.io/part-of: bottalk
+spec:
+  rules:
+    - host: bot-talk.back2china.net
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: bottalk-app
+                port:
+                  number: 3000
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: bottalk-feishu
+  namespace: bottalk
+  labels:
+    app.kubernetes.io/name: bottalk-feishu
+    app.kubernetes.io/part-of: bottalk
+spec:
+  rules:
+    - host: feishu.bot-talk.back2china.net
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: bottalk-feishu
+                port:
+                  number: 3000
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: bottalk-wecom
+  namespace: bottalk
+  labels:
+    app.kubernetes.io/name: bottalk-wecom
+    app.kubernetes.io/part-of: bottalk
+spec:
+  rules:
+    - host: wecom.bot-talk.back2china.net
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: bottalk-wecom
+                port:
+                  number: 3000
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: bottalk-portal
+  namespace: bottalk
+  labels:
+    app.kubernetes.io/name: bottalk-portal
+    app.kubernetes.io/part-of: bottalk
+spec:
+  rules:
+    - host: portal.bot-talk.back2china.net
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: bottalk-portal
+                port:
+                  number: 3000

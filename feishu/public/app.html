@@ -191,11 +191,13 @@ const PUSH_TYPES = [
 ];
 
 function renderApiExample(key){
-  const base = 'https://bot-talk.com';
-  PUSH_TYPES.forEach((t,i) => {
-    const el = document.getElementById('pt-code-'+i);
-    if (el) el.textContent = t.code(key, base);
-  });
+  fetch('/api/config').then(r=>r.json()).then(c=>{
+    const base = c.base_url || window.location.origin;
+    PUSH_TYPES.forEach((t,i) => {
+      const el = document.getElementById('pt-code-'+i);
+      if (el) el.textContent = t.code(key, base);
+    });
+  }).catch(()=>{});
 }
 
 async function runTest(i){

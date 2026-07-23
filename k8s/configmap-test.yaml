@@ -1,0 +1,39 @@
+# BotTalk 环境变量配置 - 测试版
+# 应用: kubectl apply -f k8s/configmap-test.yaml -n bottalk
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bottalk-config
+  namespace: bottalk
+  labels:
+    app.kubernetes.io/part-of: bottalk
+data:
+  # ── 通用 ──
+  TZ: "Asia/Shanghai"
+  NODE_ENV: "production"
+
+  # ── 主站 (bottalk-app) ──
+  BASE_URL: "http://bot-talk.back2china.net"
+
+  # ── 飞书站 (bottalk-feishu) ──
+  FEISHU_BASE_URL: "http://feishu.bot-talk.back2china.net"
+  WECHAT_SITE_URL: "http://bot-talk.back2china.net"
+
+  # ── 企业微信站 (bottalk-wecom) ──
+  WECOM_BASE_URL: "http://wecom.bot-talk.back2china.net"
+
+  # ── Portal (bottalk-portal) ──
+  PORTAL_BASE_URL: "http://portal.bot-talk.back2china.net"
+
+  # ── 内部通信 (容器间代理,同 namespace 内 DNS 解析) ──
+  FEISHU_INTERNAL_URL: "http://bottalk-feishu:3000"
+  WECOM_INTERNAL_URL: "http://bottalk-wecom:3000"
+
+  # ── 可选:内部统计 token ──
+  INTERNAL_STATS_TOKEN: ""
+
+  # ── 可选:超管飞书 SendKey ──
+  SUPERADMIN_FEISHU_SENDKEY: ""
+
+  # ── 可选:Portal 超管密码 ──
+  PORTAL_ADMIN_PASSWORD: ""

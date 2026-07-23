@@ -16,14 +16,14 @@ const CHANNELS = [
   },
   {
     key: 'feishu', name: '飞书', color: '#00b386',
-    site: 'https://feishu.bot-talk.com',
-    admin: 'https://feishu.bot-talk.com/admin',
+    site: 'https://bot-talk.com',
+    admin: 'https://bot-talk.com/admin',
     internal: 'http://bottalk-feishu:3000/api/internal/stats',
   },
   {
     key: 'wecom', name: '企业微信', color: '#2f90ea',
-    site: 'https://wecom.bot-talk.com',
-    admin: 'https://wecom.bot-talk.com/admin',
+    site: 'https://bot-talk.com',
+    admin: 'https://bot-talk.com/admin',
     internal: 'http://bottalk-wecom:3000/api/internal/stats',
   },
 ];

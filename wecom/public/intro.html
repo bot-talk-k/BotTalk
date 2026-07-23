@@ -49,7 +49,7 @@
 
   <div class="card">
     <h2>发送一条消息只需</h2>
-    <pre>curl "https://wecom.bot-talk.com/YOUR_SENDKEY.send?title=部署完成&desp=服务已上线"</pre>
+    <pre>curl "https://bot-talk.com/YOUR_SENDKEY.send?title=部署完成&desp=服务已上线"</pre>
     <p style="font-size:13px;color:#86868b;margin-top:10px;">扫码绑定后会拿到你的 SendKey,替换上面的 <code>YOUR_SENDKEY</code> 即可。</p>
   </div>
 
@@ -61,6 +61,17 @@
   fetch('/api/config',{credentials:'same-origin'}).then(r=>r.json()).then(c=>{
     if(c && c.wechat_site_url){ document.getElementById('wechat-link').href=c.wechat_site_url; document.getElementById('home-link').href=c.wechat_site_url; }
   }).catch(()=>{});
+  // 动态替换跨域链接和代码示例，测试环境下自动指向当前域名
+  (function(){
+    var o=window.location.origin;
+    document.querySelectorAll('a[href]').forEach(function(a){
+      var h=a.href;
+      if(h.indexOf('https://feishu.bot-talk.com')===0) a.href=o+'/feishu-app'+h.replace('https://feishu.bot-talk.com','');
+      else if(h.indexOf('https://wecom.bot-talk.com')===0) a.href=o+'/wecom-app'+h.replace('https://wecom.bot-talk.com','');
+      else if(h.indexOf('https://bot-talk.com')===0) a.href=o+h.replace('https://bot-talk.com','');
+    });
+    document.querySelectorAll('pre,code').forEach(function(el){if(el.textContent.indexOf('bot-talk.com')>=0)el.innerHTML=el.innerHTML.replace(/https?:\/\/bot-talk\.com/g,o);});
+  })();
 </script>
 </body>
 </html>

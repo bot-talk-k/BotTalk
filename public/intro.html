@@ -147,19 +147,19 @@
         <button class="ctab" onclick="showTab('node')">Node.js</button>
       </div>
       <pre id="tab-curl"><span class="c"># GET 风格 (Server酱兼容)</span>
-<span class="k">curl</span> <span class="s">"https://feishu.bot-talk.com/&lt;SendKey&gt;.send?title=部署完成&amp;desp=服务已上线"</span>
+<span class="k">curl</span> <span class="s">"https://bot-talk.com/&lt;SendKey&gt;.send?title=部署完成&amp;desp=服务已上线"</span>
 
 <span class="c"># POST 风格</span>
-<span class="k">curl</span> -X POST <span class="s">"https://feishu.bot-talk.com/&lt;SendKey&gt;.send"</span> \
+<span class="k">curl</span> -X POST <span class="s">"https://bot-talk.com/&lt;SendKey&gt;.send"</span> \
   -d <span class="s">"title=部署完成&amp;desp=服务已上线&amp;channel=all"</span></pre>
       <pre id="tab-python" style="display:none"><span class="k">import</span> requests
 
-requests.<span class="n">get</span>(<span class="s">"https://feishu.bot-talk.com/&lt;SendKey&gt;.send"</span>, params={
+requests.<span class="n">get</span>(<span class="s">"https://bot-talk.com/&lt;SendKey&gt;.send"</span>, params={
     <span class="s">"title"</span>: <span class="s">"部署完成"</span>,
     <span class="s">"desp"</span>:  <span class="s">"服务已上线"</span>,
 })</pre>
       <pre id="tab-node" style="display:none"><span class="c">// Node.js (fetch)</span>
-<span class="k">await</span> fetch(<span class="s">`https://feishu.bot-talk.com/${sendKey}.send?title=部署完成&amp;desp=服务已上线`</span>)</pre>
+<span class="k">await</span> fetch(<span class="s">`https://bot-talk.com/${sendKey}.send?title=部署完成&amp;desp=服务已上线`</span>)</pre>
     </div>
   </section>
 
@@ -263,6 +263,19 @@ requests.<span class="n">get</span>(<span class="s">"https://feishu.bot-talk.com
 <footer>BotTalk · 免费开源消息推送 · MIT 协议 · <a href="https://github.com/bot-talk-k/BotTalk" target="_blank" style="color:#0071e3;">GitHub</a></footer>
 
 <script>
+  // 动态替换跨域链接和代码示例，测试环境下自动指向当前域名
+  (function(){
+    var o=window.location.origin;
+    // 替换 <a> 链接
+    document.querySelectorAll('a[href]').forEach(function(a){
+      var h=a.href;
+      if(h.indexOf('https://feishu.bot-talk.com')===0) a.href=o+'/feishu-app'+h.replace('https://feishu.bot-talk.com','');
+      else if(h.indexOf('https://wecom.bot-talk.com')===0) a.href=o+'/wecom-app'+h.replace('https://wecom.bot-talk.com','');
+      else if(h.indexOf('https://bot-talk.com')===0) a.href=o+h.replace('https://bot-talk.com','');
+    });
+    // 替换 <pre>/<code> 中的代码示例
+    document.querySelectorAll('pre,code').forEach(function(el){if(el.textContent.indexOf('bot-talk.com')>=0)el.innerHTML=el.innerHTML.replace(/https?:\/\/bot-talk\.com/g,o);});
+  })();
   function showTab(id) {
     ['curl','python','node'].forEach(t => {
       document.getElementById('tab-'+t).style.display = t===id ? '' : 'none';

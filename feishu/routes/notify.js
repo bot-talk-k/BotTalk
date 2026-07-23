@@ -117,7 +117,7 @@ function buildCard(title, content) {
   }
   elements.push({
     tag: 'note',
-    elements: [{ tag: 'plain_text', content: '由 BotTalk 推送 · feishu.bot-talk.com' }],
+    elements: [{ tag: 'plain_text', content: '由 BotTalk 推送 · bot-talk.com' }],
   });
   return {
     config: { wide_screen_mode: true },
