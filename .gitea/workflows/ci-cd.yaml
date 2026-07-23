@@ -12,18 +12,13 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install
 
-      - name: Debug - check installed binaries
+      - name: Verify install
         run: |
-          echo "=== node_modules/.bin contents ==="
-          ls -la node_modules/.bin/ 2>&1 || echo "NO .bin DIR"
-          echo "=== eslint bin location ==="
-          find node_modules/eslint/bin -type f 2>&1 || echo "NO eslint/bin"
-          echo "=== node version ==="
-          node --version
-          echo "=== npm version ==="
-          npm --version
+          node -e "require('express'); console.log('express OK')"
+          node -e "require('axios'); console.log('axios OK')"
+          node -e "require('eslint'); console.log('eslint OK')"
 
       - name: Run linter
         run: node node_modules/eslint/bin/eslint.js .
