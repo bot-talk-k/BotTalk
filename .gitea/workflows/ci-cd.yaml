@@ -15,7 +15,7 @@ jobs:
         run: npm ci
 
       - name: Run linter
-        run: npx eslint .
+        run: ./node_modules/.bin/eslint .
 
       - name: Run tests
         run: node --test tests/keepalive-tip.test.js tests/smoke.test.js tests/guard-bash.test.js tests/channel-health.test.js
