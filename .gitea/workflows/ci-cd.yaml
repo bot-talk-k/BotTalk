@@ -2,59 +2,27 @@ name: CI - Lint & Test
 on:
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
 
 jobs:
-  lint:
-    name: ESLint
+  lint-and-test:
+    name: Lint & Test
     runs-on: ubuntu-latest
+    container: node:20
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-      - run: npm ci
-      - run: npm run lint
 
-  test-main:
-    name: Test (main)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-      - run: npm ci
-      - run: npm test
+      - name: Install dependencies
+        run: npm ci
 
-  test-feishu:
-    name: Test (feishu)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      - run: cd feishu && npm ci
-      - run: cd feishu && npm test
+      - name: Run linter
+        run: npm run lint
 
-  test-wecom:
-    name: Test (wecom)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      - run: cd wecom && npm ci
-      - run: cd wecom && npm test
+      - name: Run tests
+        run: npm test
 
   build:
     name: Build Docker Images
-    needs: [lint, test-main, test-feishu, test-wecom]
+    needs: lint-and-test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
