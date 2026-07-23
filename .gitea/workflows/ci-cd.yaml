@@ -7,9 +7,12 @@ jobs:
   lint-and-test:
     name: Lint & Test
     runs-on: ubuntu-latest
-    container: node:20
+    container: node:20-bookworm
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install build tools
+        run: apt-get update && apt-get install -y build-essential python3 && rm -rf /var/lib/apt/lists/*
 
       - name: Install dependencies
         run: npm install
