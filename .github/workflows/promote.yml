@@ -1,0 +1,82 @@
+name: Promote to Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: 'Commit SHA to promote (留空则用 dev 当前版本)'
+        required: false
+        type: string
+      confirm:
+        description: '输入 "YES" 确认发布到生产'
+        required: true
+        type: string
+
+jobs:
+  promote:
+    name: Promote to Prod
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate confirmation
+        if: github.event.inputs.confirm != 'YES'
+        run: |
+          echo "❌ 请输入 YES 确认发布"
+          exit 1
+
+      - name: Get latest dev SHA (if not specified)
+        id: get-sha
+        env:
+          INPUT_SHA: ${{ github.event.inputs.sha }}
+        run: |
+          if [ -n "$INPUT_SHA" ]; then
+            echo "sha=$INPUT_SHA" >> $GITHUB_OUTPUT
+            echo "Using specified SHA: $INPUT_SHA"
+          else
+            SHA=$(ssh -o StrictHostKeyChecking=no ${{ secrets.JAKARTA_SSH_USER }}@${{ secrets.JAKARTA_SSH_HOST }} \
+              ssh root@homevps 'kubectl get deployment bottalk-app -n bottalk-dev -o jsonpath="{.spec.template.spec.containers[0].image}"' | grep -oP 'sha-\K[0-9a-f]+')
+            echo "sha=$SHA" >> $GITHUB_OUTPUT
+            echo "Using dev SHA: $SHA"
+          fi
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.JAKARTA_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          echo "${{ secrets.JAKARTA_SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+
+      - name: Deploy to bottalk (production)
+        env:
+          SHA: ${{ steps.get-sha.outputs.sha }}
+          REGISTRY: ghcr.io/${{ github.repository_owner }}
+        run: |
+          echo "🚀 Promoting SHA $SHA to production..."
+          ssh -o StrictHostKeyChecking=no ${{ secrets.JAKARTA_SSH_USER }}@${{ secrets.JAKARTA_SSH_HOST }} \
+            "ssh root@homevps '
+              NAMESPACE=bottalk
+              for svc in app feishu wecom portal; do
+                kubectl set image deployment/bottalk-\$svc \
+                  bottalk-\$svc=${REGISTRY}/bottalk-\$svc:${SHA} \
+                  -n \$NAMESPACE
+              done
+              echo \"─── Rolling out ───\"
+              for svc in app feishu wecom portal; do
+                kubectl rollout status deployment/bottalk-\$svc -n \$NAMESPACE --timeout=120s
+              done
+              echo \"─── Prod pods ───\"
+              kubectl get pods -n \$NAMESPACE
+            '"
+
+      - name: Verify production site
+        run: |
+          sleep 5
+          for domain in bot-talk.com feishu.bot-talk.com wecom.bot-talk.com; do
+            CODE=$(curl -sf -o /dev/null -w "%{http_code}" "https://$domain" || echo "fail")
+            echo "$domain → $CODE"
+          done
+
+      - name: Rollback command
+        if: failure()
+        run: |
+          echo " 部署失败！如需回滚，执行："
+          echo "ssh root@homevps 'kubectl rollout undo deployment/bottalk-app -n bottalk'"
