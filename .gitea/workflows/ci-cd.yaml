@@ -1,4 +1,4 @@
-name: CI - Lint & Test
+name: CI/CD - Lint, Test & Deploy
 on:
   push:
     branches: [main]
@@ -32,5 +32,27 @@ jobs:
       - name: Run tests
         run: node --test tests/keepalive-tip.test.js tests/smoke.test.js tests/guard-bash.test.js tests/channel-health.test.js
 
-  # TODO: Add CD (Build & Deploy) job when ready for automated deployment
-  # Requires Docker-in-Docker sidecar or host Docker access in the runner
+  deploy-dev:
+    name: Deploy to Dev
+    needs: lint-and-test
+    runs-on: ubuntu-latest
+    container:
+      image: bitnami/kubectl:1.32
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify k8s access
+        run: kubectl get pods -n bottalk-dev
+
+      - name: Deploy to dev namespace
+        run: kubectl apply -n bottalk-dev -f k8s/dev-deploy.yaml
+
+      - name: Wait for rollout
+        run: |
+          kubectl rollout status deployment/bottalk-app -n bottalk-dev --timeout=120s
+          kubectl rollout status deployment/bottalk-feishu -n bottalk-dev --timeout=120s
+          kubectl rollout status deployment/bottalk-wecom -n bottalk-dev --timeout=120s
+          kubectl rollout status deployment/bottalk-portal -n bottalk-dev --timeout=120s
+
+      - name: Verify deployment
+        run: kubectl get pods -n bottalk-dev -o wide
