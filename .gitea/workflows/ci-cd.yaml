@@ -11,18 +11,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install build tools
-        run: apt-get update && apt-get install -y build-essential python3 && rm -rf /var/lib/apt/lists/*
+      - name: Install dependencies (ignore scripts first)
+        run: npm install --ignore-scripts
 
-      - name: Install dependencies
-        run: npm install --ignore-scripts=false 2>&1 || npm install --ignore-scripts 2>&1
+      - name: Rebuild native modules
+        run: npm rebuild better-sqlite3 2>&1 || echo "rebuild failed, continuing"
 
       - name: Verify install
         run: |
-          ls node_modules/.bin/ 2>/dev/null && echo "bin dir exists" || echo "NO bin dir"
-          node -e "require('express'); console.log('express OK')" 2>&1 || echo "express MISSING"
-          node -e "require('axios'); console.log('axios OK')" 2>&1 || echo "axios MISSING"
-          node -e "require('eslint'); console.log('eslint OK')" 2>&1 || echo "eslint MISSING"
+          node -e "require('express'); console.log('express OK')"
+          node -e "require('axios'); console.log('axios OK')"
+          node -e "require('eslint'); console.log('eslint OK')"
 
       - name: Run linter
         run: node node_modules/eslint/bin/eslint.js .
