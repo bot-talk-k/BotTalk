@@ -18,15 +18,15 @@ jobs:
         run: |
           echo "=== node_modules/.bin contents ==="
           ls -la node_modules/.bin/ 2>&1 || echo "NO .bin DIR"
-          echo "=== npm ls eslint ==="
-          npm ls eslint 2>&1 || true
-          echo "=== which npx ==="
-          which npx
-          echo "=== PATH ==="
-          echo $PATH
+          echo "=== eslint bin location ==="
+          find node_modules/eslint/bin -type f 2>&1 || echo "NO eslint/bin"
+          echo "=== node version ==="
+          node --version
+          echo "=== npm version ==="
+          npm --version
 
       - name: Run linter
-        run: ./node_modules/.bin/eslint .
+        run: node node_modules/eslint/bin/eslint.js .
 
       - name: Run tests
         run: node --test tests/keepalive-tip.test.js tests/smoke.test.js tests/guard-bash.test.js tests/channel-health.test.js
