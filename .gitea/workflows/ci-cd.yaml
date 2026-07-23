@@ -18,10 +18,7 @@ jobs:
         run: apt-get update && apt-get install -y build-essential python3 && rm -rf /var/lib/apt/lists/*
 
       - name: Install dependencies
-        run: pnpm install --ignore-scripts
-
-      - name: Rebuild native modules
-        run: pnpm rebuild 2>&1
+        run: pnpm install
 
       - name: Verify install
         run: |
