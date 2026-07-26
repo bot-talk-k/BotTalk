@@ -73,9 +73,16 @@ jobs:
           ssh -o StrictHostKeyChecking=no ${{ secrets.JAKARTA_SSH_USER }}@${{ secrets.JAKARTA_SSH_HOST }} \
             "ssh root@homevps '
               NAMESPACE=bottalk-dev
+              echo \"── Pulling images from GHCR ──\"
+              for svc in app feishu wecom portal; do
+                echo "Pulling bottalk-\$svc..."
+                sudo ctr -n k8s.io images pull ${REGISTRY}/bottalk-\$svc:${SHA} 2>&1 || echo "WARN: pull failed for \$svc"
+                sudo ctr -n k8s.io images tag ${REGISTRY}/bottalk-\$svc:${SHA} bottalk-\$svc:latest 2>/dev/null || true
+              done
+              echo \"── Updating deployments ──\"
               for svc in app feishu wecom portal; do
                 kubectl set image deployment/bottalk-\$svc \
-                  bottalk-\$svc=${REGISTRY}/bottalk-\$svc:${SHA} \
+                  bottalk-\$svc=bottalk-\$svc:latest \
                   -n \$NAMESPACE
               done
               echo \"─── Rolling out ──\"

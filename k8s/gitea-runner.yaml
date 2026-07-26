@@ -43,6 +43,12 @@ spec:
           value: "ubuntu-latest:docker://ubuntu:22.04,ubuntu-22.04:docker://ubuntu:22.04"
         - name: DOCKER_HOST
           value: "tcp://localhost:2375"
+        - name: HTTP_PROXY
+          value: "http://100.79.69.118:10808"
+        - name: HTTPS_PROXY
+          value: "http://100.79.69.118:10808"
+        - name: NO_PROXY
+          value: "localhost,127.0.0.1,10.0.0.0/8,100.101.0.0/16,192.168.0.0/16,gitea.gitea.svc.cluster.local"
         volumeMounts:
         - name: runner-data
           mountPath: /data
@@ -61,6 +67,16 @@ spec:
         env:
         - name: DOCKER_TLS_CERTDIR
           value: ""
+        - name: HTTP_PROXY
+          value: "http://100.79.69.118:10808"
+        - name: HTTPS_PROXY
+          value: "http://100.79.69.118:10808"
+        - name: NO_PROXY
+          value: "localhost,127.0.0.1,10.0.0.0/8,100.101.0.0/16,192.168.0.0/16"
+        args:
+        - dockerd
+        - --host=tcp://0.0.0.0:2375
+        - --host=unix:///var/run/docker.sock
         volumeMounts:
         - name: runner-data
           mountPath: /data

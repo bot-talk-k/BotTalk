@@ -23,19 +23,17 @@ jobs:
           echo "❌ 请输入 YES 确认发布"
           exit 1
 
-      - name: Get latest dev SHA (if not specified)
-        id: get-sha
+      - name: Determine image tag
+        id: get-tag
         env:
           INPUT_SHA: ${{ github.event.inputs.sha }}
         run: |
           if [ -n "$INPUT_SHA" ]; then
-            echo "sha=$INPUT_SHA" >> $GITHUB_OUTPUT
+            echo "tag=$INPUT_SHA" >> $GITHUB_OUTPUT
             echo "Using specified SHA: $INPUT_SHA"
           else
-            SHA=$(ssh -o StrictHostKeyChecking=no ${{ secrets.JAKARTA_SSH_USER }}@${{ secrets.JAKARTA_SSH_HOST }} \
-              ssh root@homevps 'kubectl get deployment bottalk-app -n bottalk-dev -o jsonpath="{.spec.template.spec.containers[0].image}"' | grep -oP 'sha-\K[0-9a-f]+')
-            echo "sha=$SHA" >> $GITHUB_OUTPUT
-            echo "Using dev SHA: $SHA"
+            echo "tag=dev" >> $GITHUB_OUTPUT
+            echo "Using :dev tag (latest dev build)"
           fi
 
       - name: Setup SSH
@@ -47,23 +45,30 @@ jobs:
 
       - name: Deploy to bottalk (production)
         env:
-          SHA: ${{ steps.get-sha.outputs.sha }}
+          SHA: ${{ steps.get-tag.outputs.tag }}
           REGISTRY: ghcr.io/${{ github.repository_owner }}
         run: |
-          echo "🚀 Promoting SHA $SHA to production..."
+          echo " Promoting SHA $SHA to production..."
           ssh -o StrictHostKeyChecking=no ${{ secrets.JAKARTA_SSH_USER }}@${{ secrets.JAKARTA_SSH_HOST }} \
             "ssh root@homevps '
               NAMESPACE=bottalk
+              echo \"── Pulling images from GHCR ──\"
+              for svc in app feishu wecom portal; do
+                echo \"Pulling bottalk-\$svc...\"
+                sudo ctr -n k8s.io images pull ${REGISTRY}/bottalk-\$svc:${SHA} 2>&1 || echo \"WARN: pull failed for \$svc\"
+                sudo ctr -n k8s.io images tag ${REGISTRY}/bottalk-\$svc:${SHA} bottalk-\$svc:latest 2>/dev/null || true
+              done
+              echo \"── Updating deployments ─\"
               for svc in app feishu wecom portal; do
                 kubectl set image deployment/bottalk-\$svc \
-                  bottalk-\$svc=${REGISTRY}/bottalk-\$svc:${SHA} \
+                  bottalk-\$svc=bottalk-\$svc:latest \
                   -n \$NAMESPACE
               done
               echo \"─── Rolling out ───\"
               for svc in app feishu wecom portal; do
                 kubectl rollout status deployment/bottalk-\$svc -n \$NAMESPACE --timeout=120s
               done
-              echo \"─── Prod pods ───\"
+              echo \"─── Prod pods ──\"
               kubectl get pods -n \$NAMESPACE
             '"
 
