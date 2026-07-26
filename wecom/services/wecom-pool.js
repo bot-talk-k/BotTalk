@@ -53,9 +53,18 @@ function ensure(channel) {
       entry.lastError = null;
       db.prepare("UPDATE channels SET ws_state = 'authenticated', last_error = NULL WHERE id = ?").run(channel.id);
     },
-    onDisconnected: () => {
+    onDisconnected: (reason) => {
       entry.authenticated = false;
       db.prepare("UPDATE channels SET ws_state = 'disconnected' WHERE id = ?").run(channel.id);
+      // 自动重连：5 秒后尝试重新建立连接
+      console.log(`[wecom-pool] 通道 ${channel.id} 断开 (${reason}),5 秒后重连...`);
+      setTimeout(() => {
+        const ch = db.prepare('SELECT * FROM channels WHERE id = ?').get(channel.id);
+        if (ch && ch.status !== 'inactive') {
+          console.log(`[wecom-pool] 重连通道 ${channel.id}...`);
+          ensure(ch);
+        }
+      }, 5000);
     },
     onError: (err) => {
       entry.lastError = err;
