@@ -196,3 +196,16 @@ jobs:
       - name: Run tests
         working-directory: sdk/go
         run: go test -v ./...
+
+  domain-consistency:
+    name: Domain Consistency
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Check HTML files use unified domain
+        run: node tests/domain-consistency.test.js
