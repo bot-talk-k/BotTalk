@@ -39,26 +39,151 @@ jobs:
           UNSKIP_DB_TEST: '1'
         run: npm test
 
-  # ─── 构建 + 部署（homevps self-hosted runner）───
-  deploy-dev:
-    name: Deploy to DEV
+  # ─── 构建镜像并推送到 GHCR（GitHub 托管 runner）───
+  build-push:
+    name: Build & Push Images
     needs: lint-test
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: [self-hosted, homevps]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image_tag: ${{ steps.meta.outputs.tags }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build & Deploy to DEV
-        run: ./scripts/deploy-k3s-ci.sh dev
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        run: |
+          SHA_SHORT=$(echo ${{ github.sha }} | cut -c1-7)
+          echo "sha=$SHA_SHORT" >> $GITHUB_OUTPUT
+          echo "tags=ghcr.io/${{ github.repository_owner }}/bottalk:$SHA_SHORT" >> $GITHUB_OUTPUT
+
+      - name: Build and push main app
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/bottalk-app:${{ steps.meta.outputs.sha }}
+
+      - name: Build and push feishu
+        uses: docker/build-push-action@v5
+        with:
+          context: ./feishu
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/bottalk-feishu:${{ steps.meta.outputs.sha }}
+
+      - name: Build and push wecom
+        uses: docker/build-push-action@v5
+        with:
+          context: ./wecom
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/bottalk-wecom:${{ steps.meta.outputs.sha }}
+
+      - name: Build and push portal
+        uses: docker/build-push-action@v5
+        with:
+          context: ./portal
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/bottalk-portal:${{ steps.meta.outputs.sha }}
+
+  # ─── 部署到 dev 环境（self-hosted runner）───
+  deploy-dev:
+    name: Deploy to DEV
+    needs: build-push
+    runs-on: [self-hosted, homevps]
+    steps:
+      - name: Pull images from GHCR
+        run: |
+          SHA="${{ needs.build-push.outputs.sha }}"
+          echo "Pulling images for commit: $SHA"
+          
+          # 使用 ghcr.io 镜像
+          docker pull ghcr.io/${{ github.repository_owner }}/bottalk-app:$SHA
+          docker pull ghcr.io/${{ github.repository_owner }}/bottalk-feishu:$SHA
+          docker pull ghcr.io/${{ github.repository_owner }}/bottalk-wecom:$SHA
+          docker pull ghcr.io/${{ github.repository_owner }}/bottalk-portal:$SHA
+          
+          # 重新打标签为 latest（k3s 配置使用 latest）
+          docker tag ghcr.io/${{ github.repository_owner }}/bottalk-app:$SHA bottalk-app:latest
+          docker tag ghcr.io/${{ github.repository_owner }}/bottalk-feishu:$SHA bottalk-feishu:latest
+          docker tag ghcr.io/${{ github.repository_owner }}/bottalk-wecom:$SHA bottalk-wecom:latest
+          docker tag ghcr.io/${{ github.repository_owner }}/bottalk-portal:$SHA bottalk-portal:latest
+
+      - name: Import images to k3s
+        run: |
+          NODES=$(kubectl get nodes -o jsonpath='{.items[*].status.addresses[?(@.type=="InternalIP")].address}')
+          for node_ip in $NODES; do
+            echo "Importing to $node_ip"
+            docker save bottalk-app:latest bottalk-feishu:latest bottalk-wecom:latest bottalk-portal:latest | \
+              ssh -o StrictHostKeyChecking=no root@$node_ip \
+              "ctr -a /run/k3s/containerd/containerd.sock -n k8s.io images import -"
+          done
+
+      - name: Rollout restart dev
+        run: |
+          kubectl rollout restart deployment/bottalk-app -n bottalk-dev
+          kubectl rollout restart deployment/bottalk-feishu -n bottalk-dev
+          kubectl rollout restart deployment/bottalk-wecom -n bottalk-dev
+          kubectl rollout restart deployment/bottalk-portal -n bottalk-dev
+          
+          kubectl rollout status deployment/bottalk-app -n bottalk-dev --timeout=120s
+          kubectl rollout status deployment/bottalk-feishu -n bottalk-dev --timeout=120s
+          kubectl rollout status deployment/bottalk-wecom -n bottalk-dev --timeout=120s
+          kubectl rollout status deployment/bottalk-portal -n bottalk-dev --timeout=120s
+          
+          echo "✅ DEV deployment complete"
+          kubectl get pods -n bottalk-dev
 
   # ─── 手动触发部署到生产 ───
   deploy-prod:
     name: Deploy to PROD
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'prod'
-    needs: lint-test
+    needs: build-push
     runs-on: [self-hosted, homevps]
     steps:
-      - uses: actions/checkout@v4
+      - name: Pull images from GHCR
+        run: |
+          SHA="${{ needs.build-push.outputs.sha }}"
+          docker pull ghcr.io/${{ github.repository_owner }}/bottalk-app:$SHA
+          docker pull ghcr.io/${{ github.repository_owner }}/bottalk-feishu:$SHA
+          docker pull ghcr.io/${{ github.repository_owner }}/bottalk-wecom:$SHA
+          docker pull ghcr.io/${{ github.repository_owner }}/bottalk-portal:$SHA
+          
+          docker tag ghcr.io/${{ github.repository_owner }}/bottalk-app:$SHA bottalk-app:latest
+          docker tag ghcr.io/${{ github.repository_owner }}/bottalk-feishu:$SHA bottalk-feishu:latest
+          docker tag ghcr.io/${{ github.repository_owner }}/bottalk-wecom:$SHA bottalk-wecom:latest
+          docker tag ghcr.io/${{ github.repository_owner }}/bottalk-portal:$SHA bottalk-portal:latest
 
-      - name: Build & Deploy to PROD
-        run: ./scripts/deploy-k3s-ci.sh prod
+      - name: Import images to k3s
+        run: |
+          NODES=$(kubectl get nodes -o jsonpath='{.items[*].status.addresses[?(@.type=="InternalIP")].address}')
+          for node_ip in $NODES; do
+            echo "Importing to $node_ip"
+            docker save bottalk-app:latest bottalk-feishu:latest bottalk-wecom:latest bottalk-portal:latest | \
+              ssh -o StrictHostKeyChecking=no root@$node_ip \
+              "ctr -a /run/k3s/containerd/containerd.sock -n k8s.io images import -"
+          done
+
+      - name: Rollout restart prod
+        run: |
+          kubectl rollout restart deployment/bottalk-app -n bottalk
+          kubectl rollout restart deployment/bottalk-feishu -n bottalk
+          kubectl rollout restart deployment/bottalk-wecom -n bottalk
+          kubectl rollout restart deployment/bottalk-portal -n bottalk
+          
+          kubectl rollout status deployment/bottalk-app -n bottalk --timeout=120s
+          kubectl rollout status deployment/bottalk-feishu -n bottalk --timeout=120s
+          kubectl rollout status deployment/bottalk-wecom -n bottalk --timeout=120s
+          kubectl rollout status deployment/bottalk-portal -n bottalk --timeout=120s
+          
+          echo "✅ PROD deployment complete"
+          kubectl get pods -n bottalk
