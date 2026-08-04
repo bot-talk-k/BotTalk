@@ -1,0 +1,64 @@
+name: CI & Deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: '部署环境'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - prod
+
+jobs:
+  # ─── 质量检查（GitHub 托管 runner）───
+  lint-test:
+    name: Lint & Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Smoke tests
+        env:
+          UNSKIP_DB_TEST: '1'
+        run: npm test
+
+  # ─── 构建 + 部署（homevps self-hosted runner）───
+  deploy-dev:
+    name: Deploy to DEV
+    needs: lint-test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, homevps]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build & Deploy to DEV
+        run: ./scripts/deploy-k3s-ci.sh dev
+
+  # ─── 手动触发部署到生产 ───
+  deploy-prod:
+    name: Deploy to PROD
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'prod'
+    needs: lint-test
+    runs-on: [self-hosted, homevps]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build & Deploy to PROD
+        run: ./scripts/deploy-k3s-ci.sh prod
