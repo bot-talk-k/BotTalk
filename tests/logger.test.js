@@ -1,5 +1,13 @@
 const test = require('node:test');
 const assert = require('node:assert');
+const Module = require('node:module');
+const originalLoad = Module._load;
+Module._load = function (request, parent, isMain) {
+  if (request === '../db' && parent?.filename?.endsWith('logger.js')) {
+    return { prepare: () => ({ run: () => ({ changes: 0 }) }) };
+  }
+  return originalLoad.call(this, request, parent, isMain);
+};
 const logger = require('../services/logger');
 
 test('LOG_LEVEL defaults to info and suppresses debug', () => {

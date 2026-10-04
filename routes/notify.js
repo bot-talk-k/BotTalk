@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const ilink = require('../ilink');
-const { logActivity } = require('../services/logger');
+const { logActivity, error: logError } = require('../services/logger');
 const { markSendResult, classifyAndMarkRet14 } = require('../services/channel-health');
 const { enqueueSend } = require('../services/push-queue');
 const { appendTip } = require('../services/keepalive-tip');
@@ -402,8 +402,17 @@ router.all('/notify', async (req, res) => {
   const content = req.body?.message || req.body?.desp || req.query?.msg || req.query?.desp || '';
   const channel = req.body?.channel || req.query?.channel || '';
 
-  const result = await handlePush(sendKey, title, content, getClientIp(req), channel, req);
-  res.json(result);
+  try {
+    const result = await handlePush(sendKey, title, content, getClientIp(req), channel, req);
+    res.json(result);
+  } catch (error) {
+    logError('❌ handlePush 未处理错误:', error.message);
+    res.status(500).json({
+      code: 50002,
+      message: '推送处理异常',
+      data: { reason: 'internal_error' },
+    });
+  }
 });
 
 // ===== 风格2：Server酱风格 =====
@@ -418,8 +427,17 @@ router.all('/:key.send', async (req, res) => {
   const content = req.body?.desp || req.body?.message || req.query?.desp || req.query?.msg || '';
   const channel = req.body?.channel || req.query?.channel || '';
 
-  const result = await handlePush(sendKey, title, content, getClientIp(req), channel, req);
-  res.json(result);
+  try {
+    const result = await handlePush(sendKey, title, content, getClientIp(req), channel, req);
+    res.json(result);
+  } catch (error) {
+    logError('❌ handlePush 未处理错误:', error.message);
+    res.status(500).json({
+      code: 50002,
+      message: '推送处理异常',
+      data: { reason: 'internal_error' },
+    });
+  }
 });
 
 // ===== 联系团队 =====
@@ -561,4 +579,5 @@ router.post('/contact', requireLogin, async (req, res) => {
 });
 
 module.exports = router;
+module.exports.handlePush = handlePush;
 module.exports.alertAdminsOnFailure = alertAdminsOnFailure;
