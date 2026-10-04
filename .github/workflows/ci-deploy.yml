@@ -8,7 +8,7 @@ on:
 
 jobs:
   lint-test:
-    name: Lint & Test
+    name: Root L1 - Lint & Test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,11 +23,57 @@ jobs:
           UNSKIP_DB_TEST: '1'
         run: npm test
 
+  l2-container:
+    name: L2 Container - ${{ matrix.service }}
+    needs: lint-test
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: app
+            context: .
+          - service: feishu
+            context: ./feishu
+          - service: wecom
+            context: ./wecom
+          - service: portal
+            context: ./portal
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build local image
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.context }}
+          load: true
+          push: false
+          tags: bottalk-${{ matrix.service }}:l2
+      - name: Start service
+        run: docker run -d --name l2-${{ matrix.service }} -e PORT=3000 -p 3000:3000 bottalk-${{ matrix.service }}:l2
+      - name: Wait for pure health endpoint
+        run: |
+          for attempt in $(seq 1 30); do
+            body=$(curl --fail --silent http://127.0.0.1:3000/healthz || true)
+            if [ "$body" = "ok" ]; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs l2-${{ matrix.service }} || true
+          echo "healthz did not return ok within 30 seconds" >&2
+          exit 1
+      - name: Run complete container test suite
+        run: docker exec l2-${{ matrix.service }} npm test
+      - name: Teardown
+        if: always()
+        run: docker rm -f l2-${{ matrix.service }} || true
+
   release-policy:
     name: Manual k8s2 Release Policy
     runs-on: ubuntu-latest
     steps:
       - run: |
-          echo "CI validates source only."
+          echo "CI validates source and containers only."
           echo "Production release is manual: scripts/release-k8s2.sh --preflight <sha7>"
           echo "See docs/production-k8s2-release.md."
