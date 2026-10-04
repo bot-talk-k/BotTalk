@@ -47,7 +47,7 @@ async function checkReminders() {
         continue;
       }
 
-      // 立即递增 send_count(无论后续成功/失败都算用掉一次配额)
+      // ret:-2 仍保留一次 5 秒即时重试；失败只写日志，不进入持久化队列。
       // 历史教训(2026-05-21): 旧逻辑只在 success 才递增,导致 every2min reminder
       // 通道 ret:-2 时永远 send_count=0 < max_count,12 天无限轰炸用户
       db.prepare('UPDATE reminders SET send_count = ? WHERE id = ?').run(sendCount, r.id);
@@ -184,19 +184,7 @@ console.log('⏰ 定时任务已启动');
 // 每 30 分钟扫一次
 // setInterval(checkKeepaliveReminders, 30 * 60 * 1000);  // 已移除：保活提醒废弃
 
-// 延时重试队列：每 30 秒扫描到期任务
-const { processRetries, cleanupStalePaused } = require('./services/retry-queue');
-setInterval(() => {
-  processRetries().catch(e => console.error('processRetries 错误:', e.message));
-}, 30000);
-setTimeout(() => {
-  processRetries().catch(e => console.error('processRetries 错误:', e.message));
-}, 45000);
-
-// 每 6 小时清理一次 24h+ 未触发的 paused record(用户始终没回复 = abandoned)
-setInterval(cleanupStalePaused, 6 * 60 * 60 * 1000);
-setTimeout(cleanupStalePaused, 60 * 1000); // 启动 60s 后跑一次,避免每次重启都立刻清
-
+// 持久化 retry queue 与 neg2 自动探测已停用；失败记录保留在 push_logs。
 // Poller 监控：每 2 分钟扫描心跳，挂掉自动重启
 const { superviseOnce } = require('./services/poller-supervisor');
 setInterval(() => {
@@ -206,15 +194,7 @@ setTimeout(() => {
   superviseOnce().catch(e => console.error('supervisor 错误:', e.message));
 }, 90 * 1000);
 
-// neg2-probe 持续探测：每 60 分钟扫一次到期任务（每个通道实际节奏也是 60min）
-const { processProbes } = require('./services/neg2-probe');
-setInterval(() => {
-  processProbes().catch(e => console.error('processProbes 错误:', e.message));
-}, 60 * 60 * 1000);
-setTimeout(() => {
-  processProbes().catch(e => console.error('processProbes 错误:', e.message));
-}, 3 * 60 * 1000);
-// 启动 60 秒后先跑一次
+// neg2-probe 持久化自动探测已停用；用户回复仍由 poller 刷新通道状态。// 启动 60 秒后先跑一次
 // setTimeout(checkKeepaliveReminders, 60000);  // 已移除
 // console.log('🔔 预防性保活提醒任务已启动');  // 已移除
 

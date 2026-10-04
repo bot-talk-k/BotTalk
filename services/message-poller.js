@@ -162,11 +162,7 @@ function handleMessages(botToken, userId, messages, state) {
   }
 
   if (batchHasUserText && batchChannelId && batchContextToken && !batchFiredFirstMessage) {
-    try {
-      require('./retry-queue').flushOldestPausedRetry(batchChannelId);
-    } catch (error) {
-      logger.error('flushOldestPausedRetry 调用失败:', error.message);
-    }
+    // 用户回复仅恢复 context/channel 状态与 ack；持久化 retry queue 已停用。
     maybeSendAck(batchChannelId, botToken, userId, batchContextToken);
   }
 }

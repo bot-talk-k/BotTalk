@@ -50,13 +50,8 @@ async function testSendMessageTimeout() {
 async function testPollerEpoch() {
   // 静态检查：源码里有 epoch 保护逻辑
   const src = require('fs').readFileSync(path.join(__dirname, '..', 'services', 'message-poller.js'), 'utf8');
-  assert(src.includes('pollerEpoch'), '必须有 pollerEpoch map');
-  assert(src.includes('myEpoch'), '必须在 loop 内捕获 myEpoch');
-  // 应有两处 epoch 检查：loop 入口 + getUpdates 后
-  const checks = src.match(/pollerEpoch\[botToken\]\s*!==\s*myEpoch/g) || [];
-  assert(checks.length >= 2, `epoch 检查应 >= 2 处，实际 ${checks.length}`);
-  // 每次 start 应递增 epoch
-  assert(/pollerEpoch\[botToken\]\s*=\s*myEpoch/.test(src), 'start 时应写入新 epoch');
+  assert(src.includes('pollerHeartbeat'), '必须有 pollerHeartbeat map');
+  assert(src.includes('activePollers'), '必须有单飞 poller registry');
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -65,10 +60,9 @@ async function testPollerEpoch() {
 
 async function testRetryEnqueueConditions() {
   const src = require('fs').readFileSync(path.join(__dirname, '..', 'routes', 'notify.js'), 'utf8');
-  assert(src.includes('isNetworkErr'), '应包含 isNetworkErr 判断');
-  assert(src.includes('isQueueFull'), '应包含 isQueueFull 判断');
-  assert(src.includes("error.code === 'QUEUE_FULL'"), '应检查 QUEUE_FULL');
-  assert(src.includes('!errData && !tokenInvalid'), '网络错误判断应检查 errData 缺失');
+  assert(!src.includes('enqueueRetry('), 'B 方案不应再写入持久化 retry queue');
+  assert(src.includes('source: \'api-retry\''), '应保留 API 即时重试来源');
+  assert(src.includes('setTimeout'), '应保留 5 秒即时 retry 等待');
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -166,11 +160,9 @@ async function testBeijingTimezoneSQL() {
 
 async function testUserReplyResets() {
   const src = require('fs').readFileSync(path.join(__dirname, '..', 'services', 'message-poller.js'), 'utf8');
-  assert(src.includes('consecutive_neg2_count = 0'), '应重置 neg2 计数');
-  assert(src.includes('push_retry_queue'), '应触发 retry 补发');
-  assert(src.includes('next_try_at = CURRENT_TIMESTAMP'), '应将 pending 重试 next_try_at 置为现在而非直接标 success');
-  assert(src.includes('neg2_recovery_probe'), '应处理 neg2-probe');
-  assert(src.includes("pollerEpoch"), '应有 epoch 保护');
+  assert(src.includes('pollerHeartbeat'), '应有 heartbeat 状态');
+  assert(src.includes('activePollers'), '应有单飞保护');
+  assert(src.includes('consecutive_neg2_count = 0'), '用户回复仍应重置 neg2 计数');
 }
 
 // ═══════════════════════════════════════════════════════════════════

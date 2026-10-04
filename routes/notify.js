@@ -6,7 +6,8 @@ const { logActivity, error: logError } = require('../services/logger');
 const { markSendResult, classifyAndMarkRet14 } = require('../services/channel-health');
 const { enqueueSend } = require('../services/push-queue');
 const { appendTip } = require('../services/keepalive-tip');
-const { enqueueRetry } = require('../services/retry-queue');
+// Persistent retry queue is intentionally disabled; services/retry-queue.js remains
+// only for historical/admin compatibility while the migration policy is decided.
 
 // 简单内存限流：每 Key 每小时最多 100 条
 const rateLimits = {};
@@ -205,27 +206,13 @@ async function handlePush(sendKey, title, content, clientIp, channelParam, req) 
         VALUES (?, ?, ?, 'failed', ?, ?, ?)
       `).run(user.id, title, content, clientIp, channel.id, resJson);
 
-      // 入延时重试队列：
-      //   - ret:-2 / ret:-14 半死态（真 session 死已标 inactive，不重试）
-      //   - 网络错误（无 response，errData 为 undefined）— 可能暂时丢连接，值得重试
-      //   - push-queue 满（QUEUE_FULL）— 罕见，也让它稍后重试
+      // 持久化 retry queue 已停用：失败仍记录 push_logs，调用方收到明确 reason，
+      // 不再把失败消息排入后台补发队列。
       const retCode = errData?.ret;
-      const isNetworkErr = !errData && !tokenInvalid;
       const isQueueFull = error.code === 'QUEUE_FULL';
-      const shouldRetry = !tokenInvalid && (retCode === -2 || retCode === -14 || isNetworkErr || isQueueFull);
-      if (shouldRetry) {
-        enqueueRetry({
-          userId: user.id,
-          channelId: channel.id,
-          title,
-          content,
-          source: 'api',
-          originalPushLogId: logInfo.lastInsertRowid,
-          firstError: errData || { message: error.message, code: error.code || 'network_err' },
-        });
-      }
+      const isNetworkErr = !errData && !tokenInvalid;
 
-      logActivity(user.id, 'push_fail', { channel_id: channel.id, error: error.message, token_invalid: tokenInvalid, enqueued_retry: shouldRetry }, req);
+      logActivity(user.id, 'push_fail', { channel_id: channel.id, error: error.message, token_invalid: tokenInvalid, enqueued_retry: false }, req);
       console.error('❌ 推送失败:', errData || error.message);
       alertAdminsOnFailure({
         userId: user.id,
