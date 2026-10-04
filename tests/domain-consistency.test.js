@@ -5,6 +5,7 @@
 const fs = require('fs');
 const path = require('path');
 
+// Unified-domain list is part of the assertion contract below.
 const UNIFIED_DOMAIN = 'bot-talk.com';
 const SUBDOMAINS = ['feishu.bot-talk.com', 'wecom.bot-talk.com', 'portal.bot-talk.com'];
 

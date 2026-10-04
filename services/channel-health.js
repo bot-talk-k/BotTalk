@@ -203,7 +203,7 @@ function getChannelHealth(channel) {
 async function classifyRet14(channelId, botToken) {
   try {
     // 用很短的 timeout 检查 getUpdates 是否也 ret:-14
-    const result = await Promise.race([
+    await Promise.race([
       ilink.getUpdates(botToken, ''),
       new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000)),
     ]);

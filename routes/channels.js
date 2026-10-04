@@ -11,7 +11,7 @@ const { generateSendKey } = require('../db');
 const ilink = require('../ilink');
 const { requireLogin } = require('../middleware/auth');
 const { logActivity } = require('../services/logger');
-const { startMessagePoller, getContextToken } = require('../services/message-poller');
+const { startMessagePoller } = require('../services/message-poller');
 
 // 系统提醒来源：这些是系统主动发给用户的（保活提醒、定时提醒等），不应纳入补发范围
 const SYSTEM_REMINDER_SOURCES = "('system', 'system-announce', 'system-warning', 'session-warning', 'alert', 'announce-redo', 'system-backfill', 'system-announce-retry', 'system-announce-retry2', 'health-check', 'resend', 'system-apology', 'resend-notice', 'resend-recovery', 'resend-prompt', 'keepalive-reminder', 'scheduler')";

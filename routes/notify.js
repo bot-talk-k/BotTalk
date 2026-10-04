@@ -201,7 +201,7 @@ async function handlePush(sendKey, title, content, clientIp, channelParam, req) 
         console.error(`⚠️ 通道 ${channel.id} 已标记为 inactive（HTTP ${errStatus}）`);
       }
 
-      const logInfo = db.prepare(`
+      db.prepare(`
         INSERT INTO push_logs (user_id, title, content, status, ip, channel_id, response)
         VALUES (?, ?, ?, 'failed', ?, ?, ?)
       `).run(user.id, title, content, clientIp, channel.id, resJson);

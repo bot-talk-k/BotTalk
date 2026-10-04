@@ -338,10 +338,9 @@ router.get('/page-views', (req, res) => {
        ORDER BY pv.id DESC LIMIT 50`
     ).all(...params);
 
-    // Mask IP: replace last segment with *
+    // IP masking: replace the last segment with *.
     function maskIp(ip) {
       if (!ip) return '-';
-      // IPv4
       if (ip.includes('.')) {
         const parts = ip.split('.');
         if (parts.length === 4) {
@@ -349,10 +348,7 @@ router.get('/page-views', (req, res) => {
           return parts.join('.');
         }
       }
-      // IPv6 or other: mask last 4 chars
-      if (ip.length > 4) {
-        return ip.substring(0, ip.length - 4) + '****';
-      }
+      if (ip.length > 4) return ip.substring(0, ip.length - 4) + '****';
       return '****';
     }
 

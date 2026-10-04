@@ -37,14 +37,14 @@ test('block: force push main', () => {
 
 test('block: direct k8s2 SQL delete', () => {
   assert.equal(
-    runGuard('ssh homevps "ssh um880pro \"node -e \\\"DELETE FROM users\\\"\""').allow,
+    runGuard('ssh homevps "ssh um880pro \'node -e \\\"DELETE FROM users\\\"\'"').allow,
     false,
   );
 });
 
 test('block: direct k8s2 db run call', () => {
   assert.equal(
-    runGuard('ssh homevps "ssh um880pro \"db.prepare(\\\"x\\\").run()\""').allow,
+    runGuard('ssh homevps "ssh um880pro \'db.prepare(\\\"x\\\").run()\'"').allow,
     false,
   );
 });
@@ -55,14 +55,14 @@ test('block: broad Kubernetes Pod delete', () => {
 
 test('block: k8s2 PVC mutation', () => {
   assert.equal(
-    runGuard('ssh homevps "ssh um880pro \"sudo -n k3s kubectl apply -f pvc.yaml\""').allow,
+    runGuard('ssh homevps "ssh um880pro \'sudo -n k3s kubectl apply -f pvc.yaml\'"').allow,
     false,
   );
 });
 
 test('allow: read-only k8s2 inspection', () => {
   assert.equal(
-    runGuard('ssh homevps "ssh um880pro \"sudo -n k3s kubectl -n bottalk get pods\""').allow,
+    runGuard('ssh homevps "ssh um880pro \'sudo -n k3s kubectl -n bottalk get pods\'"').allow,
     true,
   );
 });
