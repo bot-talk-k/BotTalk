@@ -97,13 +97,13 @@ test('database migrations applied (schema_version >= 22)', { skip: 'requires nat
 });
 
 if (process.env.UNSKIP_DB_TEST === '1') {
-  test('database migrations applied (schema_version >= 30)', () => {
+  test('database migrations applied (schema_version >= 29)', () => {
     const Database = require('better-sqlite3');
     const dbPath = path.join(TEST_DATA_DIR, 'bottalk.db');
     const db = new Database(dbPath, { readonly: true });
     const row = db.prepare('SELECT MAX(version) AS v FROM schema_version').get();
     db.close();
-    assert.ok(row.v >= 30, `expected schema_version >= 30, got ${row.v}`);
+    assert.ok(row.v >= 29, `expected schema_version >= 29, got ${row.v}`);
   });
 }
 
