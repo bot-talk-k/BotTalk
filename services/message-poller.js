@@ -65,7 +65,7 @@ async function runPollingLoop({
       onHeartbeat({ lastOk: now(), alive: true, pollCount, startedAt });
       if (pollCount % 100 === 0) {
         const hours = ((now() - startedAt) / 3600000).toFixed(1);
-        logger.info(`💓 ${userId} poller 存活 ${hours}h，已轮询 ${pollCount} 次`);
+        logger.debug(`💓 ${userId} poller 存活 ${hours}h，已轮询 ${pollCount} 次`);
       }
 
       if (result.get_updates_buf && result.get_updates_buf !== cursor) {

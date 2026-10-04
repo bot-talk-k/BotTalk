@@ -10,22 +10,25 @@ Module._load = function (request, parent, isMain) {
 };
 const logger = require('../services/logger');
 
-test('LOG_LEVEL defaults to info and suppresses debug', () => {
+test('LOG_LEVEL defaults to info and suppresses debug heartbeat', () => {
   const previous = process.env.LOG_LEVEL;
   delete process.env.LOG_LEVEL;
-  const original = console.info;
+  const originalInfo = console.info;
+  const originalLog = console.log;
   const lines = [];
-  console.info = (...args) => lines.push(args);
+  console.info = (...args) => lines.push(['info', ...args]);
+  console.log = (...args) => lines.push(['log', ...args]);
   try {
     logger.debug('🔄 getUpdates 请求');
-    logger.info('💓 user poller 存活 0.0h，已轮询 100 次');
+    logger.debug('💓 user poller 存活 0.0h，已轮询 100 次');
+    logger.info('🩺 supervisor: 共 260 通道，健康 260，重启 0，报警 0');
   } finally {
-    console.info = original;
+    console.info = originalInfo;
+    console.log = originalLog;
     if (previous === undefined) delete process.env.LOG_LEVEL;
     else process.env.LOG_LEVEL = previous;
   }
-  assert.strictEqual(lines.length, 1);
-  assert.strictEqual(lines[0][0], '💓 user poller 存活 0.0h，已轮询 100 次');
+  assert.deepStrictEqual(lines, [['info', '🩺 supervisor: 共 260 通道，健康 260，重启 0，报警 0']]);
 });
 
 test('LOG_LEVEL=debug enables debug detail', () => {

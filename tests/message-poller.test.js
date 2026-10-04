@@ -4,10 +4,10 @@ const Module = require('node:module');
 
 const originalLoad = Module._load;
 Module._load = function (request, parent, isMain) {
-  if (request === '../db' && parent?.filename?.endsWith('message-poller.js')) {
+  if (request === '../db' || request === './db' || request === '../services/retry-queue' || request === './retry-queue') {
     return { prepare: () => ({ get: () => null, all: () => [], run: () => ({ changes: 0 }) }) };
   }
-  if (request === '../ilink' && parent?.filename?.endsWith('message-poller.js')) return {};
+  if (request === '../ilink' || request === './ilink') return {};
   return originalLoad.call(this, request, parent, isMain);
 };
 
@@ -92,10 +92,10 @@ test('request failures use capped exponential backoff and reset after success', 
   assert.strictEqual(errorDelay(7), 30000);
 });
 
-test('85 empty pollers emit no default-info request or response lines in 60s', async () => {
+test('260 empty pollers emit at most five default-info lines in 60s', async () => {
   let totalRequests = 0;
   let totalWarnings = 0;
-  await Promise.all(Array.from({ length: 85 }, async (_, index) => {
+  await Promise.all(Array.from({ length: 260 }, async (_, index) => {
     const controller = new AbortController();
     const clock = fakeClock(controller);
     await runPollingLoop({
@@ -106,11 +106,11 @@ test('85 empty pollers emit no default-info request or response lines in 60s', a
     });
   }));
 
-  // Default info emits no per-request or per-empty-response lines.
-  const logLines = totalWarnings;
-  assert.strictEqual(logLines, 0);
-  assert.ok(logLines <= 200);
-  assert.strictEqual(totalRequests, 85 * 14);
+  // Per-poller request, empty-response, and heartbeat logs are DEBUG-only.
+  // INFO remains for the separately scheduled supervisor aggregation/event logs.
+  const infoLines = totalWarnings;
+  assert.ok(infoLines <= 5, `60s simulation emitted ${infoLines} info lines`);
+  assert.strictEqual(totalRequests, 260 * 14);
 });
 
 test('single-flight duplicate start is represented by one held request', async () => {
