@@ -44,7 +44,7 @@ test('block: direct k8s2 SQL delete', () => {
 
 test('block: direct k8s2 db run call', () => {
   assert.equal(
-    runGuard('ssh homevps ssh um880pro db.prepare.run').allow,
+    runGuard('ssh homevps ssh um880pro db.prepare(DELETE).run()').allow,
     false,
   );
 });
