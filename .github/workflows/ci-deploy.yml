@@ -54,7 +54,7 @@ jobs:
       - name: Wait for pure health endpoint
         run: |
           for attempt in $(seq 1 30); do
-            body=$(curl --fail --silent http://127.0.0.1:3000/healthz || true)
+          body=$(curl --fail --silent http://127.0.0.1:3000/healthz || true)
             if [ "$body" = "ok" ]; then
               exit 0
             fi

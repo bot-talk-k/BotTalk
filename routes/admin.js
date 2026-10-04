@@ -358,8 +358,7 @@ router.get('/page-views', (req, res) => {
         summary: { total, today, unique_ips: uniqueIps },
         by_page: byPage,
         by_day: byDay,
-        recent: recent
-      }
+        recent: recent.map(r => ({ ...r, ip: maskIp(r.ip) }))      }
     });
   } catch (err) {
     console.error('Admin page-views error:', err.message);

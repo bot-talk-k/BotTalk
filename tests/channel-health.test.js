@@ -16,13 +16,12 @@ const assert = require('node:assert');
 // 通过 mock require 避开 better-sqlite3(channel-health.js 依赖 db.js → better-sqlite3,
 // Windows 上 native 编译困难)。我们只测纯函数,不需要真 db。
 const Module = require('node:module');
-const origResolve = Module._resolve_filename ? Module._resolve_filename.bind(Module) : null;
-// 简单方式: 直接 require 时拦截 db 加载
 const originalLoad = Module._load;
 Module._load = function (request, parent, isMain) {
   if (request === '../db' || request.endsWith('/db') || request.endsWith('/db.js')) {
     return new Proxy({}, { get: () => () => ({ run: () => ({}), get: () => null, all: () => [] }) });
   }
+  if (request === 'axios') return {};
   return originalLoad.call(this, request, parent, isMain);
 };
 const { isChannelDisconnected } = require('../services/channel-health');

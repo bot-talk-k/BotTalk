@@ -15,7 +15,7 @@ Module._load = function (request, parent, isMain) {
 const ROOT = path.join(__dirname, '..');
 const TOP_LEVEL_SERVICE_DIRS = new Set(['feishu', 'wecom', 'portal', 'sdk', 'node_modules', '.git', '.claude']);
 
-function walk(dir, isMainRoot = false) {
+function walk(dir) {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
     if (entry.isDirectory() && (TOP_LEVEL_SERVICE_DIRS.has(entry.name) || entry.name === 'node_modules')) return [];
     const target = path.join(dir, entry.name);
