@@ -10,6 +10,8 @@ metadata:
     app.kubernetes.io/part-of: bottalk
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app.kubernetes.io/name: bottalk-portal
@@ -19,11 +21,12 @@ spec:
         app.kubernetes.io/name: bottalk-portal
         app.kubernetes.io/part-of: bottalk
     spec:
+      nodeSelector:
+        kubernetes.io/arch: amd64
       containers:
         - name: bottalk-portal
-          # ️ 部署前需在 homevps 上构建镜像:
-          # cd /path/to/bottalk/portal && docker build -t bottalk-portal:latest .
-          image: bottalk-portal:latest
+          # Rendered by scripts/release-k8s2.sh; do not apply this template directly.
+          image: bottalk-portal:__RELEASE_SHA__
           imagePullPolicy: Never
           ports:
             - containerPort: 3000
@@ -53,15 +56,21 @@ spec:
               cpu: "500m"
           readinessProbe:
             httpGet:
-              path: /api/config
+              path: /healthz
               port: 3000
             initialDelaySeconds: 10
             periodSeconds: 10
             timeoutSeconds: 5
-            failureThreshold: 3
+            failureThreshold: 5
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: 3000
+            periodSeconds: 10
+            failureThreshold: 60
           livenessProbe:
             httpGet:
-              path: /api/config
+              path: /healthz
               port: 3000
             initialDelaySeconds: 30
             periodSeconds: 30
@@ -75,18 +84,21 @@ spec:
 ---
 apiVersion: v1
 kind: Service
+# REFERENCE-ONLY / INIT-ONLY: the live Service, Ingress, LoadBalancer IP, and
+# related infrastructure are Home-Lab owned. Never reapply this document during a release.
 metadata:
   name: bottalk-portal
   namespace: bottalk
+  annotations:
+    metallb.io/loadBalancerIPs: 192.168.3.244
   labels:
     app.kubernetes.io/name: bottalk-portal
     app.kubernetes.io/part-of: bottalk
 spec:
-  type: NodePort
+  type: LoadBalancer
   ports:
     - port: 3000
       targetPort: 3000
-      nodePort: 30103
       protocol: TCP
       name: http
   selector:

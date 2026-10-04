@@ -1,5 +1,7 @@
 # BotTalk 自部署指南
 
+> **范围说明：** 本文档仅面向第三方或本地 Docker Compose 自部署者。BotTalk 项目维护者的正式生产环境是 k8s2，发布流程见 [k8s2 生产发布手册](production-k8s2-release.md)，不要将本指南用于项目生产发布。
+
 本文档面向想要在自己服务器上部署 BotTalk 的开发者。BotTalk 是一个开源的微信消息推送服务（类似 Server酱），基于 Node.js + SQLite，通过 Docker 一键部署。
 
 ---
@@ -496,7 +498,7 @@ if [ "$RESPONSE" != "200" ]; then
 fi
 ```
 
-也可以对接 Uptime Kuma、Prometheus 等监控工具，定期请求 `/api/config` 检查可用性。
+也可以对接 Uptime Kuma、Prometheus 等监控工具，定期请求 `/healthz` 检查可用性。`/healthz` 是纯内存 `200 ok` 应答，不访问 SQLite 或外部服务。
 
 ### 6. 防火墙
 

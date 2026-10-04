@@ -2,7 +2,7 @@
 // 「超管飞书」(全站超管消息中枢),并标注【企业微信】来源,便于在飞书里区分。
 //
 // 为什么推飞书而非 wecom 自己通道:用户拍板"真正的超管消息通道是飞书"。
-// 走 bottalk-shared 网络内的 feishu 容器,凭超管飞书 SendKey 推送。
+// 走 Kubernetes Service DNS 的飞书服务，凭超管飞书 SendKey 推送。
 // fire-and-forget,不阻塞;同类事件 1 小时去重。
 
 const axios = require('axios');

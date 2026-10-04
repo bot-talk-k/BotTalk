@@ -26,7 +26,11 @@ function resolveSessionSecret() {
   }
 }
 
+const { healthz } = require('./healthz');
+
 const app = express();
+// Register before middleware: this path must not create/read a session or touch SQLite.
+app.get('/healthz', healthz);
 const PORT = process.env.PORT || 3000;
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 // 微信现站地址(intro 页「微信通道」入口指向它)

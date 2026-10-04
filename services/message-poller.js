@@ -1,14 +1,17 @@
 const ilink = require('../ilink');
 const db = require('../db');
+const logger = require('./logger');
 
-// 内存缓存
 const contextTokenCache = {};
-const pollerHeartbeat = {}; // botToken -> { lastOk: timestamp, alive: bool }
-const lastAckAt = {};       // channelId -> timestamp（回执去重）
-const pollerEpoch = {};     // botToken -> integer（每次 startMessagePoller 递增，旧 loop 发现 epoch 不匹配就退出）
+const pollerHeartbeat = {};
+const lastAckAt = {};
+const activePollers = new Map(); // botToken -> { controller, promise }
 
-// 回执文案池（轮换避免机械感）
-// 文案口径:教育用户"多回复 = 通道畅通",对应 iLink 限流阈值约 9-10 条/周期的事实
+const IDLE_DELAYS_MS = [1000, 2000, 4000];
+const IDLE_DELAY_MAX_MS = 5000;
+const ERROR_DELAY_BASE_MS = 1000;
+const ERROR_DELAY_MAX_MS = 30000;
+
 const ACK_MESSAGES = [
   '✅ 收到！假装在聊天，通道才畅通',
   '✅ 收到！收到消息多回复，保障通道畅通',
@@ -16,206 +19,246 @@ const ACK_MESSAGES = [
 ];
 const ACK_DEDUP_MS = 30 * 1000;
 
-// 启动长轮询服务（持续接收消息）
-// 幂等保护：同一 bot_token 只允许一个 loop 活跃。再次调用会递增 epoch，
-// 旧 loop 在下一次迭代发现 epoch 不匹配就自行 break，避免并发 long-poll。
-async function startMessagePoller(botToken, userId, onFirstMessage) {
-  const myEpoch = (pollerEpoch[botToken] || 0) + 1;
-  pollerEpoch[botToken] = myEpoch;
-  console.log(`🔄 启动消息轮询服务：${userId} (epoch=${myEpoch})`);
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 
+function idleDelay(attempt) {
+  return attempt <= IDLE_DELAYS_MS.length
+    ? IDLE_DELAYS_MS[attempt - 1]
+    : IDLE_DELAY_MAX_MS;
+}
+
+function errorDelay(attempt) {
+  return Math.min(ERROR_DELAY_BASE_MS * (2 ** (attempt - 1)), ERROR_DELAY_MAX_MS);
+}
+
+// Testable core. Empty responses are deliberately paced; only messages pull again
+// immediately. A request error is not an empty response and uses the longer cap.
+async function runPollingLoop({
+  botToken,
+  userId,
+  signal,
+  getUpdates = ilink.getUpdates,
+  now = Date.now,
+  wait = sleep,
+  onResult = async () => {},
+  onError = logger.warn,
+  onSessionExpired = async () => {},
+  onHeartbeat = () => {},
+  onStart = () => {},
+}) {
   let cursor = '';
-  let hasReceivedFirstMessage = false;
-  const pollerStartTime = Date.now();
+  let idleAttempt = 0;
+  let errorAttempt = 0;
   let pollCount = 0;
+  const startedAt = now();
 
-  // 初始化心跳
-  pollerHeartbeat[botToken] = { lastOk: Date.now(), alive: true };
-
-  // 从 channels 表加载已有的 context_token
-  const channel = db.prepare(
-    `SELECT context_token FROM channels WHERE bot_token = ? AND wechat_openid = ? AND context_token IS NOT NULL LIMIT 1`
-  ).get(botToken, userId);
-  if (channel?.context_token) {
-    contextTokenCache[userId] = channel.context_token;
-    hasReceivedFirstMessage = true;
-    console.log(`📦 ${userId} 从数据库恢复 context_token`);
-  }
-
-  while (true) {
-    // Epoch 检查：如果有更新的 poller 被启动（epoch 递增），本 loop 退出
-    if (pollerEpoch[botToken] !== myEpoch) {
-      console.log(`🛑 ${userId} poller (epoch=${myEpoch}) 退出，已被新 loop (epoch=${pollerEpoch[botToken]}) 取代`);
-      return;
-    }
+  onStart();
+  while (!signal?.aborted) {
     try {
-      const result = await ilink.getUpdates(botToken, cursor);
+      const result = await getUpdates(botToken, cursor, { signal });
+      if (signal?.aborted) return { reason: 'aborted', pollCount };
 
-      // 再次检查 epoch（await 期间可能已被取代）
-      if (pollerEpoch[botToken] !== myEpoch) {
-        console.log(`🛑 ${userId} poller (epoch=${myEpoch}) 在 getUpdates 后发现被取代，退出`);
-        return;
-      }
-
-      // 每次 getUpdates 正常返回（含空轮询）都更新心跳
       pollCount++;
-      pollerHeartbeat[botToken] = { lastOk: Date.now(), alive: true };
+      errorAttempt = 0;
+      onHeartbeat({ lastOk: now(), alive: true, pollCount, startedAt });
       if (pollCount % 100 === 0) {
-        const hours = ((Date.now() - pollerStartTime) / 3600000).toFixed(1);
-        console.log(`💓 ${userId} poller 存活 ${hours}h，已轮询 ${pollCount} 次`);
+        const hours = ((now() - startedAt) / 3600000).toFixed(1);
+        logger.info(`💓 ${userId} poller 存活 ${hours}h，已轮询 ${pollCount} 次`);
       }
 
       if (result.get_updates_buf && result.get_updates_buf !== cursor) {
         cursor = result.get_updates_buf;
       }
 
-      if (result.msgs && result.msgs.length > 0) {
-        let batchHasUserText = false;
-        let batchChannelId = null;
-        let batchContextToken = null;
-        let batchFiredFirstMessage = false;
-        for (const msg of result.msgs) {
-          if (msg.context_token) {
-            // 写入内存缓存
-            contextTokenCache[userId] = msg.context_token;
+      const messages = Array.isArray(result.msgs) ? result.msgs : [];
+      if (messages.length > 0) {
+        idleAttempt = 0;
+        await onResult(messages);
+        continue; // next pull is intentionally immediate
+      }
 
-            // 持久化到 channels 表：刷新 context_token + 复位所有衰退标记
-            // 用户回复证明通道活着，ret:-2 老化状态自动清零, 失联状态也解除(X4)
-            db.prepare(`UPDATE channels
-              SET context_token = ?, status = 'active', last_inbound_at = CURRENT_TIMESTAMP,
-                  consecutive_neg2_count = 0, disconnected_at = NULL
-              WHERE bot_token = ? AND wechat_openid = ?`)
-              .run(msg.context_token, botToken, userId);
+      idleAttempt++;
+      await wait(idleDelay(idleAttempt), signal);
+    } catch (error) {
+      if (signal?.aborted || error.code === 'ABORT_ERR' || error.name === 'CanceledError') {
+        return { reason: 'aborted', pollCount };
+      }
+      if (error.code === 'SESSION_EXPIRED') {
+        await onSessionExpired(error);
+        return { reason: 'session_expired', pollCount };
+      }
 
-            // 用户回复 → 标记 neg2-probe 为已恢复（纯归因记录，无副作用发送）
-            try {
-              const chRow = db.prepare('SELECT id FROM channels WHERE bot_token = ? AND wechat_openid = ? LIMIT 1').get(botToken, userId);
-              if (chRow?.id) {
-                const r2 = db.prepare(`UPDATE neg2_recovery_probe
-                  SET recovered_at = CURRENT_TIMESTAMP, recovered_by = 'user_reply'
-                  WHERE channel_id = ? AND recovered_at IS NULL AND gave_up_at IS NULL`).run(chRow.id);
-                if (r2.changes > 0) {
-                  console.log(`♻️ 用户回复: channel=${chRow.id} 标记 ${r2.changes} 条探测为 user_reply 恢复`);
-                }
-              }
-            } catch (e) {
-              console.error('用户回复复位失败:', e.message);
-            }
+      errorAttempt++;
+      idleAttempt = 0;
+      const delay = errorDelay(errorAttempt);
+      onError(`⚠️ ${userId} 轮询失败，${delay / 1000}s 后重试: ${error.message}`);
+      await wait(delay, signal);
+    }
+  }
+  return { reason: 'aborted', pollCount };
+}
 
-            // 记录 inbound_events（脱敏：仅存前 50 字预览）
-            try {
-              const channelRow = db.prepare('SELECT id FROM channels WHERE bot_token = ? AND wechat_openid = ? LIMIT 1').get(botToken, userId);
-              let textPreview = null;
-              let hasText = 0;
-              if (msg.item_list && msg.item_list.length > 0) {
-                const txtItem = msg.item_list.find(it => it.text_item?.text);
-                if (txtItem) {
-                  hasText = 1;
-                  textPreview = String(txtItem.text_item.text).substring(0, 50);
-                }
-              }
-              db.prepare(`
-                INSERT INTO inbound_events
-                (channel_id, wechat_openid, from_user_id, message_type, has_text, text_preview, context_token_prefix)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-              `).run(
-                channelRow?.id || null,
-                userId,
-                msg.from_user_id || null,
-                msg.message_type || null,
-                hasText,
-                textPreview,
-                msg.context_token.substring(0, 20)
-              );
-              console.log(`📥 inbound_event 记录: channel=${channelRow?.id} from=${msg.from_user_id} text="${textPreview || '(无)'}"`);
-              if (hasText) {
-                batchHasUserText = true;
-                batchChannelId = channelRow?.id || null;
-                batchContextToken = msg.context_token;
-              }
-            } catch (e) {
-              console.error('inbound_events 写入失败:', e.message);
-            }
+function handleMessages(botToken, userId, messages, state) {
+  let batchHasUserText = false;
+  let batchChannelId = null;
+  let batchContextToken = null;
+  let batchFiredFirstMessage = false;
 
-            if (!hasReceivedFirstMessage && onFirstMessage) {
-              hasReceivedFirstMessage = true;
-              batchFiredFirstMessage = true;
-              onFirstMessage(msg.context_token);
-            }
-          }
-        }
+  for (const msg of messages) {
+    if (!msg.context_token) continue;
 
-        // 整批消息处理完后，统一回一次 ack（不论 N 条都只回 1 条）
-        // 但若本批触发了 onFirstMessage（首条消息 → welcome 已包含"测试通过"反馈），则跳过 ack 避免重复
-        if (batchHasUserText && batchChannelId && batchContextToken && !batchFiredFirstMessage) {
-          // 用户回复 → 解锁该 channel 最近 1 条 paused retry 立即补发
-          // (严格"最近 1 条"遵循 commit 6684f51 的"防一股脑全发"原则;内置 30s cool-down)
-          try {
-            require('./retry-queue').flushOldestPausedRetry(batchChannelId);
-          } catch (e) {
-            console.error('flushOldestPausedRetry 调用失败:', e.message);
-          }
-          maybeSendAck(batchChannelId, botToken, userId, batchContextToken);
-        }
+    contextTokenCache[userId] = msg.context_token;
+    db.prepare(`UPDATE channels
+      SET context_token = ?, status = 'active', last_inbound_at = CURRENT_TIMESTAMP,
+          consecutive_neg2_count = 0, disconnected_at = NULL
+      WHERE bot_token = ? AND wechat_openid = ?`)
+      .run(msg.context_token, botToken, userId);
+
+    try {
+      const chRow = db.prepare('SELECT id FROM channels WHERE bot_token = ? AND wechat_openid = ? LIMIT 1').get(botToken, userId);
+      if (chRow?.id) {
+        const result = db.prepare(`UPDATE neg2_recovery_probe
+          SET recovered_at = CURRENT_TIMESTAMP, recovered_by = 'user_reply'
+          WHERE channel_id = ? AND recovered_at IS NULL AND gave_up_at IS NULL`).run(chRow.id);
+        if (result.changes > 0) logger.info(`♻️ 用户回复: channel=${chRow.id} 标记 ${result.changes} 条探测为 user_reply 恢复`);
       }
     } catch (error) {
-      if (error.code === 'SESSION_EXPIRED') {
-        console.error(`⚠️ ${userId} session 已过期，停止轮询并标记通道 inactive`);
-        pollerHeartbeat[botToken] = { lastOk: pollerHeartbeat[botToken]?.lastOk || 0, alive: false, reason: 'session_expired' };
-        db.prepare("UPDATE channels SET status = 'inactive' WHERE bot_token = ? AND wechat_openid = ?")
-          .run(botToken, userId);
-        delete contextTokenCache[userId];
-        return; // 停止轮询
-      }
-      console.error(`❌ ${userId} 轮询错误:`, error.message);
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      logger.error('用户回复复位失败:', error.message);
     }
+
+    try {
+      const channelRow = db.prepare('SELECT id FROM channels WHERE bot_token = ? AND wechat_openid = ? LIMIT 1').get(botToken, userId);
+      let textPreview = null;
+      let hasText = 0;
+      if (msg.item_list?.length > 0) {
+        const textItem = msg.item_list.find(item => item.text_item?.text);
+        if (textItem) {
+          hasText = 1;
+          textPreview = String(textItem.text_item.text).substring(0, 50);
+        }
+      }
+      db.prepare(`INSERT INTO inbound_events
+        (channel_id, wechat_openid, from_user_id, message_type, has_text, text_preview, context_token_prefix)
+        VALUES (?, ?, ?, ?, ?, ?, ?)`)
+        .run(channelRow?.id || null, userId, msg.from_user_id || null, msg.message_type || null,
+          hasText, textPreview, msg.context_token.substring(0, 20));
+      logger.info(`📥 收到消息: channel=${channelRow?.id || 'unknown'}${hasText ? ` text="${textPreview}"` : ''}`);
+      if (hasText) {
+        batchHasUserText = true;
+        batchChannelId = channelRow?.id || null;
+        batchContextToken = msg.context_token;
+      }
+    } catch (error) {
+      logger.error('inbound_events 写入失败:', error.message);
+    }
+
+    if (!state.hasReceivedFirstMessage && state.onFirstMessage) {
+      state.hasReceivedFirstMessage = true;
+      batchFiredFirstMessage = true;
+      state.onFirstMessage(msg.context_token);
+    }
+  }
+
+  if (batchHasUserText && batchChannelId && batchContextToken && !batchFiredFirstMessage) {
+    try {
+      require('./retry-queue').flushOldestPausedRetry(batchChannelId);
+    } catch (error) {
+      logger.error('flushOldestPausedRetry 调用失败:', error.message);
+    }
+    maybeSendAck(batchChannelId, botToken, userId, batchContextToken);
   }
 }
 
-// 用户回复时秒回一条确认（让用户知道"我们收到了"）
-// 同 channel 30 秒去重；走 push-queue 限流；失败不重试（在 push_logs 可见即可）
+// Same token gets one flight. Normal duplicate starts return that flight; callers
+// may pass { restart: true } only when a deliberate replacement is required.
+function startPollingFlight(botToken, userId, onFirstMessage) {
+  const controller = new AbortController();
+  const state = { hasReceivedFirstMessage: false, onFirstMessage };
+  const channel = db.prepare(
+    `SELECT context_token FROM channels WHERE bot_token = ? AND wechat_openid = ? AND context_token IS NOT NULL LIMIT 1`
+  ).get(botToken, userId);
+  if (channel?.context_token) {
+    contextTokenCache[userId] = channel.context_token;
+    state.hasReceivedFirstMessage = true;
+    logger.info(`📦 ${userId} 从数据库恢复 context_token`);
+  }
+
+  logger.info(`🔄 启动消息轮询服务：${userId}`);
+  const entry = { controller, promise: null };
+  entry.promise = runPollingLoop({
+    botToken,
+    userId,
+    signal: controller.signal,
+    onStart: () => {
+      pollerHeartbeat[botToken] = { lastOk: Date.now(), alive: true };
+    },
+    onHeartbeat: heartbeat => {
+      pollerHeartbeat[botToken] = heartbeat;
+    },
+    onResult: messages => handleMessages(botToken, userId, messages, state),
+    onSessionExpired: () => {
+      logger.error(`⚠️ ${userId} session 已过期，停止轮询并标记通道 inactive`);
+      pollerHeartbeat[botToken] = { lastOk: pollerHeartbeat[botToken]?.lastOk || 0, alive: false, reason: 'session_expired' };
+      db.prepare("UPDATE channels SET status = 'inactive' WHERE bot_token = ? AND wechat_openid = ?")
+        .run(botToken, userId);
+      delete contextTokenCache[userId];
+    },
+  }).catch(error => logger.error(`poller ${userId} 未处理异常:`, error.message))
+    .finally(() => {
+      if (activePollers.get(botToken) === entry) activePollers.delete(botToken);
+    });
+  activePollers.set(botToken, entry);
+  return entry.promise;
+}
+
+function startMessagePoller(botToken, userId, onFirstMessage, options = {}) {
+  const existing = activePollers.get(botToken);
+  if (!existing) return startPollingFlight(botToken, userId, onFirstMessage);
+  if (!options.restart) return existing.promise;
+
+  existing.controller.abort();
+  return existing.promise.finally(() => startPollingFlight(botToken, userId, onFirstMessage));
+}
+
 function maybeSendAck(channelId, botToken, wechatOpenid, contextToken) {
   const now = Date.now();
   if ((lastAckAt[channelId] || 0) > now - ACK_DEDUP_MS) return;
   lastAckAt[channelId] = now;
   const text = ACK_MESSAGES[Math.floor(Math.random() * ACK_MESSAGES.length)];
-  // 延迟 require 避免循环依赖
   const { enqueueSend } = require('./push-queue');
   const { markSendResult } = require('./channel-health');
   enqueueSend(channelId,
     () => ilink.sendMessage(botToken, wechatOpenid, text, contextToken),
     { title: 'ack', source: 'inbound-ack' })
-    .then(r => {
-      markSendResult(channelId, r, true);
+    .then(result => {
+      markSendResult(channelId, result, true);
       try {
         db.prepare(`INSERT INTO push_logs (user_id, title, content, status, ip, channel_id, response)
           SELECT user_id, '✅ 回执', ?, 'success', 'inbound-ack', id, ?
           FROM channels WHERE id = ?`)
-          .run(text, JSON.stringify(r), channelId);
-      } catch (e) {}
+          .run(text, JSON.stringify(result), channelId);
+      } catch {}
     })
-    .catch(err => {
-      markSendResult(channelId, err, false);
-      console.error(`📤 ack 失败 channel=${channelId}:`, err.message);
+    .catch(error => {
+      markSendResult(channelId, error, false);
+      logger.error(`📤 ack 失败 channel=${channelId}:`, error.message);
     });
 }
 
-// 检查通道是否存活（不调 iLink API，只看 poller 心跳）
 function isChannelAlive(botToken) {
-  const hb = pollerHeartbeat[botToken];
-  if (!hb) return { alive: false, reason: 'no_poller' };
-  if (!hb.alive) return { alive: false, reason: hb.reason || 'stopped' };
-  // 超过 60 秒没心跳认为异常（正常长轮询约 18 秒一次）
-  const age = Date.now() - hb.lastOk;
-  if (age > 60000) return { alive: false, reason: 'heartbeat_timeout', last_ok_seconds_ago: Math.round(age / 1000) };
+  const heartbeat = pollerHeartbeat[botToken];
+  if (!heartbeat) return { alive: false, reason: 'no_poller' };
+  if (!heartbeat.alive) return { alive: false, reason: heartbeat.reason || 'stopped' };
+  // 40s long-poll plus 30s retry backoff requires a wider supervisor window.
+  const age = Date.now() - heartbeat.lastOk;
+  if (age > 120000) return { alive: false, reason: 'heartbeat_timeout', last_ok_seconds_ago: Math.round(age / 1000) };
   return { alive: true, last_ok_seconds_ago: Math.round(age / 1000) };
 }
 
 function getContextToken(userId) {
-  // 先查缓存
   if (contextTokenCache[userId]) return contextTokenCache[userId];
-  // 再查 channels 表
   const channel = db.prepare(
     `SELECT context_token FROM channels WHERE wechat_openid = ? AND context_token IS NOT NULL ORDER BY id DESC LIMIT 1`
   ).get(userId);
@@ -228,17 +271,25 @@ function getContextToken(userId) {
 
 function setContextToken(userId, token) {
   contextTokenCache[userId] = token;
-  // 手动注入 token = 管理员确认通道可用 → 全量复活（status/send_disabled/计数一起清）
   const rows = db.prepare(`SELECT id FROM channels WHERE wechat_openid = ?`).all(userId);
   db.prepare(`UPDATE channels SET context_token = ? WHERE wechat_openid = ?`).run(token, userId);
   try {
     const { reviveChannel } = require('./channel-health');
-    rows.forEach(r => reviveChannel(r.id));
-  } catch (e) {
-    // channel-health 可能在循环依赖下加载失败；降级为最小更新
+    rows.forEach(row => reviveChannel(row.id));
+  } catch {
     db.prepare(`UPDATE channels SET status = 'active' WHERE wechat_openid = ?`).run(userId);
   }
-  console.log(`✅ 手动设置 ${userId} 的 context_token`);
+  logger.info(`✅ 手动设置 ${userId} 的 context_token`);
 }
 
-module.exports = { startMessagePoller, getContextToken, setContextToken, isChannelAlive, _heartbeat: pollerHeartbeat };
+module.exports = {
+  startMessagePoller,
+  runPollingLoop,
+  idleDelay,
+  errorDelay,
+  getContextToken,
+  setContextToken,
+  isChannelAlive,
+  _heartbeat: pollerHeartbeat,
+  _activePollers: activePollers,
+};

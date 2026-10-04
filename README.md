@@ -181,10 +181,11 @@ docker compose up -d
 
 飞书通道在 `feishu/` 子目录，独立部署：
 
+> 以下 Docker Compose 命令只适用于第三方自部署，不是 BotTalk 项目生产发布方式。项目维护者请参阅 [k8s2 生产发布手册](docs/production-k8s2-release.md)。
+
 ```bash
 docker compose -f docker-compose.feishu.yml up -d
-# 或使用一键脚本
-./deploy-feishu.sh
+# 或使用 Docker Compose 管理对应服务（这些旧 deploy-*.sh 已不再用于项目生产）
 ```
 
 <details>

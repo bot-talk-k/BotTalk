@@ -4,7 +4,7 @@ const express = require('express');
 const router = express.Router();
 const axios = require('axios');
 
-// 渠道注册表。internal 为容器内网地址(bottalk-shared 网络);admin 为公网深链。
+// 渠道注册表。internal 为 Kubernetes Service DNS；admin 为公网深链。
 // 微信冻结站不接入 internal 统计,只放深链。
 const CHANNELS = [
   {

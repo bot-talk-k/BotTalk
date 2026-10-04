@@ -1,5 +1,6 @@
 const axios = require('axios');
 const crypto = require('crypto');
+const logger = require('./services/logger');
 
 const BASE_URL = 'https://ilinkai.weixin.qq.com';
 
@@ -31,58 +32,57 @@ async function checkQRStatus(qrcode) {
   return res.data;
 }
 
-// 长轮询收消息（35 秒超时）
-async function getUpdates(botToken, cursor = '') {
+// Long-poll messages. Transport failures are intentionally rethrown so the
+// poller can apply error backoff instead of treating them as empty responses.
+async function getUpdates(botToken, cursor = '', options = {}) {
   const headers = getHeaders(botToken);
   const body = {
     get_updates_buf: cursor,
     base_info: { channel_version: '1.0.2' }
   };
-  
-  console.log('🔄 getUpdates 请求:', { cursor: cursor.substring(0, 50) + '...' });
-  
+
+  logger.debug('🔄 getUpdates 请求:', { cursor: cursor ? '[redacted]' : '' });
+
   try {
     const startTime = Date.now();
-    const res = await axios.post(`${BASE_URL}/ilink/bot/getupdates`, body, { 
+    const res = await axios.post(`${BASE_URL}/ilink/bot/getupdates`, body, {
       headers,
-      timeout: 40000
+      timeout: 40000,
+      signal: options.signal,
     });
     const duration = Date.now() - startTime;
-    
-    console.log(`📥 getUpdates 响应 (${duration}ms):`, JSON.stringify({
+    const msgCount = Array.isArray(res.data.msgs) ? res.data.msgs.length : 0;
+
+    logger.debug(`📥 getUpdates 响应 (${duration}ms):`, {
       ret: res.data.ret,
-      has_msgs: res.data.msgs && res.data.msgs.length > 0,
-      msg_count: res.data.msgs ? res.data.msgs.length : 0,
+      msg_count: msgCount,
       has_cursor: !!res.data.get_updates_buf,
-      cursor_preview: res.data.get_updates_buf ? res.data.get_updates_buf.substring(0, 50) + '...' : null
-    }));
-    
-    if (res.data.msgs && res.data.msgs.length > 0) {
-      console.log('📨 消息详情:', res.data.msgs.map(m => ({
+    });
+    if (msgCount > 0) {
+      logger.debug('📨 消息详情:', res.data.msgs.map(m => ({
         from: m.from_user_id,
         type: m.message_type,
-        has_context_token: !!m.context_token
+        has_context_token: !!m.context_token,
       })));
     }
-    
-    // 检测 session 过期
+
     if (res.data.ret === -14) {
       const err = new Error('iLink session 已过期 (ret: -14)');
       err.code = 'SESSION_EXPIRED';
       err.response = { status: res.status, data: res.data };
       throw err;
     }
+    if (res.data.ret !== undefined && res.data.ret !== 0) {
+      const err = new Error(`iLink getUpdates 业务错误: ret=${res.data.ret}`);
+      err.response = { status: res.status, data: res.data };
+      throw err;
+    }
 
     return res.data;
   } catch (error) {
-    console.error('❌ getUpdates 错误:', error.message);
-    if (error.response) {
-      console.error('响应状态:', error.response.status);
-      console.error('响应数据:', JSON.stringify(error.response.data).substring(0, 500));
-    }
-    // 重新抛出 session 过期错误，让调用方处理
     if (error.code === 'SESSION_EXPIRED') throw error;
-    return { get_updates_buf: cursor, msgs: [] };
+    logger.warn('⚠️ getUpdates 失败:', error.message);
+    throw error;
   }
 }
 

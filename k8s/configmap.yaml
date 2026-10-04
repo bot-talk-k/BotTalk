@@ -27,8 +27,8 @@ data:
   # ── Portal (bottalk-portal) ──
   PORTAL_BASE_URL: "https://portal.bot-talk.com"
 
-  # ── 内部通信 (容器间代理,同 namespace 内 DNS 解析) ──
-  # 主站通过此地址代理 fs_/ww_ 前缀请求到子服务
+  # ── Internal service addresses (Kubernetes Service DNS) ──
+  # Main service proxies fs_/ww_ requests to these Services.
   FEISHU_INTERNAL_URL: "http://bottalk-feishu:3000"
   WECOM_INTERNAL_URL: "http://bottalk-wecom:3000"
 

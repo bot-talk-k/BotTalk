@@ -620,59 +620,6 @@ if (!hasRun(29)) {
   markRun(29);
 }
 
-// Migration 30: 历史数据保留 30 天 + 一次性压缩 SQLite 文件
-// 只删可再生成的历史；保留用户、通道、提醒、未过期 session、pending 重试及活跃恢复探测。
-// VACUUM 不能置于 transaction 内，且需在成功后才 markRun，失败时下次启动会安全重试。
-if (!hasRun(30)) {
-  const retentionCleanup = db.transaction(() => {
-    const cutoff = "datetime('now', '-30 days')";
-    const deleted = {};
-
-    // 活跃的 ret:-2 恢复探测仍在工作，不能删除它对应的 retry 记录。
-    const activeProbeRetryIds = `
-      SELECT retry_queue_id FROM neg2_recovery_probe
-      WHERE retry_queue_id IS NOT NULL AND recovered_at IS NULL AND gave_up_at IS NULL
-    `;
-    const expiredTerminalRetryIds = `
-      SELECT id FROM push_retry_queue
-      WHERE status != 'pending' AND created_at < ${cutoff}
-        AND id NOT IN (${activeProbeRetryIds})
-    `;
-
-    deleted.neg2_recovery_probe = db.prepare(`
-      DELETE FROM neg2_recovery_probe
-      WHERE retry_queue_id IN (${expiredTerminalRetryIds})
-    `).run().changes;
-    deleted.push_retry_queue = db.prepare(`
-      DELETE FROM push_retry_queue
-      WHERE id IN (${expiredTerminalRetryIds})
-    `).run().changes;
-    deleted.push_logs = db.prepare(`
-      DELETE FROM push_logs
-      WHERE created_at < ${cutoff}
-        AND id NOT IN (
-          SELECT original_push_log_id FROM push_retry_queue
-          WHERE original_push_log_id IS NOT NULL
-        )
-    `).run().changes;
-    deleted.activity_logs = db.prepare(`DELETE FROM activity_logs WHERE created_at < ${cutoff}`).run().changes;
-    deleted.page_views = db.prepare(`DELETE FROM page_views WHERE created_at < ${cutoff}`).run().changes;
-    deleted.inbound_events = db.prepare(`DELETE FROM inbound_events WHERE received_at < ${cutoff}`).run().changes;
-    deleted.logs = db.prepare(`DELETE FROM logs WHERE sent_at < ${cutoff}`).run().changes;
-    deleted.sessions = db.prepare(`
-      DELETE FROM sessions WHERE expire < CAST(strftime('%s', 'now') AS INTEGER)
-    `).run().changes;
-
-    return deleted;
-  });
-
-  const deleted = retentionCleanup();
-  db.exec('VACUUM');
-  db.pragma('wal_checkpoint(TRUNCATE)');
-  markRun(30);
-  console.log(`📋 migration 30: 已清理 30 天前历史 ${JSON.stringify(deleted)} 并压缩数据库`);
-}
-
 // ── Helpers ──────────────────────────────────────────────────────────
 
 function generateSendKey() {

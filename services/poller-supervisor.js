@@ -40,7 +40,7 @@ async function superviseOnce() {
         if ((lastRestartAt[ch.bot_token] || 0) > now - RESTART_COOLDOWN_MS) continue;
         console.log(`🩺 supervisor: channel=${ch.id} 无 poller 心跳，启动`);
         lastRestartAt[ch.bot_token] = now;
-        startPollerSafely(ch);
+        startPollerSafely(ch, true);
         restarted++;
         continue;
       }
@@ -61,7 +61,7 @@ async function superviseOnce() {
         if ((lastRestartAt[ch.bot_token] || 0) > now - RESTART_COOLDOWN_MS) continue;
         console.log(`🩺 supervisor: channel=${ch.id} 心跳 ${Math.round(lastOkMs/1000)}s 无更新，重启 poller`);
         lastRestartAt[ch.bot_token] = now;
-        startPollerSafely(ch);
+        startPollerSafely(ch, true);
         restarted++;
       }
     }
@@ -73,13 +73,13 @@ async function superviseOnce() {
   }
 }
 
-function startPollerSafely(ch) {
+function startPollerSafely(ch, restart = false) {
   try {
     startMessagePoller(ch.bot_token, ch.wechat_openid, (newToken) => {
       db.prepare("UPDATE channels SET context_token = ?, status = 'active' WHERE id = ?")
         .run(newToken, ch.id);
       console.log(`🩺 supervisor 重启后收到首条消息，channel=${ch.id}`);
-    });
+    }, { restart });
   } catch (e) {
     console.error(`supervisor startMessagePoller 失败 channel=${ch.id}:`, e.message);
   }

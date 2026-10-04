@@ -330,7 +330,7 @@ function getClientIp(req) {
 // 飞书 SendKey 以 fs_ 开头 → 透明代理到飞书容器(127.0.0.1:3001)
 // 调用方只需使用 bot-talk.com,无需关心通道类型。
 const axios = require('axios');
-// 容器间通信走 Docker 共享网络(bottalk-shared),用容器名而非宿主 IP
+// 子服务使用 Kubernetes Service DNS；Docker Compose 同名服务也兼容这一地址。
 const FEISHU_BASE = process.env.FEISHU_INTERNAL_URL || 'http://bottalk-feishu:3000';
 const WECOM_BASE = process.env.WECOM_INTERNAL_URL || 'http://bottalk-wecom:3000';
 

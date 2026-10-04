@@ -20,7 +20,11 @@ process.on('unhandledRejection', (reason) => {
   });
 });
 
+const { healthz } = require('./healthz');
+
 const app = express();
+// Register before middleware: this path must not create/read a session or touch SQLite.
+app.get('/healthz', healthz);
 const PORT = process.env.PORT || 3000;
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 
@@ -136,6 +140,7 @@ app.listen(PORT, () => {
   // Restore message pollers for all active channels with context_token
   try {
     const { startMessagePoller } = require('./services/message-poller');
+    const { schedulePollerRestores } = require('./services/poller-startup');
     const activeChannels = db
       .prepare(
         `SELECT c.id, c.bot_token, c.wechat_openid, c.context_token
@@ -148,13 +153,13 @@ app.listen(PORT, () => {
       )
       .all();
 
-    for (const ch of activeChannels) {
+    schedulePollerRestores(activeChannels, (ch) => {
       console.log(`🔄 恢复频道轮询: channel=${ch.id} openid=${ch.wechat_openid}`);
-      startMessagePoller(ch.bot_token, ch.wechat_openid);
-    }
+      return startMessagePoller(ch.bot_token, ch.wechat_openid);
+    });
 
     if (activeChannels.length > 0) {
-      console.log(`✅ 已恢复 ${activeChannels.length} 个频道的消息轮询`);
+      console.log(`✅ 已错峰安排 ${activeChannels.length} 个频道的消息轮询`);
     }
   } catch (e) {
     console.error('⚠️ 恢复频道轮询失败:', e.message);

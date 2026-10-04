@@ -1,6 +1,6 @@
-# BotTalk k3s 一键部署
-# 用法: kubectl apply -k k8s/
-# 或按顺序: namespace → configmap/secret → pvc → middleware → cert-issuer → deployments → ingress
+# Bootstrap-only k8s resource bundle. Do not use this for an application release:
+# it contains PVC, Service, Ingress, ConfigMap, and Secret resources. Releases use
+# scripts/release-k8s2.sh to render and update Deployments only.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 

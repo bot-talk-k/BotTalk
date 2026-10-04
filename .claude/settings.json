@@ -17,7 +17,7 @@
       "ExitPlanMode",
       "TodoWrite(*)",
       "Read(//c/Users/thoma/.ssh/**)",
-      "Bash(ssh rn *)",
+      "Bash(ssh homevps *)",
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
       "Bash(git push *)",

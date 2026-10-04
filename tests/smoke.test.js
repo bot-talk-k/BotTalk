@@ -61,6 +61,13 @@ test.after(() => {
   }
 });
 
+test('GET /healthz returns in-memory ok response', async () => {
+  const r = await fetch(`${BASE}/healthz`);
+  assert.strictEqual(r.status, 200);
+  assert.strictEqual(r.headers.get('content-type'), 'text/plain; charset=utf-8');
+  assert.strictEqual(await r.text(), 'ok');
+});
+
 test('GET /api/config returns base_url', async () => {
   const r = await fetch(`${BASE}/api/config`);
   assert.strictEqual(r.status, 200);

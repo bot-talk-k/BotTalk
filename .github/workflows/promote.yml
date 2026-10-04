@@ -1,87 +1,14 @@
-name: Promote to Production
+name: Production Deployment Disabled
 
 on:
   workflow_dispatch:
-    inputs:
-      sha:
-        description: 'Commit SHA to promote (留空则用 dev 当前版本)'
-        required: false
-        type: string
-      confirm:
-        description: '输入 "YES" 确认发布到生产'
-        required: true
-        type: string
 
+# Direct production release is intentionally manual and SHA-gated.
+# See docs/production-k8s2-release.md and scripts/release-k8s2.sh.
 jobs:
-  promote:
-    name: Promote to Prod
+  disabled:
     runs-on: ubuntu-latest
     steps:
-      - name: Validate confirmation
-        if: github.event.inputs.confirm != 'YES'
-        run: |
-          echo "❌ 请输入 YES 确认发布"
-          exit 1
-
-      - name: Determine image tag
-        id: get-tag
-        env:
-          INPUT_SHA: ${{ github.event.inputs.sha }}
-        run: |
-          if [ -n "$INPUT_SHA" ]; then
-            echo "tag=$INPUT_SHA" >> $GITHUB_OUTPUT
-            echo "Using specified SHA: $INPUT_SHA"
-          else
-            echo "tag=dev" >> $GITHUB_OUTPUT
-            echo "Using :dev tag (latest dev build)"
-          fi
-
-      - name: Setup SSH
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.JAKARTA_SSH_KEY }}" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          echo "${{ secrets.JAKARTA_SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
-
-      - name: Deploy to bottalk (production)
-        env:
-          SHA: ${{ steps.get-tag.outputs.tag }}
-          REGISTRY: ghcr.io/${{ github.repository_owner }}
-        run: |
-          echo " Promoting SHA $SHA to production..."
-          ssh -o StrictHostKeyChecking=no ${{ secrets.JAKARTA_SSH_USER }}@${{ secrets.JAKARTA_SSH_HOST }} \
-            "ssh root@homevps '
-              NAMESPACE=bottalk
-              echo \"── Pulling images from GHCR ──\"
-              for svc in app feishu wecom portal; do
-                echo \"Pulling bottalk-\$svc...\"
-                sudo ctr -n k8s.io images pull ${REGISTRY}/bottalk-\$svc:${SHA} 2>&1 || echo \"WARN: pull failed for \$svc\"
-                sudo ctr -n k8s.io images tag ${REGISTRY}/bottalk-\$svc:${SHA} bottalk-\$svc:latest 2>/dev/null || true
-              done
-              echo \"── Updating deployments ─\"
-              for svc in app feishu wecom portal; do
-                kubectl set image deployment/bottalk-\$svc \
-                  bottalk-\$svc=bottalk-\$svc:latest \
-                  -n \$NAMESPACE
-              done
-              echo \"─── Rolling out ───\"
-              for svc in app feishu wecom portal; do
-                kubectl rollout status deployment/bottalk-\$svc -n \$NAMESPACE --timeout=120s
-              done
-              echo \"─── Prod pods ──\"
-              kubectl get pods -n \$NAMESPACE
-            '"
-
-      - name: Verify production site
-        run: |
-          sleep 5
-          for domain in bot-talk.com feishu.bot-talk.com wecom.bot-talk.com; do
-            CODE=$(curl -sf -o /dev/null -w "%{http_code}" "https://$domain" || echo "fail")
-            echo "$domain → $CODE"
-          done
-
-      - name: Rollback command
-        if: failure()
-        run: |
-          echo " 部署失败！如需回滚，执行："
-          echo "ssh root@homevps 'kubectl rollout undo deployment/bottalk-app -n bottalk'"
+      - run: |
+          echo "GitHub Actions production deployment is disabled by policy."
+          echo "Use the documented manual k8s2 release process after explicit approval."

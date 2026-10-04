@@ -891,6 +891,18 @@ curl -X PATCH "https://bot-talk.com/api/reminders/1/enable" \
 
 ---
 
+## 健康检查
+
+### GET /healthz
+
+Kubernetes liveness/readiness 使用的纯内存接口。固定返回 HTTP 200 和纯文本 `ok`，不会读取 SQLite、启动轮询或调用外部 HTTP。
+
+```bash
+curl -i "https://bot-talk.com/healthz"
+```
+
+---
+
 ## 配置 API
 
 ### GET /api/config

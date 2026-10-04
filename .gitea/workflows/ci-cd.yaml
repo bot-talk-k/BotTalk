@@ -1,4 +1,7 @@
-name: CI - Lint & Test
+name: Gitea CI Validation (Optional Mirror)
+
+# GitHub is the canonical repository. Mirroring to Gitea is paused, and this
+# workflow never deploys a cluster. It only validates a manually mirrored copy.
 on:
   push:
     branches: [main]
@@ -30,4 +33,4 @@ jobs:
         run: node node_modules/eslint/bin/eslint.js .
 
       - name: Run tests
-        run: node --test tests/keepalive-tip.test.js tests/smoke.test.js tests/guard-bash.test.js tests/channel-health.test.js
+        run: node --test tests/healthz.test.js tests/keepalive-tip.test.js tests/smoke.test.js tests/guard-bash.test.js tests/channel-health.test.js
