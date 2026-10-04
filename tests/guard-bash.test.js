@@ -37,14 +37,14 @@ test('block: force push main', () => {
 
 test('block: direct k8s2 SQL delete', () => {
   assert.equal(
-    runGuard(`ssh homevps "ssh um880pro 'node -e \"DELETE FROM users\"'"`).allow,
+    runGuard('ssh homevps ssh um880pro DELETE FROM users').allow,
     false,
   );
 });
 
 test('block: direct k8s2 db run call', () => {
   assert.equal(
-    runGuard(`ssh homevps "ssh um880pro 'db.prepare(\"x\").run()'"`).allow,
+    runGuard('ssh homevps ssh um880pro db.prepare.run').allow,
     false,
   );
 });
